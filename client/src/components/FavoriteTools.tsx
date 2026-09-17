@@ -1,0 +1,8 @@
+// Orbital Workbench: a clearable, browser-only favorites deck resolved from the verified tool registry.
+import { clearFavoriteTools, favoriteToolsEvent, getFavoriteSlugs } from "@/lib/favoriteTools";
+import { tools } from "@/data/toolRegistry";
+import { Star, Trash2 } from "lucide-react";
+import { useEffect, useState } from "react";
+import ToolCard from "@/components/ToolCard";
+
+export default function FavoriteTools() { const [slugs, setSlugs] = useState(() => getFavoriteSlugs()); useEffect(() => { const refresh = () => setSlugs(getFavoriteSlugs()); window.addEventListener(favoriteToolsEvent(), refresh); return () => window.removeEventListener(favoriteToolsEvent(), refresh); }, []); const favorites = slugs.map((slug) => tools.find((tool) => tool.slug === slug)).filter((tool): tool is (typeof tools)[number] => Boolean(tool)); return <section className="favorite-tools" aria-labelledby="favorite-tools-title"><div className="favorite-tools__head"><div><p className="mono-label text-[#c7f36b]">PINNED / BROWSER LOCAL</p><h2 id="favorite-tools-title" className="font-display">Favorite tools</h2></div>{favorites.length > 0 && <button type="button" onClick={() => clearFavoriteTools()}><Trash2 size={14} /> Clear pins</button>}</div>{favorites.length ? <div className="favorite-tools__grid">{favorites.map((tool) => <ToolCard key={tool.slug} tool={tool} compact />)}</div> : <div className="favorite-tools__empty"><Star size={17} /><p>Pin a verified tool with its star control. This browser stores only the tool route slug—never workspace inputs, outputs, files, or generated content.</p></div>}<p className="favorite-tools__note">Favorites are local to this browser and can be cleared here at any time.</p></section>; }

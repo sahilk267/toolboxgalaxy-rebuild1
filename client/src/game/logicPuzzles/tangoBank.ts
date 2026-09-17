@@ -1,0 +1,17 @@
+// Orbital Workbench / Tango bank: seven independently solver-verified binary fields. Every edition has a distinct solution grid, clue mask, and relation topology.
+import type { TangoGrid, TangoRelation } from "@/game/logicPuzzles/tango";
+export type TangoDifficulty = "calm" | "standard" | "dense";
+export type TangoEdition = { id: string; difficulty: TangoDifficulty; solution: TangoGrid; givens: TangoGrid; relations: TangoRelation[]; clueCount: number };
+const parseGrid = (source: string, blank = false): TangoGrid => Array.from({ length: 6 }, (_, row) => Array.from({ length: 6 }, (_, col) => { const value = source[row * 6 + col]; return blank && value === "-" ? null : Number(value) as 0 | 1; }));
+const parseRelations = (source: string): TangoRelation[] => source.split(",").map((token) => { const [edge, mode] = token.split(":"); const [first, second] = edge.split("-").map(Number); return { a: { row: Math.floor(first / 6), col: first % 6 }, b: { row: Math.floor(second / 6), col: second % 6 }, relation: mode === "s" ? "same" : "different" }; });
+const edition = (id: string, difficulty: TangoDifficulty, solution: string, givens: string, relations: string): TangoEdition => { const parsedGivens = parseGrid(givens, true); return { id, difficulty, solution: parseGrid(solution), givens: parsedGivens, relations: parseRelations(relations), clueCount: parsedGivens.flat().filter((value) => value !== null).length }; };
+export const tangoEditionBank: TangoEdition[] = [
+  edition("tango-apollo", "calm", "010110110100101001010110001011101001", "01--10--0--010----------00------10--", "3-9:s,8-9:d,16-22:d,8-14:d,9-10:d,19-25:d,16-17:d,24-25:s,25-31:s,13-19:d,34-35:d,28-29:s,17-23:d,9-15:d,10-16:s,4-10:d,4-5:d,10-11:s"),
+  edition("tango-borealis", "calm", "101010101010010101101100010011010101", "-----01-----01--01-0-----10-1-----0-", "7-8:d,1-7:s,20-26:d,14-15:d,9-10:d,17-23:d,13-14:d,6-12:d,25-31:s,3-4:d,22-23:s,13-19:d,18-24:d,21-27:d,25-26:d,10-16:d,15-16:d,6-7:d"),
+  edition("tango-celeste", "standard", "100101101100010011001101110010011010", "1-----1--1---10---0-1------0--0-----", "5-11:d,21-27:d,1-7:s,3-4:d,29-35:s,10-11:s,23-29:d,2-8:d,27-28:d,4-10:s,13-19:d,25-31:s,9-15:d,20-21:s,4-5:d,14-15:s"),
+  edition("tango-drift", "standard", "011001110100001011101001010110100110", "--1-0-1--------------0-1-----0-00---", "3-4:s,9-10:d,7-13:d,10-11:s,0-1:d,28-29:d,2-8:d,22-23:d,24-30:d,32-33:d,5-11:d,27-28:s,8-14:d,21-22:s,25-31:d,16-17:s"),
+  edition("tango-equinox", "standard", "100110101001011010010110100101011001", "-00---1----1---01-------1-0---------", "14-15:d,14-20:d,1-2:s,3-9:d,24-30:d,9-15:s,27-28:d,26-32:d,16-17:d,3-4:s,19-20:d,22-28:d,34-35:d,8-14:s,28-29:d"),
+  edition("tango-fathom", "dense", "001101100110010011101001110100011010", "---------11--1--1----0-------------0", "4-5:d,13-14:d,17-23:s,28-29:s,26-27:d,24-25:s,27-28:d,5-11:d,20-21:d,6-7:d,13-19:d,12-13:d,33-34:d,14-15:s"),
+  edition("tango-galileo", "dense", "110100110100001011110100001011001011", "----------0---1----1-----0--------1-", "12-13:s,27-33:s,32-33:d,1-2:d,24-25:s,6-12:d,26-32:s,19-20:d,7-13:d,20-26:d,22-23:s,21-22:d,5-11:s,6-7:s"),
+];
+export function tangoEditionForDate(dateId: string) { const [year, month, day] = dateId.split("-").map(Number); const ordinal = Math.floor(Date.UTC(year, month - 1, day) / 86_400_000); return tangoEditionBank[((ordinal % tangoEditionBank.length) + tangoEditionBank.length) % tangoEditionBank.length]; }

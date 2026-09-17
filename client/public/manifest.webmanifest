@@ -1,0 +1,20 @@
+{
+  "name": "Toolbox Galaxy",
+  "short_name": "Toolbox",
+  "description": "A browser-first workbench of verified local tools and lightweight games.",
+  "id": "/",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "display_override": ["window-controls-overlay", "standalone"],
+  "background_color": "#0b1020",
+  "theme_color": "#0b1020",
+  "icons": [
+    {
+      "src": "/orbit-mark.svg",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}

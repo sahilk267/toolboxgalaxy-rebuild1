@@ -1,0 +1,8 @@
+{
+  "name": "Toolbox Galaxy",
+  "description": "A browser-first workbench of verified local tools and lightweight games.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

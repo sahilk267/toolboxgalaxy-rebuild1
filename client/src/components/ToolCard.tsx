@@ -1,0 +1,7 @@
+// Orbital Workbench: compact verified tool module with an external, accessible favorite control and no nested links.
+import FavoriteToolButton from "@/components/FavoriteToolButton";
+import { ArrowUpRight, CheckCircle2 } from "lucide-react";
+import { Link } from "wouter";
+import type { ToolDefinition } from "@/data/toolRegistry";
+
+export default function ToolCard({ tool, compact = false }: { tool: ToolDefinition; compact?: boolean }) { return <article className={`tool-card tool-card--${tool.accent} ${compact ? "tool-card--compact" : ""}`}><FavoriteToolButton tool={tool} className="tool-card__favorite" /><Link href={`/tools/${tool.slug}`} className="tool-card__link"><div className="telemetry-strip"><span><CheckCircle2 size={13} /> VERIFIED</span><span>LOCAL</span></div><div className="flex items-start justify-between gap-4"><div><p className="mono-label text-white/45">{tool.category}</p><h3 className="font-display mt-2 text-xl font-semibold leading-tight tracking-[-0.035em]">{tool.name}</h3></div><span className="card-arrow"><ArrowUpRight size={19} /></span></div>{!compact && <p className="mt-5 max-w-[30ch] text-sm leading-6 text-white/62">{tool.description}</p>}<div className="tool-card__payload"><span><i>01</i> LOCAL EXECUTOR</span><span><i>02</i> {tool.tags[0]?.toUpperCase() || "BROWSER OUTPUT"}</span><small>INPUT → OUTPUT / BROWSER ONLY</small></div><div className="mt-auto flex gap-2 pt-4">{tool.tags.map((tag) => <span className="tag-chip" key={tag}>{tag}</span>)}</div></Link></article>; }
