@@ -403,6 +403,25 @@ export function resolveOgImageUrl(pathname: string): string {
     return `${BASE_URL}${OG_IMAGE_DIR}/${TOOL_CATEGORY_OG["pdf-studio"].filename}`;
   }
 
+  // 3b. Guides hub and individual technical guides
+  if (cleanPath.startsWith("/guides/")) {
+    const slug = cleanPath.replace(/^\/guides\/?/, "").split("/")[0];
+    if (slug.includes("pdf")) {
+      return `${BASE_URL}${OG_IMAGE_DIR}/${TOOL_CATEGORY_OG["pdf-studio"].filename}`;
+    }
+    if (slug.includes("gst") || slug.includes("passport")) {
+      return `${BASE_URL}${OG_IMAGE_DIR}/${TOOL_CATEGORY_OG["regional-tools"].filename}`;
+    }
+    if (slug.includes("json") || slug.includes("csv")) {
+      return `${BASE_URL}${OG_IMAGE_DIR}/${TOOL_CATEGORY_OG["developer-tools"].filename}`;
+    }
+    return `${BASE_URL}${OG_IMAGE_DIR}/${TOOL_CATEGORY_OG["tools-hub"].filename}`;
+  }
+
+  if (cleanPath === "/guides" || cleanPath === "/guides/") {
+    return `${BASE_URL}${OG_IMAGE_DIR}/${TOOL_CATEGORY_OG["tools-hub"].filename}`;
+  }
+
   // 4. Game routes (/games/:slug or /games/logic/:slug)
   if (cleanPath.startsWith("/games/") || cleanPath.startsWith("/games/logic/")) {
     let gameSlug = cleanPath.replace(/^\/games\/(?:logic\/)?/, "").split("/")[0];

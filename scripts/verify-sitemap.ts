@@ -3,6 +3,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { tools } from "../client/src/data/toolRegistry";
 import { logicGames } from "../client/src/pages/Games";
+import { GUIDES } from "../shared/guidesData";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const SITEMAP_PATH = path.resolve(__dirname, "../client/public/sitemap.xml");
@@ -38,6 +39,7 @@ const requiredCoreRoutes = [
   `${BASE_URL}/`,
   `${BASE_URL}/studio`,
   `${BASE_URL}/tools`,
+  `${BASE_URL}/guides`,
   `${BASE_URL}/games`,
   `${BASE_URL}/privacy`,
   `${BASE_URL}/terms`,
@@ -48,7 +50,7 @@ const missingCore = requiredCoreRoutes.filter((url) => !uniqueLocs.has(url));
 assert(
   missingCore.length === 0,
   missingCore.length === 0
-    ? "All required core and legal routes (/, /studio, /tools, /games, /privacy, /terms, /contact) are present in sitemap"
+    ? "All required core and legal routes (/, /studio, /tools, /guides, /games, /privacy, /terms, /contact) are present in sitemap"
     : `Missing core routes: ${missingCore.join(", ")}`
 );
 
@@ -88,6 +90,22 @@ assert(
   missingToolSlugs.length === 0
     ? `All ${tools.length} registered tools from toolRegistry.ts are present in sitemap`
     : `Missing tool slugs in sitemap: ${missingToolSlugs.join(", ")}`
+);
+
+// 5. Technical Guides validation against GUIDES
+const missingGuideSlugs: string[] = [];
+for (const guide of GUIDES) {
+  const expectedUrl = `${BASE_URL}/guides/${guide.slug}`;
+  if (!uniqueLocs.has(expectedUrl)) {
+    missingGuideSlugs.push(guide.slug);
+  }
+}
+
+assert(
+  missingGuideSlugs.length === 0,
+  missingGuideSlugs.length === 0
+    ? `All ${GUIDES.length} technical guides from guidesData.ts are present in sitemap`
+    : `Missing guide slugs in sitemap: ${missingGuideSlugs.join(", ")}`
 );
 
 // Summary & exit code

@@ -6,9 +6,11 @@ import { fileURLToPath } from "url";
 import {
   findToolBySlug,
   findGameBySlug,
+  findGuideBySlug,
   truncateDescription,
   resolveOgImageUrl,
   renderToolJsonLdScript,
+  renderGuideJsonLdScript,
 } from "../shared/seoCatalog";
 import { sanitizeUserParam, escapeHtml } from "../shared/userParam";
 
@@ -251,6 +253,9 @@ async function startServer() {
     }
 
     const safeBy = sanitizeUserParam(req.query.by);
+    const cookieHeader = req.headers.cookie || "";
+    const queryLang = typeof req.query.lang === "string" ? req.query.lang.toLowerCase() : typeof req.query.hl === "string" ? req.query.hl.toLowerCase() : "";
+    const isHindiReq = queryLang === "hi" || /app_lang=hi\b/.test(cookieHeader);
 
     let pageTitle = "Toolbox Galaxy – Private In-Browser Tools & Daily Logic Hub";
     let ogTitle = "Toolbox Galaxy – Free In-Browser Tools & Daily Logic Puzzles";
@@ -266,19 +271,49 @@ async function startServer() {
     const toolSlug = isTool ? pathname.replace(/^\/tools\/?/, "").split("/")[0] : null;
 
     let toolJsonLdScript: string | null = null;
+    let guideJsonLdScript: string | null = null;
+    let toolKeywordsMeta: string | null = null;
+    let toolHreflangTags: string | null = null;
+    let isHindiPage = false;
+
     if (toolSlug) {
       const matchedTool = findToolBySlug(toolSlug);
       if (matchedTool) {
+        const useHindi = Boolean(isHindiReq && matchedTool.hindiName);
+        isHindiPage = useHindi;
+        const toolName = useHindi && matchedTool.hindiName ? matchedTool.hindiName : matchedTool.name;
+        const toolDesc = useHindi && matchedTool.hindiDescription ? matchedTool.hindiDescription : matchedTool.description;
+
         if (safeBy) {
-          pageTitle = `${safeBy} thinks you'll find this useful: ${matchedTool.name} | Toolbox Galaxy`;
-          ogTitle = `${safeBy} thinks you'll find this useful: ${matchedTool.name} | Toolbox Galaxy`;
-          ogDesc = `${safeBy} shared this free, private in-browser tool with you: ${matchedTool.name}. ${truncateDescription(matchedTool.description, 110)}`;
+          if (useHindi) {
+            pageTitle = `${safeBy} ने आपके साथ शेयर किया: ${toolName} | Toolbox Galaxy`;
+            ogTitle = `${safeBy} ने आपके साथ शेयर किया: ${toolName}`;
+            ogDesc = `${safeBy} ने आपके साथ यह सुरक्षित, फ्री ऑनलाइन टूल शेयर किया है: ${toolName}। ${truncateDescription(toolDesc, 110)}`;
+          } else {
+            pageTitle = `${safeBy} thinks you'll find this useful: ${matchedTool.name} | Toolbox Galaxy`;
+            ogTitle = `${safeBy} thinks you'll find this useful: ${matchedTool.name} | Toolbox Galaxy`;
+            ogDesc = `${safeBy} shared this free, private in-browser tool with you: ${matchedTool.name}. ${truncateDescription(matchedTool.description, 110)}`;
+          }
         } else {
-          pageTitle = `${matchedTool.name} – Free Online Tool | Toolbox Galaxy`;
-          ogTitle = `${matchedTool.name} – Free Online Tool | Toolbox Galaxy`;
-          ogDesc = truncateDescription(matchedTool.description, 155);
+          if (useHindi) {
+            pageTitle = `${toolName} – फ्री ऑनलाइन टूल | Toolbox Galaxy`;
+            ogTitle = `${toolName} – फ्री ऑनलाइन टूल | Toolbox Galaxy`;
+            ogDesc = truncateDescription(toolDesc, 155);
+          } else {
+            pageTitle = `${matchedTool.name} – Free Online Tool | Toolbox Galaxy`;
+            ogTitle = `${matchedTool.name} – Free Online Tool | Toolbox Galaxy`;
+            ogDesc = truncateDescription(matchedTool.description, 155);
+          }
         }
-        toolJsonLdScript = renderToolJsonLdScript(matchedTool);
+        toolJsonLdScript = renderToolJsonLdScript(matchedTool, "https://toolboxgalaxy.com", useHindi ? "hi" : "en");
+
+        if (matchedTool.hindiName) {
+          toolHreflangTags = `<link rel="alternate" hreflang="en" href="https://toolboxgalaxy.com/tools/${matchedTool.slug}" />\n  <link rel="alternate" hreflang="hi" href="https://toolboxgalaxy.com/tools/${matchedTool.slug}?lang=hi" />\n  <link rel="alternate" hreflang="x-default" href="https://toolboxgalaxy.com/tools/${matchedTool.slug}" />`;
+        }
+
+        if (useHindi && matchedTool.hindiKeywords && matchedTool.hindiKeywords.length > 0) {
+          toolKeywordsMeta = `<meta name="keywords" content="${escapeHtml(matchedTool.hindiKeywords.join(", "))}" />`;
+        }
       } else if (safeBy) {
         const rawSlug = toolSlug || "tool";
         const formatted = rawSlug.split("-").map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(" ");
@@ -382,6 +417,23 @@ async function startServer() {
       pageTitle = "Contact Us – Toolbox Galaxy";
       ogTitle = "Contact Us – Toolbox Galaxy";
       ogDesc = "Get in touch with the Toolbox Galaxy maintainers for support, suggestions, or feedback.";
+    } else if (pathname.startsWith("/guides/")) {
+      const guideSlug = pathname.replace(/^\/guides\/?/, "").split("/")[0];
+      const matchedGuide = guideSlug ? findGuideBySlug(guideSlug) : undefined;
+      if (matchedGuide) {
+        pageTitle = `${matchedGuide.metaTitle} | Toolbox Galaxy`;
+        ogTitle = matchedGuide.title;
+        ogDesc = truncateDescription(matchedGuide.metaDescription, 155);
+        guideJsonLdScript = renderGuideJsonLdScript(matchedGuide, "https://toolboxgalaxy.com");
+      } else {
+        pageTitle = "Technical Guides & How-To Articles | Toolbox Galaxy";
+        ogTitle = "Technical Guides & In-Browser How-To Articles";
+        ogDesc = "Explore authoritative technical guides, compliance tutorials, and zero-upload in-browser tool workflows.";
+      }
+    } else if (pathname === "/guides" || pathname === "/guides/") {
+      pageTitle = "Technical Guides & In-Browser How-To Tutorials | Toolbox Galaxy";
+      ogTitle = "Technical Guides & In-Browser How-To Tutorials";
+      ogDesc = "Authoritative, zero-fluff guides on PDF forms, electronic signatures, GST tax calculations, photo resizing for government exams, and data conversion.";
     }
 
     const ogImageUrl = resolveOgImageUrl(pathname);
@@ -389,10 +441,14 @@ async function startServer() {
     const safeEscapedOgTitle = escapeHtml(ogTitle);
     const safeEscapedOgDesc = escapeHtml(ogDesc);
     const safeEscapedOgImage = escapeHtml(ogImageUrl);
-    const canonicalUrl = `https://toolboxgalaxy.com${pathname === "/" ? "" : pathname.split("?")[0]}`;
+    const canonicalUrl = `https://toolboxgalaxy.com${pathname === "/" ? "" : pathname.split("?")[0]}${isHindiPage ? "?lang=hi" : ""}`;
     const safeEscapedCanonicalUrl = escapeHtml(canonicalUrl);
 
     // Replace meta tags dynamically using callback functions to prevent regex replacement injection
+    if (isHindiPage) {
+      html = html.replace(/<html(?:\s+lang="[^"]*")?/i, '<html lang="hi"');
+    }
+
     html = html
       .replace(/<title>.*?<\/title>/, () => `<title>${safeEscapedTitle}</title>`)
       .replace(/<link rel="canonical" href=".*?" \/>/, () => `<link rel="canonical" href="${safeEscapedCanonicalUrl}" />`)
@@ -405,8 +461,20 @@ async function startServer() {
       .replace(/<meta name="twitter:image" content=".*?" \/>/, () => `<meta name="twitter:image" content="${safeEscapedOgImage}" />`)
       .replace(/<meta name="description" content=".*?" \/>/, () => `<meta name="description" content="${safeEscapedOgDesc}" />`);
 
+    if (toolHreflangTags) {
+      html = html.replace("</head>", () => `  ${toolHreflangTags}\n</head>`);
+    }
+
+    if (toolKeywordsMeta) {
+      html = html.replace("</head>", () => `  ${toolKeywordsMeta}\n</head>`);
+    }
+
     if (toolJsonLdScript) {
       html = html.replace("</head>", () => `  ${toolJsonLdScript}\n</head>`);
+    }
+
+    if (guideJsonLdScript) {
+      html = html.replace("</head>", () => `  ${guideJsonLdScript}\n</head>`);
     }
 
     res.setHeader("Content-Type", "text/html; charset=utf-8");

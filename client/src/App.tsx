@@ -4,6 +4,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import ErrorBoundary from "@/components/ErrorBoundary";
 import PwaUpdateNotice from "@/components/PwaUpdateNotice";
 import { ThemeProvider } from "@/contexts/ThemeContext";
+import { LanguageProvider } from "@/contexts/LanguageContext";
 import Contact from "@/pages/Contact";
 import Games from "@/pages/Games";
 import Home from "@/pages/Home";
@@ -13,6 +14,8 @@ import Terms from "@/pages/Terms";
 import Tools from "@/pages/Tools";
 import ToolWorkspace from "@/pages/ToolWorkspace";
 import DocumentStudio from "@/pages/DocumentStudio";
+import Guides from "@/pages/Guides";
+import GuideDetail from "@/pages/GuideDetail";
 import { Route, Switch, useLocation } from "wouter";
 import { lazy, Suspense, useEffect } from "react";
 import { trackPageView } from "@/lib/analytics";
@@ -65,28 +68,32 @@ export default function App() {
   return (
     <ErrorBoundary>
       <ThemeProvider defaultTheme="dark" switchable={true}>
-        <TooltipProvider>
-          <PageViewTracker />
-          <Toaster theme="dark" position="bottom-right" />
-          <PwaUpdateNotice />
-          <Switch>
-            <Route path="/" component={Home} />
-            <Route path="/studio" component={DocumentStudio} />
-            <Route path="/pdf-studio" component={DocumentStudio} />
-            <Route path="/document-studio" component={DocumentStudio} />
-            <Route path="/tools" component={Tools} />
-            <Route path="/tools/:slug" component={ToolWorkspace} />
-            <Route path="/games" component={Games} />
-            <Route path="/games/orbit-dash" component={GameRoute} />
-            <Route path="/games/logic-lab" component={LogicLabRoute} />
-            <Route path="/games/:slug" component={LogicPuzzleRoute} />
-            <Route path="/games/logic/:slug" component={LogicPuzzleRoute} />
-            <Route path="/contact" component={Contact} />
-            <Route path="/privacy" component={Privacy} />
-            <Route path="/terms" component={Terms} />
-            <Route component={NotFound} />
-          </Switch>
-        </TooltipProvider>
+        <LanguageProvider>
+          <TooltipProvider>
+            <PageViewTracker />
+            <Toaster theme="dark" position="bottom-right" />
+            <PwaUpdateNotice />
+            <Switch>
+              <Route path="/" component={Home} />
+              <Route path="/studio" component={DocumentStudio} />
+              <Route path="/pdf-studio" component={DocumentStudio} />
+              <Route path="/document-studio" component={DocumentStudio} />
+              <Route path="/tools" component={Tools} />
+              <Route path="/tools/:slug" component={ToolWorkspace} />
+              <Route path="/guides" component={Guides} />
+              <Route path="/guides/:slug" component={GuideDetail} />
+              <Route path="/games" component={Games} />
+              <Route path="/games/orbit-dash" component={GameRoute} />
+              <Route path="/games/logic-lab" component={LogicLabRoute} />
+              <Route path="/games/:slug" component={LogicPuzzleRoute} />
+              <Route path="/games/logic/:slug" component={LogicPuzzleRoute} />
+              <Route path="/contact" component={Contact} />
+              <Route path="/privacy" component={Privacy} />
+              <Route path="/terms" component={Terms} />
+              <Route component={NotFound} />
+            </Switch>
+          </TooltipProvider>
+        </LanguageProvider>
       </ThemeProvider>
     </ErrorBoundary>
   );

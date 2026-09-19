@@ -31,6 +31,7 @@ import ShareToolButton from "@/components/ShareToolButton";
 import { getTool } from "@/data/toolRegistry";
 import { recordToolVisit } from "@/lib/recentToolHistory";
 import { trackEvent } from "@/lib/analytics";
+import { useLanguage } from "@/contexts/LanguageContext";
 import { Check, Clipboard, RotateCcw, ShieldCheck, X } from "lucide-react";
 import { Link, useRoute } from "wouter";
 import { useEffect, useMemo, useState } from "react";
@@ -46,6 +47,9 @@ const toolTelemetry = {
 
 function WorkspaceFrame({ children, tool }: { children: React.ReactNode; tool: NonNullable<ReturnType<typeof getTool>> }) {
   const telemetry = toolTelemetry[tool.kind as keyof typeof toolTelemetry] ?? ["LOCAL INSTRUMENT", "CURRENT-TAB EXECUTOR"] as const;
+  const { isHindi } = useLanguage();
+  const displayName = isHindi && tool.hindiName ? tool.hindiName : tool.name;
+  const displayDescription = isHindi && tool.hindiDescription ? tool.hindiDescription : tool.description;
 
   const [referrer, setReferrer] = useState<string>(() => {
     if (typeof window === "undefined") return "";
@@ -60,13 +64,13 @@ function WorkspaceFrame({ children, tool }: { children: React.ReactNode; tool: N
 
   useEffect(() => {
     if (referrer) {
-      document.title = `${referrer} thinks you'll find this useful: ${tool.name} | Toolbox Galaxy`;
+      document.title = `${referrer} thinks you'll find this useful: ${displayName} | Toolbox Galaxy`;
     } else {
-      document.title = `${tool.name} – Free Online Tool | Toolbox Galaxy`;
+      document.title = `${displayName} – Free Online Tool | Toolbox Galaxy`;
     }
-  }, [referrer, tool.name]);
+  }, [referrer, displayName]);
 
-  return <AppShell><section className="page-section workspace"><Link href="/tools" className="back-link">← Back to tool foundry</Link>{referrer && (<aside className="tool-referral-banner" role="status" aria-label={`Recommended by ${referrer}`}><div className="tool-referral-banner__content"><span className="tool-referral-banner__tag">RECOMMENDATION</span><p><strong>{referrer}</strong> thinks you&apos;ll find this useful: <span>{tool.name}</span>. This tool runs 100% locally in your browser with zero data sent to any server.</p></div><button type="button" onClick={() => setReferrer("")} className="tool-referral-banner__dismiss" aria-label="Dismiss recommendation" title="Dismiss notice"><X size={14} /></button></aside>)}<div className="workspace-intro"><div><p className="mono-label text-[#c7f36b]">VERIFIED LOCAL MODULE</p><h1 className="font-display mt-3 text-4xl font-semibold tracking-[-0.06em] md:text-6xl">{tool.name}</h1><p className="mt-4 max-w-xl text-white/62">{tool.description}</p></div><div className="workspace-side-actions"><aside className="workspace-telemetry" aria-label={`${tool.name} instrument status`}><span>MODULE / 0{tool.kind === "loanEmi" ? "2" : tool.kind === "workShift" ? "3" : tool.kind === "imageTransform" ? "4" : tool.kind === "lineSorter" ? "5" : tool.kind === "imageMetadata" ? "6" : tool.kind === "splitBill" ? "1" : "0"}</span><strong>{telemetry[0]}</strong><small>{telemetry[1]}</small><i>INPUT / LOCAL</i></aside><div className="flex items-center gap-2 justify-end"><FavoriteToolButton tool={tool} className="workspace-favorite" /><ShareToolButton tool={tool} className="workspace-share" /></div><div className="privacy-note"><ShieldCheck size={19} /><span>Input stays in this browser tab.</span></div></div></div>{tool.kind === "imageMetadata" ? <div className="metadata-route-bus" aria-label="Privacy relay status"><span>PRIVACY RELAY BUS</span><i aria-hidden="true" /><span>CURRENT TAB ONLY</span></div> : null}<div className="workspace-panel"><div className="console-divider"><span>01 · INPUT DECK</span><span>LOCAL EXECUTOR</span><span>02 · OUTPUT BAY</span></div>{children}</div></section></AppShell>;
+  return <AppShell><section className="page-section workspace"><Link href="/tools" className="back-link">← Back to tool foundry</Link>{referrer && (<aside className="tool-referral-banner" role="status" aria-label={`Recommended by ${referrer}`}><div className="tool-referral-banner__content"><span className="tool-referral-banner__tag">RECOMMENDATION</span><p><strong>{referrer}</strong> thinks you&apos;ll find this useful: <span>{displayName}</span>. This tool runs 100% locally in your browser with zero data sent to any server.</p></div><button type="button" onClick={() => setReferrer("")} className="tool-referral-banner__dismiss" aria-label="Dismiss recommendation" title="Dismiss notice"><X size={14} /></button></aside>)}<div className="workspace-intro"><div><p className="mono-label text-[#c7f36b]">VERIFIED LOCAL MODULE</p><h1 className="font-display mt-3 text-4xl font-semibold tracking-[-0.06em] md:text-6xl">{displayName}</h1><p className="mt-4 max-w-xl text-white/62">{displayDescription}</p></div><div className="workspace-side-actions"><aside className="workspace-telemetry" aria-label={`${displayName} instrument status`}><span>MODULE / 0{tool.kind === "loanEmi" ? "2" : tool.kind === "workShift" ? "3" : tool.kind === "imageTransform" ? "4" : tool.kind === "lineSorter" ? "5" : tool.kind === "imageMetadata" ? "6" : tool.kind === "splitBill" ? "1" : "0"}</span><strong>{telemetry[0]}</strong><small>{telemetry[1]}</small><i>INPUT / LOCAL</i></aside><div className="flex items-center gap-2 justify-end"><FavoriteToolButton tool={tool} className="workspace-favorite" /><ShareToolButton tool={tool} className="workspace-share" /></div><div className="privacy-note"><ShieldCheck size={19} /><span>Input stays in this browser tab.</span></div></div></div>{tool.kind === "imageMetadata" ? <div className="metadata-route-bus" aria-label="Privacy relay status"><span>PRIVACY RELAY BUS</span><i aria-hidden="true" /><span>CURRENT TAB ONLY</span></div> : null}<div className="workspace-panel"><div className="console-divider"><span>01 · INPUT DECK</span><span>LOCAL EXECUTOR</span><span>02 · OUTPUT BAY</span></div>{children}</div></section></AppShell>;
 }
 
 function Result({ value, error }: { value: string; error?: string }) {

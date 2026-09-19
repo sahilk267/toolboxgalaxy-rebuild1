@@ -3,6 +3,7 @@ import AppShell from "@/components/AppShell";
 import SectionHeading from "@/components/SectionHeading";
 import ToolCard from "@/components/ToolCard";
 import DailyDuaCard from "@/components/DailyDuaCard";
+import ToolOfTheDayCard from "@/components/ToolOfTheDayCard";
 import { PinnedQuickDock } from "@/components/PinnedQuickDock";
 import { tools } from "@/data/toolRegistry";
 import { GameBayVisual, HeroWorkbenchVisual, StoryToolsVisual } from "@/components/HomeVisuals";
@@ -42,6 +43,11 @@ export default function Home() {
     {/* Pinned Quick Dock for Personalized 1-Click Access */}
     <section className="my-6 max-w-6xl mx-auto px-4">
       <PinnedQuickDock />
+    </section>
+
+    {/* Daily Discovery: Tool of the Day */}
+    <section className="my-6 max-w-4xl mx-auto px-4">
+      <ToolOfTheDayCard />
     </section>
 
     {/* Soulful Daily Dua & Quote Card for Positivity & Blessings */}

@@ -19,6 +19,7 @@
     "generate:og": "tsx scripts/generate-og-images.ts",
     "verify:og": "tsx scripts/verify-og-images.ts",
     "verify:jsonld": "tsx scripts/verify-tool-jsonld.ts",
+    "verify:tool-of-the-day": "tsx scripts/verify-tool-of-the-day.ts",
     "format": "prettier --write ."
   },
   "dependencies": {

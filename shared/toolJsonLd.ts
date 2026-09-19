@@ -6,6 +6,7 @@ export interface ToolJsonLdSchema {
   name: string;
   description: string;
   url: string;
+  inLanguage?: string;
   applicationCategory: string;
   operatingSystem: string;
   browserRequirements: string;
@@ -91,21 +92,25 @@ export function getToolApplicationCategory(tool: ToolDefinition): string {
 /**
  * Builds the typed Schema.org WebApplication structured data object for a given tool.
  */
-export function buildToolJsonLd(tool: ToolDefinition, baseUrl = "https://toolboxgalaxy.com"): ToolJsonLdSchema {
-  const canonicalUrl = `${baseUrl}/tools/${tool.slug}`;
+export function buildToolJsonLd(tool: ToolDefinition, baseUrl = "https://toolboxgalaxy.com", lang = "en"): ToolJsonLdSchema {
+  const isHi = lang === "hi";
+  const canonicalUrl = `${baseUrl}/tools/${tool.slug}${isHi ? "?lang=hi" : ""}`;
+  const name = isHi && tool.hindiName ? tool.hindiName : tool.name;
+  const description = isHi && tool.hindiDescription ? tool.hindiDescription : tool.description;
   return {
     "@context": "https://schema.org",
     "@type": "WebApplication",
-    name: tool.name,
-    description: tool.description,
+    name,
+    description,
     url: canonicalUrl,
+    inLanguage: isHi ? "hi" : "en",
     applicationCategory: getToolApplicationCategory(tool),
     operatingSystem: "All",
     browserRequirements: "Requires JavaScript. Requires HTML5.",
     offers: {
       "@type": "Offer",
       price: "0",
-      priceCurrency: "USD",
+      priceCurrency: isHi ? "INR" : "USD",
     },
     creator: {
       "@type": "Organization",
@@ -118,8 +123,8 @@ export function buildToolJsonLd(tool: ToolDefinition, baseUrl = "https://toolbox
  * Generates a safe <script type="application/ld+json"> tag for injecting into HTML.
  * All characters are safely JSON-stringified and escaped against XSS or HTML breakout.
  */
-export function renderToolJsonLdScript(tool: ToolDefinition, baseUrl = "https://toolboxgalaxy.com"): string {
-  const data = buildToolJsonLd(tool, baseUrl);
+export function renderToolJsonLdScript(tool: ToolDefinition, baseUrl = "https://toolboxgalaxy.com", lang = "en"): string {
+  const data = buildToolJsonLd(tool, baseUrl, lang);
   // Safely serialize JSON and escape `<` as `\u003c` to avoid closing </script> injection risks
   const jsonSafe = JSON.stringify(data, null, 2).replace(/</g, "\\u003c");
   return `<script type="application/ld+json">\n${jsonSafe}\n</script>`;

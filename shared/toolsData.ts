@@ -62,6 +62,9 @@ export type ToolDefinition = {
   kind: ToolKind;
   accent: "lime" | "ember" | "sky" | "violet";
   tags: string[];
+  hindiName?: string;
+  hindiDescription?: string;
+  hindiKeywords?: string[];
 };
 
 export const tools: ToolDefinition[] = [
@@ -451,6 +454,9 @@ export const tools: ToolDefinition[] = [
     kind: "whatsappDirect",
     accent: "ember",
     tags: ["Local", "Private", "Popular", "WhatsApp"],
+    hindiName: "व्हाट्सएप डायरेक्ट चैट (बिना नंबर सेव किए)",
+    hindiDescription: "बिना मोबाइल नंबर सेव किए किसी को भी सीधे व्हाट्सएप मैसेज भेजें। कंट्री कोड, त्वरित संदेश टेम्पलेट और क्यूआर कोड।",
+    hindiKeywords: ["व्हाट्सएप डायरेक्ट", "बिना नंबर सेव किए व्हाट्सएप", "whatsapp message without saving number", "whatsapp direct hindi"],
   },
   {
     slug: "gst-tax-calculator",
@@ -460,6 +466,9 @@ export const tools: ToolDefinition[] = [
     kind: "gstTax",
     accent: "lime",
     tags: ["Local", "Verified", "Popular", "Business"],
+    hindiName: "जीएसटी एवं व्यापार कर कैलकुलेटर (GST Calculator)",
+    hindiDescription: "जीएसटी (3%, 5%, 12%, 18%, 28%), CGST/SGST/IGST विभाजन, इन्क्लूसिव व एक्सक्लूसिव टैक्स की गणना करें एवं इनवॉइस रसीद तैयार करें।",
+    hindiKeywords: ["जीएसटी कैलकुलेटर", "GST calculation in Hindi", "CGST SGST IGST", "व्यापार कर कैलकुलेटर", "gst bill calculator hindi"],
   },
   {
     slug: "passport-photo-resizer",
@@ -469,6 +478,9 @@ export const tools: ToolDefinition[] = [
     kind: "passportPhoto",
     accent: "sky",
     tags: ["Local", "Private", "Popular", "Exams"],
+    hindiName: "सरकारी परीक्षा एवं पासपोर्ट फोटो रीसाइज़र (Photo & Signature Resizer)",
+    hindiDescription: "UPSC, SSC, रेलवे और सरकारी फॉर्म के लिए फोटो (20KB–50KB) और हस्ताक्षर (10KB–20KB) को तुरंत रीसाइज़ व कम्प्रेस करें।",
+    hindiKeywords: ["पासपोर्ट फोटो रीसाइज़र", "सरकारी नौकरी फोटो साइज", "फोटो कम्प्रेस 20kb 50kb", "UPSC SSC फोटो रीसाइज़"],
   },
   {
     slug: "land-area-converter",
@@ -478,6 +490,9 @@ export const tools: ToolDefinition[] = [
     kind: "landArea",
     accent: "ember",
     tags: ["Local", "Verified", "Popular", "Property"],
+    hindiName: "जमीन एवं प्लॉट क्षेत्रफल कनवर्टर (Bigha, Gaj, Acre, Guntha)",
+    hindiDescription: "बीघा, कट्ठा, मारला, कनाल, गुंठा, वर्ग गज, सेंट, एकड़ और वर्ग फुट में जमीन व प्लॉट का सटीक क्षेत्रफल निकालें।",
+    hindiKeywords: ["जमीन नापने का कैलकुलेटर", "बीघा से वर्ग गज", "एकड़ से बीघा", "प्लॉट एरिया कनवर्टर", "land converter hindi"],
   },
   {
     slug: "number-to-words-rupees",
@@ -487,6 +502,9 @@ export const tools: ToolDefinition[] = [
     kind: "numberToWords",
     accent: "violet",
     tags: ["Local", "Verified", "Popular", "Banking"],
+    hindiName: "संख्या से शब्द व बैंक चेक स्लिप (Rupees to Words in Hindi)",
+    hindiDescription: "बैंक चेक, रसीद और बिल के लिए संख्याओं को भारतीय मुद्रा प्रारूप (लाख और करोड़) में शब्दों में बदलें।",
+    hindiKeywords: ["संख्या से शब्द", "चेक भरने के लिए शब्द", "रुपये शब्दों में", "number to words rupees hindi"],
   },
   {
     slug: "json-to-zod-schema",

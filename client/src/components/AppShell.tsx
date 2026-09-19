@@ -13,6 +13,7 @@ import {
   Menu,
   Orbit,
   Wrench,
+  BookOpen,
   PanelLeftClose,
   PanelLeftOpen,
   Coffee,
@@ -28,6 +29,7 @@ const navItems = [
   { href: "/", label: "Overview", icon: Orbit },
   { href: "/studio", label: "PDF & Doc Studio", icon: FileText },
   { href: "/tools", label: "Tools", icon: Wrench },
+  { href: "/guides", label: "Guides", icon: BookOpen },
   { href: "/games", label: "Games", icon: Gamepad2 },
 ];
 

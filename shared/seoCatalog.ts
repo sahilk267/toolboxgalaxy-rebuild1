@@ -1,12 +1,15 @@
 import { tools, ToolDefinition } from "./toolsData";
 import { GAMES_CATALOG, GameMetadata } from "./gamesData";
+import { GUIDES, GuideDefinition, findGuideBySlug } from "./guidesData";
 export * from "./ogCatalog";
 export * from "./toolJsonLd";
 export * from "./gameJsonLd";
 export * from "./breadcrumbJsonLd";
+export * from "./guidesData";
+export * from "./guideJsonLd";
 
-export { tools, GAMES_CATALOG };
-export type { ToolDefinition, GameMetadata };
+export { tools, GAMES_CATALOG, GUIDES, findGuideBySlug };
+export type { ToolDefinition, GameMetadata, GuideDefinition };
 
 /**
  * Normalizes a URL slug for robust lookup.

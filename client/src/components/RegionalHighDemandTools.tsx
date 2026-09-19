@@ -20,6 +20,9 @@ import {
   Maximize2
 } from "lucide-react";
 import QRCodeLib from "qrcode";
+import { useLanguage } from "@/contexts/LanguageContext";
+import { numberToHindiWords } from "@/lib/regionalTranslations";
+import RegionalLanguageToggle from "@/components/RegionalLanguageToggle";
 
 // -------------------------------------------------------------
 // 1. WhatsApp Direct Chat & Template Generator
@@ -46,6 +49,8 @@ const QUICK_TEMPLATES = [
 ];
 
 export function WhatsappDirectTool() {
+  const { dict, isHindi } = useLanguage();
+  const t = dict.whatsappDirect;
   const [countryCode, setCountryCode] = useState("+91");
   const [phoneNumber, setPhoneNumber] = useState("");
   const [message, setMessage] = useState("");
@@ -89,10 +94,18 @@ export function WhatsappDirectTool() {
 
   return (
     <div className="space-y-6">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3.5 rounded-xl bg-slate-900/90 border border-slate-800">
+        <div className="flex items-center gap-2 text-xs text-slate-300">
+          <Languages size={15} className="text-emerald-400 shrink-0" />
+          <span className="font-semibold">{isHindi ? "क्षेत्रीय भाषा चुनें:" : "Language Selection:"}</span>
+        </div>
+        <RegionalLanguageToggle variant="header" />
+      </div>
+
       <div className="p-4 rounded-xl bg-emerald-950/30 border border-emerald-500/30 text-emerald-200 text-xs flex items-start gap-2">
         <Sparkles size={16} className="text-emerald-400 shrink-0 mt-0.5" />
         <span>
-          <strong>100% Private & Direct:</strong> Send WhatsApp messages to any unsaved contact number without adding them to your phone address book.
+          <strong>{t.badgeTitle}</strong> {t.badgeDesc}
         </span>
       </div>
 
@@ -100,7 +113,7 @@ export function WhatsappDirectTool() {
         {/* Country Code */}
         <div>
           <label className="block text-xs font-semibold uppercase text-slate-300 mb-1.5 font-mono">
-            Country Code
+            {t.countryCodeLabel}
           </label>
           <select
             value={countryCode}
@@ -118,7 +131,7 @@ export function WhatsappDirectTool() {
         {/* Phone Number */}
         <div className="md:col-span-2">
           <label className="block text-xs font-semibold uppercase text-slate-300 mb-1.5 font-mono">
-            Phone Number (Bina 0 ya country code ke)
+            {t.phoneLabel}
           </label>
           <div className="relative">
             <span className="absolute left-3.5 top-3 text-slate-400 font-mono font-bold text-sm">
@@ -128,7 +141,7 @@ export function WhatsappDirectTool() {
               type="tel"
               value={phoneNumber}
               onChange={(e) => setPhoneNumber(e.target.value.replace(/[^\d\s-]/g, ""))}
-              placeholder="e.g. 98765 43210"
+              placeholder={t.phonePlaceholder}
               className="w-full h-11 pl-16 pr-4 rounded-xl bg-slate-900 border border-slate-700 text-white font-mono text-base font-semibold focus:border-emerald-500 focus:outline-none"
             />
           </div>
@@ -139,23 +152,23 @@ export function WhatsappDirectTool() {
       <div>
         <div className="flex items-center justify-between mb-1.5">
           <label className="text-xs font-semibold uppercase text-slate-300 font-mono">
-            Message (Optional / Pre-filled)
+            {t.messageLabel}
           </label>
           <span className="text-[11px] text-slate-400 font-mono">
-            {message.length} chars
+            {message.length} {t.chars}
           </span>
         </div>
         <textarea
           rows={3}
           value={message}
           onChange={(e) => setMessage(e.target.value)}
-          placeholder="Type your message or pick a quick template below..."
+          placeholder={t.messagePlaceholder}
           className="w-full p-3 rounded-xl bg-slate-900 border border-slate-700 text-white placeholder:text-slate-500 focus:border-emerald-500 focus:outline-none"
         />
 
         {/* Quick template chips */}
         <div className="mt-2 flex flex-wrap gap-1.5">
-          {QUICK_TEMPLATES.map((tmpl) => (
+          {t.templates.map((tmpl) => (
             <button
               key={tmpl.title}
               type="button"
@@ -178,7 +191,7 @@ export function WhatsappDirectTool() {
             className="w-full sm:flex-1 h-12 rounded-xl bg-[#25D366] hover:bg-[#20bd5a] disabled:opacity-40 disabled:pointer-events-none text-slate-950 font-bold text-sm flex items-center justify-center gap-2 shadow-lg shadow-emerald-950/50 transition-all active:scale-98"
           >
             <Send size={16} />
-            <span>Open in WhatsApp</span>
+            <span>{t.openInWhatsapp}</span>
           </button>
 
           <button
@@ -188,7 +201,7 @@ export function WhatsappDirectTool() {
             className="w-full sm:w-auto h-12 px-5 rounded-xl bg-slate-800 hover:bg-slate-700 disabled:opacity-40 disabled:pointer-events-none text-white font-semibold text-xs flex items-center justify-center gap-1.5 border border-slate-700 transition-all"
           >
             {copied ? <Check size={15} className="text-emerald-400" /> : <Copy size={15} />}
-            <span>{copied ? "Link Copied!" : "Copy Chat Link"}</span>
+            <span>{copied ? t.linkCopied : t.copyChatLink}</span>
           </button>
         </div>
 
@@ -196,9 +209,9 @@ export function WhatsappDirectTool() {
           <div className="pt-3 border-t border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-4">
             <div className="text-xs text-slate-400 space-y-1">
               <p className="font-mono text-slate-300">
-                Direct URL: <span className="text-emerald-400">{waLink}</span>
+                {t.directUrl} <span className="text-emerald-400">{waLink}</span>
               </p>
-              <p className="text-[11px]">Scan QR code with another phone camera or WhatsApp scanner to start chatting immediately.</p>
+              <p className="text-[11px]">{t.qrInstruction}</p>
             </div>
             {qrDataUrl && (
               <div className="p-2 bg-white rounded-xl shadow-md shrink-0">
@@ -216,6 +229,8 @@ export function WhatsappDirectTool() {
 // 2. GST / VAT & Tax Invoice Calculator
 // -------------------------------------------------------------
 export function GstCalculatorTool() {
+  const { dict, isHindi } = useLanguage();
+  const t = dict.gstTax;
   const [amount, setAmount] = useState("10000");
   const [gstRate, setGstRate] = useState<number>(18);
   const [customRate, setCustomRate] = useState("");
@@ -268,7 +283,7 @@ export function GstCalculatorTool() {
   };
 
   const copyInvoice = async () => {
-    const text = `🧾 GST TAX INVOICE BREAKDOWN\n------------------------------\nType: ${isInclusive ? "GST Inclusive (Tax Included)" : "GST Exclusive (Tax Added)"}\nBase Price: ${formatCurr(result.baseAmount)}\nGST Rate: ${activeRate}%\nTotal GST Tax: ${formatCurr(result.totalTax)}\n${isInterState ? `IGST (${activeRate}%): ${formatCurr(result.igst)}` : `CGST (${activeRate / 2}%): ${formatCurr(result.cgst)}\nSGST (${activeRate / 2}%): ${formatCurr(result.sgst)}`}\n------------------------------\nTOTAL AMOUNT: ${formatCurr(result.finalTotal)}\nGenerated via Toolbox Galaxy`;
+    const text = `🧾 ${t.invoiceReceiptHeader}\n------------------------------\nType: ${isInclusive ? t.typeInclusive : t.typeExclusive}\n${t.basePrice}: ${formatCurr(result.baseAmount)}\nGST Rate: ${activeRate}%\n${t.totalTax}: ${formatCurr(result.totalTax)}\n${isInterState ? `IGST (${activeRate}%): ${formatCurr(result.igst)}` : `CGST (${activeRate / 2}%): ${formatCurr(result.cgst)}\nSGST (${activeRate / 2}%): ${formatCurr(result.sgst)}`}\n------------------------------\n${t.totalAmountWord}: ${formatCurr(result.finalTotal)}\nGenerated via Toolbox Galaxy`;
     await navigator.clipboard.writeText(text);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
@@ -276,6 +291,14 @@ export function GstCalculatorTool() {
 
   return (
     <div className="space-y-6">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3.5 rounded-xl bg-slate-900/90 border border-slate-800">
+        <div className="flex items-center gap-2 text-xs text-slate-300">
+          <Languages size={15} className="text-emerald-400 shrink-0" />
+          <span className="font-semibold">{isHindi ? "क्षेत्रीय भाषा चुनें:" : "Language Selection:"}</span>
+        </div>
+        <RegionalLanguageToggle variant="header" />
+      </div>
+
       {/* Calculation Mode Toggle */}
       <div className="grid grid-cols-2 gap-2 p-1 bg-slate-900 rounded-xl border border-slate-800">
         <button
@@ -287,7 +310,7 @@ export function GstCalculatorTool() {
               : "text-slate-400 hover:text-white"
           }`}
         >
-          ➕ GST Exclusive (Add GST to Amount)
+          {t.exclusiveMode}
         </button>
         <button
           type="button"
@@ -298,7 +321,7 @@ export function GstCalculatorTool() {
               : "text-slate-400 hover:text-white"
           }`}
         >
-          🔄 GST Inclusive (Extract GST from Price)
+          {t.inclusiveMode}
         </button>
       </div>
 
@@ -306,7 +329,7 @@ export function GstCalculatorTool() {
         {/* Amount Input */}
         <div>
           <label className="block text-xs font-semibold uppercase text-slate-300 mb-1.5 font-mono">
-            {isInclusive ? "Total Price (Including GST)" : "Base Amount (Excluding GST)"}
+            {isInclusive ? t.inclusiveLabel : t.exclusiveLabel}
           </label>
           <div className="relative">
             <span className="absolute left-3.5 top-3 text-slate-400 font-bold text-base">₹</span>
@@ -323,7 +346,7 @@ export function GstCalculatorTool() {
         {/* GST Slab Selector */}
         <div>
           <label className="block text-xs font-semibold uppercase text-slate-300 mb-1.5 font-mono">
-            GST Slab Rate (%)
+            {t.slabRateLabel}
           </label>
           <div className="grid grid-cols-5 gap-1.5">
             {[3, 5, 12, 18, 28].map((rate) => (
@@ -350,14 +373,14 @@ export function GstCalculatorTool() {
       {/* State / IGST Toggle */}
       <div className="flex items-center justify-between p-3 rounded-xl bg-slate-900/60 border border-slate-800 text-xs">
         <span className="text-slate-300 font-medium">
-          Tax Jurisdiction: {isInterState ? "Inter-State (IGST 100%)" : "Intra-State (CGST 50% + SGST 50%)"}
+          {isInterState ? t.jurisdictionInter : t.jurisdictionIntra}
         </span>
         <button
           type="button"
           onClick={() => setIsInterState(!isInterState)}
           className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 font-semibold"
         >
-          Switch to {isInterState ? "CGST + SGST" : "IGST"}
+          {isInterState ? t.switchToCgstSgst : t.switchToIgst}
         </button>
       </div>
 
@@ -366,7 +389,7 @@ export function GstCalculatorTool() {
         <div className="flex items-center justify-between pb-3 border-b border-slate-800">
           <div className="flex items-center gap-2 text-emerald-400 font-bold text-sm">
             <Receipt size={18} />
-            <span>Tax & Price Breakdown ({activeRate}% GST)</span>
+            <span>{t.taxBreakdownTitle} ({activeRate}% GST)</span>
           </div>
           <button
             type="button"
@@ -374,13 +397,13 @@ export function GstCalculatorTool() {
             className="flex items-center gap-1.5 px-3 py-1 rounded-lg bg-emerald-500/20 text-emerald-300 hover:bg-emerald-500 hover:text-slate-950 font-bold text-xs transition-all"
           >
             {copied ? <Check size={14} /> : <Copy size={14} />}
-            <span>{copied ? "Invoice Copied!" : "Copy Receipt"}</span>
+            <span>{copied ? t.invoiceCopied : t.copyReceipt}</span>
           </button>
         </div>
 
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           <div className="p-3 rounded-xl bg-slate-950/60 border border-slate-800/80">
-            <span className="text-[11px] uppercase font-mono text-slate-400 block mb-1">Base Price</span>
+            <span className="text-[11px] uppercase font-mono text-slate-400 block mb-1">{t.basePrice}</span>
             <strong className="text-base sm:text-lg text-white font-mono font-bold">
               {formatCurr(result.baseAmount)}
             </strong>
@@ -390,7 +413,7 @@ export function GstCalculatorTool() {
             <>
               <div className="p-3 rounded-xl bg-slate-950/60 border border-slate-800/80">
                 <span className="text-[11px] uppercase font-mono text-sky-400 block mb-1">
-                  CGST ({activeRate / 2}%)
+                  {t.cgst} ({activeRate / 2}%)
                 </span>
                 <strong className="text-base sm:text-lg text-sky-300 font-mono font-bold">
                   {formatCurr(result.cgst)}
@@ -398,7 +421,7 @@ export function GstCalculatorTool() {
               </div>
               <div className="p-3 rounded-xl bg-slate-950/60 border border-slate-800/80">
                 <span className="text-[11px] uppercase font-mono text-amber-400 block mb-1">
-                  SGST ({activeRate / 2}%)
+                  {t.sgst} ({activeRate / 2}%)
                 </span>
                 <strong className="text-base sm:text-lg text-amber-300 font-mono font-bold">
                   {formatCurr(result.sgst)}
@@ -408,7 +431,7 @@ export function GstCalculatorTool() {
           ) : (
             <div className="col-span-2 p-3 rounded-xl bg-slate-950/60 border border-slate-800/80">
               <span className="text-[11px] uppercase font-mono text-purple-400 block mb-1">
-                IGST ({activeRate}%)
+                {t.igst} ({activeRate}%)
               </span>
               <strong className="text-base sm:text-lg text-purple-300 font-mono font-bold">
                 {formatCurr(result.igst)}
@@ -417,7 +440,7 @@ export function GstCalculatorTool() {
           )}
 
           <div className="p-3 rounded-xl bg-slate-950/60 border border-slate-800/80">
-            <span className="text-[11px] uppercase font-mono text-rose-400 block mb-1">Total Tax</span>
+            <span className="text-[11px] uppercase font-mono text-rose-400 block mb-1">{t.totalTax}</span>
             <strong className="text-base sm:text-lg text-rose-300 font-mono font-bold">
               {formatCurr(result.totalTax)}
             </strong>
@@ -428,9 +451,9 @@ export function GstCalculatorTool() {
         <div className="p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-between">
           <div>
             <span className="text-xs uppercase font-mono text-emerald-400 font-bold block">
-              FINAL INVOICE TOTAL
+              {t.finalInvoiceTotal}
             </span>
-            <span className="text-xs text-white/60">Includes all taxes and base goods/services charge</span>
+            <span className="text-xs text-white/60">{t.invoiceSubText}</span>
           </div>
           <span className="text-2xl sm:text-3xl font-black text-emerald-400 font-mono">
             {formatCurr(result.finalTotal)}
@@ -445,6 +468,8 @@ export function GstCalculatorTool() {
 // 3. Govt Job / Passport Photo & Signature Resizer (Exact KB target)
 // -------------------------------------------------------------
 export function PassportPhotoResizerTool() {
+  const { dict, isHindi } = useLanguage();
+  const t = dict.passportPhoto;
   const [imageSrc, setImageSrc] = useState<string | null>(null);
   const [fileName, setFileName] = useState("photo.jpg");
   const [preset, setPreset] = useState<"sarkariPhoto" | "signature" | "passport" | "custom">("sarkariPhoto");
@@ -588,11 +613,19 @@ export function PassportPhotoResizerTool() {
 
   return (
     <div className="space-y-6">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3.5 rounded-xl bg-slate-900/90 border border-slate-800">
+        <div className="flex items-center gap-2 text-xs text-slate-300">
+          <Languages size={15} className="text-emerald-400 shrink-0" />
+          <span className="font-semibold">{isHindi ? "क्षेत्रीय भाषा चुनें:" : "Language Selection:"}</span>
+        </div>
+        <RegionalLanguageToggle variant="header" />
+      </div>
+
       {/* Informational Guidance */}
       <div className="p-4 rounded-xl bg-blue-950/30 border border-blue-500/30 text-blue-200 text-xs flex items-start gap-2">
         <FileCheck size={16} className="text-blue-400 shrink-0 mt-0.5" />
         <span>
-          <strong>Government & Exam Portal Standards:</strong> Meets strict size constraints for UPSC, SSC, Railways, State PSC, NTA, Nadra & College online admission forms (e.g. Photo 20KB-50KB, Signature 10KB-20KB).
+          <strong>{t.standardsTitle}</strong> {t.standardsDesc}
         </span>
       </div>
 
@@ -607,8 +640,8 @@ export function PassportPhotoResizerTool() {
               : "bg-slate-900 border-slate-800 text-slate-400 hover:text-white"
           }`}
         >
-          <b className="block text-xs text-white">📸 Sarkari Photo</b>
-          <span className="text-[11px] text-slate-400 font-mono">20KB – 50KB • 3.5×4.5 cm</span>
+          <b className="block text-xs text-white">{t.presets.sarkariPhoto.title}</b>
+          <span className="text-[11px] text-slate-400 font-mono">{t.presets.sarkariPhoto.desc}</span>
         </button>
 
         <button
@@ -620,8 +653,8 @@ export function PassportPhotoResizerTool() {
               : "bg-slate-900 border-slate-800 text-slate-400 hover:text-white"
           }`}
         >
-          <b className="block text-xs text-white">✍️ Signature Box</b>
-          <span className="text-[11px] text-slate-400 font-mono">10KB – 20KB • 3:1 Ratio</span>
+          <b className="block text-xs text-white">{t.presets.signature.title}</b>
+          <span className="text-[11px] text-slate-400 font-mono">{t.presets.signature.desc}</span>
         </button>
 
         <button
@@ -633,8 +666,8 @@ export function PassportPhotoResizerTool() {
               : "bg-slate-900 border-slate-800 text-slate-400 hover:text-white"
           }`}
         >
-          <b className="block text-xs text-white">🛂 Passport 2×2"</b>
-          <span className="text-[11px] text-slate-400 font-mono">50KB – 100KB • 300 DPI</span>
+          <b className="block text-xs text-white">{t.presets.passport.title}</b>
+          <span className="text-[11px] text-slate-400 font-mono">{t.presets.passport.desc}</span>
         </button>
 
         <button
@@ -646,8 +679,8 @@ export function PassportPhotoResizerTool() {
               : "bg-slate-900 border-slate-800 text-slate-400 hover:text-white"
           }`}
         >
-          <b className="block text-xs text-white">⚙️ Custom Pixels</b>
-          <span className="text-[11px] text-slate-400 font-mono">Set exact W × H & Quality</span>
+          <b className="block text-xs text-white">{t.presets.custom.title}</b>
+          <span className="text-[11px] text-slate-400 font-mono">{t.presets.custom.desc}</span>
         </button>
       </div>
 
@@ -667,9 +700,9 @@ export function PassportPhotoResizerTool() {
           <div className="w-12 h-12 mx-auto rounded-full bg-slate-800 flex items-center justify-center text-emerald-400 mb-3">
             <ImageIcon size={24} />
           </div>
-          <h3 className="text-sm font-bold text-white mb-1">Select Photo or Signature to Resize</h3>
+          <h3 className="text-sm font-bold text-white mb-1">{t.uploadTitle}</h3>
           <p className="text-xs text-slate-400 max-w-sm mx-auto">
-            Drag & drop or tap to choose JPG, PNG, or WebP. Processed 100% inside your device memory.
+            {t.uploadDesc}
           </p>
         </div>
       ) : (
@@ -678,7 +711,7 @@ export function PassportPhotoResizerTool() {
           <div className="space-y-4">
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="block text-[11px] font-mono uppercase text-slate-400 mb-1">Width (px)</label>
+                <label className="block text-[11px] font-mono uppercase text-slate-400 mb-1">{t.widthPx}</label>
                 <input
                   type="number"
                   value={targetWidth}
@@ -687,7 +720,7 @@ export function PassportPhotoResizerTool() {
                 />
               </div>
               <div>
-                <label className="block text-[11px] font-mono uppercase text-slate-400 mb-1">Height (px)</label>
+                <label className="block text-[11px] font-mono uppercase text-slate-400 mb-1">{t.heightPx}</label>
                 <input
                   type="number"
                   value={targetHeight}
@@ -699,7 +732,7 @@ export function PassportPhotoResizerTool() {
 
             <div>
               <div className="flex items-center justify-between text-xs mb-1">
-                <span className="text-slate-300 font-medium">JPEG Quality / Compression</span>
+                <span className="text-slate-300 font-medium">{t.qualityLabel}</span>
                 <span className="font-mono text-emerald-400 font-bold">{Math.round(quality * 100)}%</span>
               </div>
               <input
@@ -715,13 +748,13 @@ export function PassportPhotoResizerTool() {
 
             <div className="p-3 rounded-xl bg-slate-950/60 border border-slate-800 text-xs space-y-1">
               <div className="flex justify-between">
-                <span className="text-slate-400">Target Output Size:</span>
+                <span className="text-slate-400">{t.targetSize}</span>
                 <b className={`font-mono text-sm ${outputSizeKb && outputSizeKb <= 50 ? "text-emerald-400" : "text-amber-400"}`}>
                   {outputSizeKb} KB
                 </b>
               </div>
               <div className="flex justify-between text-[11px] text-slate-500 font-mono">
-                <span>Dimensions:</span>
+                <span>{t.dimensions}</span>
                 <span>{targetWidth} × {targetHeight} px</span>
               </div>
             </div>
@@ -733,13 +766,13 @@ export function PassportPhotoResizerTool() {
                 className="flex-1 h-11 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs flex items-center justify-center gap-1.5 shadow-lg shadow-emerald-950/40"
               >
                 <Download size={15} />
-                <span>Download ({outputSizeKb} KB)</span>
+                <span>{t.downloadBtn} ({outputSizeKb} KB)</span>
               </button>
               <button
                 type="button"
                 onClick={() => setImageSrc(null)}
                 className="px-3 h-11 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold"
-                title="Choose new photo"
+                title={t.chooseNew}
               >
                 <RotateCcw size={15} />
               </button>
@@ -748,7 +781,7 @@ export function PassportPhotoResizerTool() {
 
           {/* Live Preview */}
           <div className="md:col-span-2 flex flex-col items-center justify-center p-4 bg-slate-950 rounded-xl border border-slate-800/80">
-            <span className="text-[11px] font-mono text-slate-500 mb-2 uppercase">Exact Scale Preview</span>
+            <span className="text-[11px] font-mono text-slate-500 mb-2 uppercase">{t.exactPreview}</span>
             {outputUrl && (
               <div className="p-2 bg-white rounded-lg shadow-xl border border-slate-300 flex items-center justify-center">
                 <img
@@ -784,6 +817,8 @@ const LAND_UNITS = [
 ];
 
 export function LandAreaConverterTool() {
+  const { dict, isHindi } = useLanguage();
+  const t = dict.landArea;
   const [value, setValue] = useState("1");
   const [fromUnit, setFromUnit] = useState("bigha_up");
 
@@ -793,10 +828,18 @@ export function LandAreaConverterTool() {
 
   return (
     <div className="space-y-6">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3.5 rounded-xl bg-slate-900/90 border border-slate-800">
+        <div className="flex items-center gap-2 text-xs text-slate-300">
+          <Languages size={15} className="text-emerald-400 shrink-0" />
+          <span className="font-semibold">{isHindi ? "क्षेत्रीय भाषा चुनें:" : "Language Selection:"}</span>
+        </div>
+        <RegionalLanguageToggle variant="header" />
+      </div>
+
       <div className="p-4 rounded-xl bg-amber-950/30 border border-amber-500/30 text-amber-200 text-xs flex items-start gap-2">
         <MapPin size={16} className="text-amber-400 shrink-0 mt-0.5" />
         <span>
-          <strong>South Asian Regional Land Calculator:</strong> Instantly converts plot, field, and real estate measurements across Bigha, Marla, Kanal, Guntha, Gaj, Cent, Acre, and Square Feet.
+          <strong>{t.bannerTitle}</strong> {t.bannerDesc}
         </span>
       </div>
 
@@ -804,7 +847,7 @@ export function LandAreaConverterTool() {
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <div>
           <label className="block text-xs font-semibold uppercase text-slate-300 mb-1.5 font-mono">
-            Land Area Amount
+            {t.amountLabel}
           </label>
           <input
             type="number"
@@ -817,18 +860,23 @@ export function LandAreaConverterTool() {
 
         <div className="sm:col-span-2">
           <label className="block text-xs font-semibold uppercase text-slate-300 mb-1.5 font-mono">
-            Selected Measurement Unit
+            {t.unitLabel}
           </label>
           <select
             value={fromUnit}
             onChange={(e) => setFromUnit(e.target.value)}
             className="w-full h-12 px-3 rounded-xl bg-slate-900 border border-slate-700 text-white font-medium focus:border-amber-500 focus:outline-none"
           >
-            {LAND_UNITS.map((u) => (
-              <option key={u.id} value={u.id}>
-                {u.name} — ({u.region})
-              </option>
-            ))}
+            {LAND_UNITS.map((u) => {
+              const unitInfo = t.units[u.id as keyof typeof t.units];
+              const unitName = isHindi && unitInfo ? unitInfo.name : u.name;
+              const unitRegion = isHindi && unitInfo ? unitInfo.region : u.region;
+              return (
+                <option key={u.id} value={u.id}>
+                  {unitName} — ({unitRegion})
+                </option>
+              );
+            })}
           </select>
         </div>
       </div>
@@ -836,7 +884,7 @@ export function LandAreaConverterTool() {
       {/* Conversion Grid Matrix */}
       <div className="space-y-3">
         <h4 className="text-xs font-mono uppercase text-slate-400 font-semibold tracking-wider">
-          Complete Multi-Unit Conversion Matrix:
+          {t.matrixTitle}
         </h4>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
@@ -844,6 +892,9 @@ export function LandAreaConverterTool() {
             const convertedVal = totalSqFt / u.factorToSqFt;
             const formatted = convertedVal >= 1000 ? convertedVal.toLocaleString("en-IN", { maximumFractionDigits: 4 }) : convertedVal.toFixed(4).replace(/\.?0+$/, "");
             const isSelected = u.id === fromUnit;
+            const unitInfo = t.units[u.id as keyof typeof t.units];
+            const unitName = isHindi && unitInfo ? unitInfo.name : u.name;
+            const unitRegion = isHindi && unitInfo ? unitInfo.region : u.region;
 
             return (
               <div
@@ -855,11 +906,11 @@ export function LandAreaConverterTool() {
                 }`}
               >
                 <div className="flex items-center justify-between text-[11px] text-slate-400 mb-1">
-                  <span>{u.name}</span>
-                  <span className="font-mono text-[10px] text-amber-300/80">{u.region}</span>
+                  <span>{unitName}</span>
+                  <span className="font-mono text-[10px] text-amber-300/80">{unitRegion}</span>
                 </div>
                 <div className="text-lg font-mono font-bold text-white tracking-tight">
-                  {formatted} <small className="text-xs font-normal text-slate-400">{u.name.split(" ")[0]}</small>
+                  {formatted} <small className="text-xs font-normal text-slate-400">{unitName.split(" ")[0]}</small>
                 </div>
               </div>
             );
@@ -908,30 +959,42 @@ function numberToIndianWords(num: number): string {
 }
 
 export function NumberToWordsTool() {
+  const { dict, isHindi } = useLanguage();
+  const t = dict.numberToWords;
   const [amount, setAmount] = useState("145250.50");
   const [copied, setCopied] = useState(false);
 
   const num = Number(amount) || 0;
   const englishWords = useMemo(() => numberToIndianWords(num), [num]);
+  const hindiWords = useMemo(() => numberToHindiWords(num), [num]);
 
   const copyWords = async () => {
-    await navigator.clipboard.writeText(englishWords);
+    const textToCopy = isHindi ? `${hindiWords}\n(${englishWords})` : englishWords;
+    await navigator.clipboard.writeText(textToCopy);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
 
   return (
     <div className="space-y-6">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3.5 rounded-xl bg-slate-900/90 border border-slate-800">
+        <div className="flex items-center gap-2 text-xs text-slate-300">
+          <Languages size={15} className="text-emerald-400 shrink-0" />
+          <span className="font-semibold">{isHindi ? "क्षेत्रीय भाषा चुनें:" : "Language Selection:"}</span>
+        </div>
+        <RegionalLanguageToggle variant="header" />
+      </div>
+
       <div className="p-4 rounded-xl bg-violet-950/30 border border-violet-500/30 text-violet-200 text-xs flex items-start gap-2">
         <Languages size={16} className="text-violet-400 shrink-0 mt-0.5" />
         <span>
-          <strong>Banking & Cheque Slip Generator:</strong> Converts numerical amounts to Indian numbering words (Lakhs & Crores) formatted for Bank Cheques, Invoices, Slips, and Legal Agreements.
+          <strong>{t.bannerTitle}</strong> {t.bannerDesc}
         </span>
       </div>
 
       <div>
         <label className="block text-xs font-semibold uppercase text-slate-300 mb-1.5 font-mono">
-          Enter Amount in Numerals (₹ / Rs)
+          {t.inputLabel}
         </label>
         <div className="relative">
           <span className="absolute left-3.5 top-3 text-slate-400 font-mono font-bold text-lg">₹</span>
@@ -950,7 +1013,7 @@ export function NumberToWordsTool() {
         <div className="flex items-center justify-between pb-3 border-b border-white/10">
           <div className="flex items-center gap-2">
             <span className="text-[11px] font-mono uppercase tracking-wider text-violet-400 font-bold">
-              BANK CHEQUE / SLIP FORMAT
+              {t.chequeFormatTitle}
             </span>
           </div>
           <button
@@ -959,28 +1022,37 @@ export function NumberToWordsTool() {
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-violet-500/20 text-violet-300 hover:bg-violet-500 hover:text-slate-950 font-bold text-xs transition-all"
           >
             {copied ? <Check size={14} /> : <Copy size={14} />}
-            <span>{copied ? "Copied to Clipboard!" : "Copy Words"}</span>
+            <span>{copied ? t.copiedWords : t.copyWords}</span>
           </button>
         </div>
 
         {/* Cheque Words Display */}
-        <div className="p-4 rounded-xl bg-black/40 border border-white/10 space-y-2">
-          <span className="text-[10px] font-mono uppercase text-slate-400 block">Rupees in Words:</span>
-          <p className="text-base sm:text-lg text-emerald-300 font-semibold leading-relaxed">
-            "{englishWords}"
-          </p>
+        <div className="space-y-3">
+          <div className="p-4 rounded-xl bg-black/40 border border-white/10 space-y-1">
+            <span className="text-[10px] font-mono uppercase text-slate-400 block">{t.rupeesInWords}</span>
+            <p className="text-base sm:text-lg text-emerald-300 font-semibold leading-relaxed">
+              "{englishWords}"
+            </p>
+          </div>
+
+          <div className="p-4 rounded-xl bg-violet-950/30 border border-violet-500/20 space-y-1">
+            <span className="text-[10px] font-mono uppercase text-violet-300/80 block">{t.hindiWordsLabel}</span>
+            <p className="text-base sm:text-lg text-violet-200 font-semibold leading-relaxed">
+              "{hindiWords}"
+            </p>
+          </div>
         </div>
 
         {/* Lakhs / Crores Formatted Numeral */}
         <div className="flex flex-wrap items-center justify-between gap-3 text-xs pt-1">
           <span className="text-slate-400">
-            Indian Numbering:{" "}
+            {t.indianNumbering}{" "}
             <strong className="text-white font-mono">
               ₹ {num.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
             </strong>
           </span>
           <span className="text-slate-500 font-mono text-[11px]">
-            Verified Local Math
+            {t.verifiedMath}
           </span>
         </div>
       </div>

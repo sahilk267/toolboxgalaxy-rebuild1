@@ -3,6 +3,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { tools } from "../client/src/data/toolRegistry";
 import { logicGames } from "../client/src/pages/Games";
+import { GUIDES } from "../shared/guidesData";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const SITEMAP_PATH = path.resolve(__dirname, "../client/public/sitemap.xml");
@@ -19,6 +20,7 @@ const coreRoutes: SitemapEntry[] = [
   { loc: `${BASE_URL}/`, changefreq: "daily", priority: "1.0" },
   { loc: `${BASE_URL}/studio`, changefreq: "weekly", priority: "0.9" },
   { loc: `${BASE_URL}/tools`, changefreq: "daily", priority: "0.9" },
+  { loc: `${BASE_URL}/guides`, changefreq: "daily", priority: "0.9" },
   { loc: `${BASE_URL}/games`, changefreq: "daily", priority: "0.9" },
   { loc: `${BASE_URL}/games/logic-lab`, changefreq: "weekly", priority: "0.8" },
 ];
@@ -141,10 +143,19 @@ export function generateSitemapXml(): { xml: string; totalCount: number; toolCou
     });
   });
 
-  // 4. Process Legal & Contact
+  // 4. Process Technical Guides: all authoritative guides from guidesData.ts
+  const guideEntries: SitemapEntry[] = GUIDES.map((guide) => {
+    return register({
+      loc: `${BASE_URL}/guides/${guide.slug}`,
+      changefreq: "weekly",
+      priority: "0.85",
+    });
+  });
+
+  // 5. Process Legal & Contact
   const registeredLegal = legalRoutes.map(register);
 
-  // 5. Construct XML document
+  // 6. Construct XML document
   const xmlLines: string[] = [
     `<?xml version="1.0" encoding="UTF-8"?>`,
     `<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">`,
@@ -156,6 +167,9 @@ export function generateSitemapXml(): { xml: string; totalCount: number; toolCou
     ``,
     `  <!-- Tools Foundry (${toolEntries.length} items) -->`,
     toolEntries.map(renderEntry).join("\n"),
+    ``,
+    `  <!-- Technical Guides & Backlink Knowledge Base (${guideEntries.length} items) -->`,
+    guideEntries.map(renderEntry).join("\n"),
     ``,
     `  <!-- Legal & Contact -->`,
     registeredLegal.map(renderEntry).join("\n"),
@@ -169,13 +183,14 @@ export function generateSitemapXml(): { xml: string; totalCount: number; toolCou
     totalCount: seenUrls.size,
     toolCount: toolEntries.length,
     gameCount: gameEntries.length,
+    guideCount: guideEntries.length,
   };
 }
 
 // When executed directly as a script
 if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.argv[1])) {
   console.log("[Sitemap Generator] Generating client/public/sitemap.xml...");
-  const { xml, totalCount, toolCount, gameCount } = generateSitemapXml();
+  const { xml, totalCount, toolCount, gameCount, guideCount } = generateSitemapXml();
   fs.writeFileSync(SITEMAP_PATH, xml, "utf-8");
-  console.log(`[Sitemap Generator] Success! Wrote ${totalCount} URLs (${toolCount} tools, ${gameCount} games) to ${SITEMAP_PATH}`);
+  console.log(`[Sitemap Generator] Success! Wrote ${totalCount} URLs (${toolCount} tools, ${gameCount} games, ${guideCount} guides) to ${SITEMAP_PATH}`);
 }
