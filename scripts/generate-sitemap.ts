@@ -39,8 +39,8 @@ function getGameMetadata(slug: string): { priority: string; changefreq: string }
   if (slug === "connections" || slug === "orbit-lexicon" || slug === "mini-crossword") {
     return { priority: "0.9", changefreq: "daily" };
   }
-  if (slug === "orbit-dash") {
-    return { priority: "0.8", changefreq: "weekly" };
+  if (slug === "orbit-dash" || slug === "tank-evolution" || slug === "surviv-io" || slug === "krunker") {
+    return { priority: "0.85", changefreq: "weekly" };
   }
   return { priority: "0.85", changefreq: "daily" };
 }
@@ -115,11 +115,14 @@ export function generateSitemapXml(): { xml: string; totalCount: number; toolCou
   // 1. Process Core
   const registeredCore = coreRoutes.map(register);
 
-  // 2. Process Games: logicGames from Games.tsx + Orbit Dash + Mini Crossword
+  // 2. Process Games: logicGames from Games.tsx + Orbit Dash + Tank Evolution + Mini Crossword
   const allGameSlugs = Array.from(
     new Set([
       ...logicGames.map((g) => g.slug),
       "orbit-dash",
+      "tank-evolution",
+      "surviv-io",
+      "krunker",
       "mini-crossword",
     ])
   );

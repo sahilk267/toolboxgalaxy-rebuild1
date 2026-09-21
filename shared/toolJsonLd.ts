@@ -52,7 +52,13 @@ export function getToolApplicationCategory(tool: ToolDefinition): string {
     case "url":
     case "html":
     case "csvViewer":
+    case "loremIpsum":
+    case "seoMeta":
+    case "fakeDataGen":
       return "DeveloperApplication";
+    case "randomNumber":
+    case "usernameGen":
+      return "UtilitiesApplication";
     case "imageResize":
     case "imageTransform":
     case "imageMetadata":
@@ -62,6 +68,7 @@ export function getToolApplicationCategory(tool: ToolDefinition): string {
     case "contrast":
     case "qr":
     case "favicon":
+    case "ogImageBuilder":
     case "pdfEditor":
     case "pdfMergeSplit":
     case "imagesToPdf":

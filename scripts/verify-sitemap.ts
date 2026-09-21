@@ -54,10 +54,22 @@ assert(
     : `Missing core routes: ${missingCore.join(", ")}`
 );
 
-// 2. Orbit Dash Arcade
+// 2. Arcade Games
 assert(
   uniqueLocs.has(`${BASE_URL}/games/orbit-dash`),
   "Orbit Dash arcade route (/games/orbit-dash) is present in sitemap"
+);
+assert(
+  uniqueLocs.has(`${BASE_URL}/games/tank-evolution`),
+  "Diep Tank evolution arcade route (/games/tank-evolution) is present in sitemap"
+);
+assert(
+  uniqueLocs.has(`${BASE_URL}/games/surviv-io`),
+  "Surviv Battle Royale route (/games/surviv-io) is present in sitemap"
+);
+assert(
+  uniqueLocs.has(`${BASE_URL}/games/krunker`),
+  "Krunker Voxel FPS arcade route (/games/krunker) is present in sitemap"
 );
 
 // 3. Logic Games validation against Games.tsx logicGames

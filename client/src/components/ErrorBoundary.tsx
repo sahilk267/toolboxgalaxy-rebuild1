@@ -21,35 +21,57 @@ class ErrorBoundary extends Component<Props, State> {
     return { hasError: true, error };
   }
 
+  handleRetry = () => {
+    this.setState({ hasError: false, error: null });
+  };
+
   render() {
     if (this.state.hasError) {
+      const isDynamicImportError =
+        this.state.error?.message?.includes("Failed to fetch dynamically imported module") ||
+        this.state.error?.message?.includes("Importing a module script failed");
+
       return (
-        <div className="flex items-center justify-center min-h-screen p-8 bg-background">
-          <div className="flex flex-col items-center w-full max-w-2xl p-8">
+        <div className="flex items-center justify-center min-h-[400px] p-8 bg-background">
+          <div className="flex flex-col items-center w-full max-w-lg p-6 text-center">
             <AlertTriangle
-              size={48}
-              className="text-destructive mb-6 flex-shrink-0"
+              size={44}
+              className="text-amber-400 mb-4 flex-shrink-0"
             />
 
-            <h2 className="text-xl mb-4">An unexpected error occurred.</h2>
+            <h2 className="text-xl font-bold mb-2">
+              {isDynamicImportError ? "Module Load Interrupted" : "An unexpected error occurred."}
+            </h2>
 
-            <div className="p-4 w-full rounded bg-muted overflow-auto mb-6">
-              <pre className="text-sm text-muted-foreground whitespace-break-spaces">
-                {this.state.error?.stack}
-              </pre>
+            <p className="text-sm text-muted-foreground mb-6 max-w-md">
+              {isDynamicImportError
+                ? "The game module could not be loaded, which can happen during a connection blip or background update. Click below to reload."
+                : "A runtime error occurred while loading this view."}
+            </p>
+
+            <div className="flex items-center gap-3">
+              <button
+                onClick={this.handleRetry}
+                className={cn(
+                  "flex items-center gap-2 px-4 py-2 rounded-lg font-medium text-sm",
+                  "bg-amber-500 text-black",
+                  "hover:bg-amber-400 cursor-pointer transition"
+                )}
+              >
+                <RotateCcw size={15} />
+                Try Again
+              </button>
+              <button
+                onClick={() => window.location.reload()}
+                className={cn(
+                  "flex items-center gap-2 px-4 py-2 rounded-lg font-medium text-sm",
+                  "bg-muted text-foreground",
+                  "hover:bg-muted/80 cursor-pointer transition"
+                )}
+              >
+                Reload Page
+              </button>
             </div>
-
-            <button
-              onClick={() => window.location.reload()}
-              className={cn(
-                "flex items-center gap-2 px-4 py-2 rounded-lg",
-                "bg-primary text-primary-foreground",
-                "hover:opacity-90 cursor-pointer"
-              )}
-            >
-              <RotateCcw size={16} />
-              Reload Page
-            </button>
           </div>
         </div>
       );

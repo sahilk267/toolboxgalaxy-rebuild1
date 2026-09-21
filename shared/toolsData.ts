@@ -52,7 +52,13 @@ export type ToolKind =
   | "jwtDebugger"
   | "cronSchedule"
   | "regexTester"
-  | "curlToCode";
+  | "curlToCode"
+  | "loremIpsum"
+  | "randomNumber"
+  | "seoMeta"
+  | "usernameGen"
+  | "ogImageBuilder"
+  | "fakeDataGen";
 
 export type ToolDefinition = {
   slug: string;
@@ -559,5 +565,77 @@ export const tools: ToolDefinition[] = [
     kind: "curlToCode",
     accent: "lime",
     tags: ["Local", "Verified", "Popular", "Developer"],
+  },
+  {
+    slug: "lorem-ipsum-generator",
+    name: "Lorem Ipsum Generator",
+    category: "Code & Text",
+    description: "Generate clean dummy placeholder text for mockups and designs with paragraph, sentence, and word count controls.",
+    kind: "loremIpsum",
+    accent: "lime",
+    tags: ["Local", "Verified", "Popular", "Design"],
+    hindiName: "लॉरम इप्सम जनरेटर",
+    hindiDescription: "डिज़ाइन और मॉकअप के लिए पैराग्राफ, वाक्य और शब्द नियंत्रण के साथ डमी टेक्स्ट जनरेट करें।",
+    hindiKeywords: ["lorem ipsum", "dummy text", "placeholder text", "mockup text"],
+  },
+  {
+    slug: "random-number-generator",
+    name: "Random Number Generator",
+    category: "Calculate",
+    description: "Cryptographically secure random numbers, ranges, dice rolls, and coin flips with duplicate controls and instant stats.",
+    kind: "randomNumber",
+    accent: "sky",
+    tags: ["Local", "Verified", "Popular", "Math"],
+    hindiName: "रैंडम नंबर जनरेटर",
+    hindiDescription: "क्रिप्टोग्राफ़िक रूप से सुरक्षित यादृच्छिक संख्याएं, पासा रोल और सिक्का उछालें।",
+    hindiKeywords: ["random number", "dice roll", "coin flip", "lottery generator"],
+  },
+  {
+    slug: "seo-meta-generator",
+    name: "SEO Meta Tag Generator",
+    category: "Code & Text",
+    description: "Generate SEO-optimized HTML meta tags, OpenGraph cards, Twitter preview cards, and Next.js metadata with live Google preview.",
+    kind: "seoMeta",
+    accent: "ember",
+    tags: ["Local", "Verified", "Popular", "Developer", "SEO"],
+    hindiName: "एसईओ मेटा टैग जनरेटर",
+    hindiDescription: "लाइव गूगल और सोशल प्रीव्यू के साथ सर्च इंजन और सोशल मीडिया मेटा टैग जनरेट करें।",
+    hindiKeywords: ["seo meta tags", "open graph generator", "twitter card", "meta description"],
+  },
+  {
+    slug: "username-generator",
+    name: "Username Generator",
+    category: "Create",
+    description: "Generate unique, aesthetic, gaming, and developer handles with custom prefixes, suffixes, styles, and separators.",
+    kind: "usernameGen",
+    accent: "violet",
+    tags: ["Local", "Verified", "Popular", "Gaming"],
+    hindiName: "यूज़रनेम जनरेटर",
+    hindiDescription: "गेमिंग, सोशल मीडिया और डेवलपर्स के लिए अनोखे और आकर्षक यूज़रनेम बनाएं।",
+    hindiKeywords: ["username generator", "gamertag", "handle creator", "cool nicknames"],
+  },
+  {
+    slug: "og-image-builder",
+    name: "OpenGraph Image Builder & Canvas",
+    category: "Create",
+    description: "Design custom 1200x630 social share cards and OpenGraph preview images with themes, custom gradients, typography, badges, and instant PNG download.",
+    kind: "ogImageBuilder",
+    accent: "sky",
+    tags: ["Local", "Verified", "Popular", "Design", "SEO"],
+    hindiName: "ओपन ग्राफ इमेज बिल्डर",
+    hindiDescription: "सोशल मीडिया शेयर कार्ड्स, थंबनेल और 1200x630 ओपन ग्राफ इमेजिस डिज़ाइन करें और तुरंत PNG डाउनलोड करें।",
+    hindiKeywords: ["og image builder", "social share card", "twitter card generator", "open graph canvas"],
+  },
+  {
+    slug: "fake-data-generator",
+    name: "Mock & Fake Data Generator",
+    category: "Code & Text",
+    description: "Generate realistic mock user profiles, customer records, addresses, financial transactions, and datasets in JSON, CSV, SQL, or Markdown format.",
+    kind: "fakeDataGen",
+    accent: "lime",
+    tags: ["Local", "Verified", "Popular", "Developer", "Database"],
+    hindiName: "मॉक और फेक डेटा जनरेटर",
+    hindiDescription: "डेवलपमेंट और टेस्टिंग के लिए जेसन, सीएसवी और एसक्यूएल फॉर्मेट में रियलिस्टिक मॉक यूज़र्स और रिकॉर्ड्स जनरेट करें।",
+    hindiKeywords: ["mock data generator", "fake user data", "dummy json data", "test data generator", "fake dataset"],
   },
 ];

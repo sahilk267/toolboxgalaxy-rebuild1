@@ -74,12 +74,18 @@ export default function Privacy() {
         <section className="policy-ledger-section" aria-labelledby="policy-analytics">
           <div className="policy-ledger-head">
             <span>04</span>
-            <h2 id="policy-analytics">Site analytics & performance telemetry</h2>
+            <h2 id="policy-analytics">Cookieless, privacy-respecting analytics & performance telemetry</h2>
             <b>AGGREGATED USAGE METRICS</b>
           </div>
           <p>
-            Toolbox Galaxy respects your data privacy. All tools run 100% locally in your browser. If website analytics measurement is configured, we use Google Analytics (GA4) to understand site traffic, popular tools, and reliability.
+            Toolbox Galaxy respects your data privacy. All tools run 100% locally in your browser. If website analytics measurement is configured, we use Cookieless, privacy-respecting analytics to understand site traffic, popular tools, and reliability.
           </p>
+          <ul className="list-disc pl-6 space-y-1 text-white/70 text-sm my-3">
+            <li><b>No cookies:</b> We operate without tracking cookies, advertising identifiers, or persistent device fingerprints.</li>
+            <li><b>No IP address storage:</b> No IP address storage or raw network logs are retained or tied to user activity.</li>
+            <li><b>No cross-site tracking:</b> No cross-site tracking is conducted across third-party websites or ad networks.</li>
+            <li><b>Do Not Track:</b> We strictly respect your browser's Do Not Track (DNT) and Global Privacy Control (GPC) signals.</li>
+          </ul>
           <p>
             <b>What is measured:</b> Standard aggregated, non-sensitive metrics to maintain site quality:
           </p>

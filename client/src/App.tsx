@@ -30,15 +30,67 @@ function PageViewTracker() {
   return null;
 }
 
-const OrbitDash = lazy(() => import("@/pages/OrbitDash"));
-const LogicLab = lazy(() => import("@/pages/LogicLab"));
-const LogicPuzzle = lazy(() => import("@/pages/LogicPuzzle"));
+// Resilient lazy module loader that retries on temporary connection loss or dev rebuilds
+function lazyWithRetry<T extends React.ComponentType<any>>(
+  factory: () => Promise<{ default: T }>
+) {
+  return lazy(async () => {
+    try {
+      return await factory();
+    } catch (err) {
+      try {
+        await new Promise((resolve) => setTimeout(resolve, 350));
+        return await factory();
+      } catch (retryErr) {
+        console.warn("Failed dynamic import on initial attempt:", retryErr);
+        throw retryErr;
+      }
+    }
+  });
+}
+
+const OrbitDash = lazyWithRetry(() => import("@/pages/OrbitDash"));
+const DiepArena = lazyWithRetry(() => import("@/pages/DiepArena"));
+const SurvivBattleRoyale = lazyWithRetry(() => import("@/pages/SurvivBattleRoyale"));
+const KrunkerArena = lazyWithRetry(() => import("@/pages/KrunkerArena"));
+const LogicLab = lazyWithRetry(() => import("@/pages/LogicLab"));
+const LogicPuzzle = lazyWithRetry(() => import("@/pages/LogicPuzzle"));
 
 function GameRoute() {
   return (
     <ErrorBoundary>
       <Suspense fallback={<div className="game-route-loading"><span className="status-dot" /> Loading Orbit Dash…</div>}>
         <OrbitDash />
+      </Suspense>
+    </ErrorBoundary>
+  );
+}
+
+function DiepRoute() {
+  return (
+    <ErrorBoundary>
+      <Suspense fallback={<div className="game-route-loading"><span className="status-dot" /> Loading Diep Tank Arena…</div>}>
+        <DiepArena />
+      </Suspense>
+    </ErrorBoundary>
+  );
+}
+
+function SurvivRoute() {
+  return (
+    <ErrorBoundary>
+      <Suspense fallback={<div className="game-route-loading"><span className="status-dot" /> Loading Surviv Battle Royale…</div>}>
+        <SurvivBattleRoyale />
+      </Suspense>
+    </ErrorBoundary>
+  );
+}
+
+function KrunkerRoute() {
+  return (
+    <ErrorBoundary>
+      <Suspense fallback={<div className="game-route-loading"><span className="status-dot" /> Loading Krunker Voxel FPS…</div>}>
+        <KrunkerArena />
       </Suspense>
     </ErrorBoundary>
   );
@@ -83,6 +135,12 @@ export default function App() {
               <Route path="/guides" component={Guides} />
               <Route path="/guides/:slug" component={GuideDetail} />
               <Route path="/games" component={Games} />
+              <Route path="/games/tank-evolution" component={DiepRoute} />
+              <Route path="/games/diep" component={DiepRoute} />
+              <Route path="/games/surviv-io" component={SurvivRoute} />
+              <Route path="/games/battle-royale" component={SurvivRoute} />
+              <Route path="/games/krunker" component={KrunkerRoute} />
+              <Route path="/games/krunker-fps" component={KrunkerRoute} />
               <Route path="/games/orbit-dash" component={GameRoute} />
               <Route path="/games/logic-lab" component={LogicLabRoute} />
               <Route path="/games/:slug" component={LogicPuzzleRoute} />

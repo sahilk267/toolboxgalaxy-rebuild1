@@ -79,6 +79,24 @@ export const GAMES_CATALOG: GameMetadata[] = [
     tag: "3D ARCADE",
   },
   {
+    slug: "tank-evolution",
+    name: "Diep Tank (2D Evolution Arena)",
+    detail: "Classic 2D tank shooter · 8 stats upgrades · 4 tier evolution tree · Shapes & AI bots",
+    tag: "2D TANK ARENA",
+  },
+  {
+    slug: "surviv-io",
+    name: "Surviv Battle Royale (2D Island Survival)",
+    detail: "Loot weapons & armor · Obstacle cover & destructible crates · Shrinking toxic gas zone · 30 survivors",
+    tag: "2D BATTLE ROYALE",
+  },
+  {
+    slug: "krunker",
+    name: "Krunker Voxel FPS (3D Slide-Hop Arena)",
+    detail: "Three.js 3D voxel shooter · Slide-hopping & bhop speed · Instant hitscan raycasts · 5 combat classes",
+    tag: "3D VOXEL FPS",
+  },
+  {
     slug: "mini-crossword",
     name: "Mini Crossword",
     detail: "Daily 5×5 speed crossword puzzle across and down",

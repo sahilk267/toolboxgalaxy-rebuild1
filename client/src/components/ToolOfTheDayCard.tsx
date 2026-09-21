@@ -33,6 +33,12 @@ import {
   Terminal,
   Wrench,
   LucideIcon,
+  Globe,
+  Dice5,
+  AtSign,
+  AlignLeft,
+  Database,
+  LayoutTemplate,
 } from "lucide-react";
 import type { ToolKind } from "@shared/toolsData";
 
@@ -116,6 +122,18 @@ function getToolIcon(kind: ToolKind): LucideIcon {
       return Regex;
     case "curlToCode":
       return Terminal;
+    case "loremIpsum":
+      return AlignLeft;
+    case "randomNumber":
+      return Dice5;
+    case "seoMeta":
+      return Globe;
+    case "usernameGen":
+      return AtSign;
+    case "ogImageBuilder":
+      return LayoutTemplate;
+    case "fakeDataGen":
+      return Database;
     default:
       return Wrench;
   }

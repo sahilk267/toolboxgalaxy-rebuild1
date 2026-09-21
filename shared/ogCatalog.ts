@@ -153,6 +153,12 @@ export const TOOL_SLUG_TO_CATEGORY: Record<string, string> = {
   "work-shift-duration": "daily-utilities",
   "line-sorter-deduplicator": "daily-utilities",
   "tracking-url-cleaner": "daily-utilities",
+  "lorem-ipsum-generator": "developer-tools",
+  "random-number-generator": "daily-utilities",
+  "seo-meta-generator": "developer-tools",
+  "username-generator": "daily-utilities",
+  "og-image-builder": "image-tools",
+  "fake-data-generator": "developer-tools",
 };
 
 // 2. Per-Game Visual Templates
