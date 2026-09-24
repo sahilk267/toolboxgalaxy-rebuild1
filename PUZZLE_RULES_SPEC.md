@@ -116,6 +116,55 @@ Each submitted selection must be an orthogonal non-repeating path. A selection r
 
 `wendBank.ts` contains seven date-selected editions (`Apollo` through `Galileo`). Each stores an independently authored 5×5 letter grid, five target words, and five orthogonal non-repeating paths that together form an exact 25-cell cover. Target-word signatures and canonical square-symmetry path signatures are unique across the bank, so a reflection, rotation, palette swap, or opening assist cannot represent a new Wend field. The permanent verifier checks every path’s spelling and adjacency, each full cover, unique exact-cover count, word/path mutation rejection, and seven-consecutive-date selector coverage. Completion storage uses `wend-<edition-id>` plus the local date so records cannot mix.
 
+## The Hive contract (Spelling Bee)
+
+The Hive arranges 7 letters in a hexagonal cluster with 1 central gold letter.
+- **Rule 1**: Every accepted word must contain at least 4 letters.
+- **Rule 2**: Every accepted word MUST include the center gold letter.
+- **Rule 3**: Letters may be repeated within a word.
+- **Scoring**: 4-letter words = 1 point; 5+ letter words = 1 point per letter; Pangrams (using all 7 letters) = word length + 7 bonus points.
+- **Validation**: Independent offline lexicon dictionary with deterministic daily honeycomb seeds.
+
+## Wordle contract (Orbit Lexicon)
+
+Wordle is a 5-letter hidden word deduction puzzle solved in 6 attempts or fewer.
+- **Feedback Matrix**:
+  - Green (Match): Correct letter in the exact correct position.
+  - Yellow (Present): Letter is in the target word but in a different position. Duplicate yellow feedback is strictly bounded by remaining target letter frequencies.
+  - Gray (Absent): Letter does not occur in the target word.
+- **Storage**: Daily attempt history and local streak stored in `localStorage` under `toolboxgalaxy:wordle-daily`.
+
+## Connections contract
+
+Connections presents a 4×4 grid of 16 words to sort into 4 distinct groups of 4.
+- **Categories**: Yellow (Straightforward), Green (Wordplay / Common Trait), Blue (Trivia / Facts), Purple (Tricky Word Associations / Double Meanings).
+- **Attempts**: Up to 4 incorrect guess submissions allowed before solution reveals. "One away..." feedback is provided when 3 of 4 selected words share a group.
+
+## Strands contract
+
+Strands is a theme-based word search on a 6×8 letter grid.
+- **Rule**: Every letter on the grid belongs to exactly one theme word or the Spangram.
+- **Spangram**: Special theme word highlighted in Gold that spans from one edge of the grid to the opposite edge (Left-to-Right or Top-to-Bottom).
+- **Assistance**: Finding non-theme valid 4+ letter words fills the Hint meter. When full, an undiscovered theme word is revealed.
+
+## Chess Puzzles contract
+
+Tactical checkmate and material advantage puzzles.
+- **Validation**: Strict FEN position loading and legal move validation using an in-browser chess engine.
+- **Conditions**: Checkmate-in-1 or Checkmate-in-2 problems with strict defensive response trees. Invalid moves reset with instructive retry telemetry.
+
+## Nonogram contract (Picross)
+
+A picture logic puzzle where cells in a grid must be filled or left blank according to numbers at the side of the grid.
+- **Clues**: Numbers indicate runs of consecutive filled squares in that row or column (e.g., "2 3" means a run of 2, at least one space, then a run of 3).
+- **Completion**: Evaluated when all cells matching the hidden bitmap pattern are filled and all empty cells are unmarked or marked with 'X'.
+
+## Mini Crossword contract
+
+A daily 5×5 symmetric crossword grid.
+- **Clues**: 5 Across clues and 5 Down clues.
+- **Validation**: Letter-by-letter matching against the daily puzzle solution key with completion timer and error checking toggle.
+
 ## Verification sequence
 
 Every shipped board must pass these checks before it is exposed in the Games Bay.

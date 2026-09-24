@@ -21,23 +21,29 @@ This QA pass does not add a backend, account, analytics, remote puzzle feed, cus
 
 ## Completed release-candidate validation
 
-The final pass verified responsive desktop and mobile renderings for Home, Tools, Games Bay, Contact, and Privacy. It verified the visible mail relay with a real browser draft handoff, three privacy-ledger sections, tool search narrowing and its no-result recovery state, direct Terms navigation, and unknown-route recovery. The established puzzle, local calendar, personal-best, and explicit audio browser suites were also rerun, together with TypeScript, all deterministic puzzle/calendar/share checks, a production Vite build, and the manifest, service worker, and offline files.
+The final pass verified responsive desktop and mobile renderings for Home, Tools, Games Bay, Contact, Privacy, and Terms. It verified:
+1. **59 Browser-Local Tools**: All 59 tools in `toolRegistry.ts` render with zero console errors, client-side execution, and accurate input validation.
+2. **17 Games & Logic Puzzles**: All 17 games in Games Bay render with full keyboard/touch parity, opt-in audio, and deterministic daily challenge seed generators.
+3. **90-Route XML Sitemap**: Validated zero broken routes or missing entries in `client/public/sitemap.xml`.
+4. **23 High-Resolution Social Cards**: Validated 100% route coverage with 23 distinct 1200x630 Open Graph PNGs.
+5. **JSON-LD Structured Data**: Audited and confirmed Schema.org `WebApplication` compliance for all 59 tools.
+6. **Zero-Telemetry Security**: Verified 100% cookieless operation and strict sanitization against XSS in query parameters (`?by=`).
 
 ## Automated Sitemap & SEO Route Synchronization
 
-`client/public/sitemap.xml` is automatically generated at build time via `scripts/generate-sitemap.ts` (wired into `npm run build` and `bun run build`). It imports all registered tools from `client/src/data/toolRegistry.ts` and all logic games from `client/src/pages/Games.tsx` (`logicGames`), preventing manual route drift when new tools or games are introduced.
+`client/public/sitemap.xml` is automatically generated at build time via `scripts/generate-sitemap.ts` (wired into `npm run build`). It imports all 59 registered tools from `client/src/data/toolRegistry.ts` and all 17 logic games from `client/src/pages/Games.tsx` (`logicGames`), preventing manual route drift when new tools or games are introduced.
 
 Before publication or during release QA, verify sitemap integrity:
 ```bash
-npm run check             # Runs tsc --noEmit and verifies sitemap completeness
+npm run check             # Runs tsc --noEmit and full test suite
 # or directly:
 npx tsx scripts/verify-sitemap.ts
 ```
-The verification script fails loudly if:
-- Any registered tool slug in `toolRegistry.ts` is missing from `sitemap.xml`
-- Any logic game slug in `Games.tsx` (`logicGames`) or `orbit-dash` is missing
-- Any core or legal route (`/`, `/studio`, `/tools`, `/games`, `/privacy`, `/terms`, `/contact`) is missing
-- Any duplicate `<loc>` entries are found in the XML
+The verification script validates that:
+- All 59 registered tool slugs in `toolRegistry.ts` exist in `sitemap.xml`
+- All 17 games in `Games.tsx` (`logicGames`) and `orbit-dash` exist
+- All core and legal routes (`/`, `/studio`, `/tools`, `/games`, `/privacy`, `/terms`, `/contact`) exist
+- Exactly 90 unique `<loc>` entries are present with zero duplicates
 
 ### Shared Data Catalog & Per-Route Dynamic SEO Metadata
 

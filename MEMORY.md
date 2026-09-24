@@ -59,3 +59,67 @@
 ## Image Tools Batch 6
 
 - The foundry now has 37 registry-backed local modules. `localImageMetadata.ts` owns pure supported-type, 20 MB file, 8,192px-edge, and 20-million-pixel bounds plus native-dimension clean re-export policy; it has no canvas, File, object URL, storage, network, or server dependency. `ImageMetadataTool.tsx` owns the current-tab PNG/JPG/WebP picker, decode, fresh PNG canvas output, object-URL cleanup, explicit clean/download/reset controls, keyboard clear, and unsupported/decode error state for the unique `imageMetadata` kind. It intentionally does not crop, rotate, resize, convert formats, or modify the original file. The browser re-export is a practical common-raster metadata cleanup path, not a forensic scanner or guarantee about every format-specific chunk. No image bytes, filename, metadata, pixels, output, or settings are uploaded or persisted. `TOOL_BATCH_6_SPEC.md` is the exact contract. Before release, run `pnpm exec tsx scripts/verify-image-metadata.ts` and `pnpm exec tsx scripts/playtest-image-metadata.ts` with the complete existing tool/game/calendar/share, public-route, build, PWA, and current-log gates; the browser suite uses real local file selection, native output geometry, pointer download, keyboard clear, unsupported-file handling, and no-storage/network assertions.
+
+## PDF & Document Studio Suite (Modules 38-44)
+
+- **PDF Visual Editor & Annotator (`/tools/pdf-visual-editor`)**: Built with Mozilla's PDF.js (`pdfjs-dist`) client-side worker synchronized via `scripts/ensure-pdf-worker.js`. Allows full-page rendering, annotation drawing, text layers, signature injection, and in-memory export.
+- **PDF Merge & Split (`/tools/pdf-merge-split`)**: Client-side document reassembly using `pdf-lib`. Reorders pages, extracts ranges, and combines multi-file uploads into single PDF archives without remote processing.
+- **PDF Security Redactor (`/tools/pdf-security-redactor`)**: Permanent redaction engine. Renders vector content to high-DPI raster canvases and draws black redaction blocks to permanently purge text and metadata, preventing copy-paste or vector-underlay recovery attacks.
+- **Excel Spreadsheet Studio (`/tools/excel-spreadsheet-studio`)**: In-browser XLSX/CSV workbook editor using `exceljs`. Provides multi-sheet navigation, formula recalculations, cell styling, and export.
+- **Document OCR Studio (`/tools/document-ocr-studio`)**: Client-side image-to-text extraction using WebAssembly Tesseract OCR. Processes local scans and screenshots without telemetry.
+- **Word to Markdown (`/tools/word-to-markdown`)**: Converts `.docx` documents into clean, GitHub-flavored Markdown using `mammoth.js` client-side parsing.
+
+## Regional & India Utilities (Modules 45-50)
+
+- **GST & Business Tax Calculator (`/tools/gst-tax-calculator`)**: Interactive Indian Goods and Services Tax engine supporting CGST/SGST intrastate splits, IGST interstate calculations, reverse charge calculations, and tax slab presets (0%, 5%, 12%, 18%, 28%).
+- **UPI QR Code Generator (`/tools/upi-qr-generator`)**: Generates NPIC-compliant UPI payment intent deep links (`upi://pay?pa=...&pn=...&am=...`) and renders sharp, scannable QR codes locally via canvas without external APIs.
+- **IFSC Code & Bank Routing Directory (`/tools/ifsc-code-lookup`)**: Fast local directory and validator for RBI Bank Identification codes with branch decoding and NEFT/RTGS/IMPS capability matrix.
+- **Salary In-Hand / CTC Breakdown (`/tools/salary-in-hand-calculator`)**: Tax calculation model implementing India's Old vs. New Tax Regimes (FY 2024-25 / AY 2025-26), standard deduction, 87A rebate, professional tax, employee EPF, and take-home salary projections.
+- **Indian Postal Pincode Directory (`/tools/indian-pincode-lookup`)**: Instant 6-digit postal index number validator and state/district locator.
+- **EPF / PF Corpus Estimator (`/tools/epf-corpus-estimator`)**: Compound retirement corpus calculator using EPFO interest rates (8.25%), employee/employer contribution splits, annual wage increments, and pension EPS allocation.
+
+## Developer Tools, Encoders & Generators (Modules 51-56)
+
+- **JSON to Zod & TypeScript Studio (`/tools/json-to-zod-schema`)**: Real-time TypeScript AST generator converting raw JSON payloads into strict Zod schemas and TypeScript interface declarations.
+- **JWT Debugger & Inspector (`/tools/jwt-debugger`)**: Client-side JSON Web Token decoder and signature inspector with HMAC-SHA256 signature verification, claims decoding, expiration counters, and Unix timestamp visualizers.
+- **Fake Data & Mock Generator (`/tools/fake-data-generator`)**: In-browser deterministic mock data generator producing realistic user profiles, addresses, transactions, UUIDs, and tabular arrays with one-click JSON/CSV download.
+- **Open Graph Social Image Builder (`/tools/og-image-builder`)**: Real-time 1200x630 social card studio with SVG canvas rendering, category color schemes, custom subtitles, logo badges, and instant PNG export.
+- **Cron Schedule Expression Builder (`/tools/cron-schedule-expression`)**: Visual cron parser and generator explaining minute, hour, day, month, and day-of-week intervals with human-readable English translations and next-run projections.
+- **SQL Query Formatter (`/tools/sql-formatter`)**: Syntax highlighter and pretty-printer for ANSI, PostgreSQL, and MySQL dialect queries with keyword capitalization and indent customization.
+
+## Image & Vector Utilities (Modules 57-59)
+
+- **Govt Job & Passport Photo Resizer (`/tools/passport-photo-resizer`)**: Strict dimension and aspect ratio presets (US Passport, Indian Passport, Schengen Visa, SSC/UPSC exams) with exact target file size clamping (e.g., 20KB–50KB) via iterative JPEG quantization.
+- **SVG to PNG & Vector Studio (`/tools/svg-to-png-converter`)**: High-fidelity vector rasterizer with scale multipliers (1x, 2x, 4x, 8x), transparency preserve toggles, and background fills.
+- **Color Signal & Contrast Studio (`/tools/color-signal`)**: WCAG 2.1 AA/AAA compliance analyzer with luminance calculation, HEX/RGB/HSL conversion, and contrast matrix.
+
+## 17 Games & Daily Logic Suite Architecture
+
+The Games Bay at `/games` currently hosts **17 verified browser-local games**:
+1. **The Hive (`/games/the-hive`)**: Daily 7-letter honeycomb spelling bee puzzle with center-letter requirement, pangram detection, and score ranks.
+2. **Wordle (Orbit Lexicon) (`/games/orbit-lexicon` & `/games/wordle`)**: 5-letter daily deduction with exact letter feedback (green/yellow/gray) and shareable emoji grids.
+3. **Connections (`/games/connections`)**: 4x4 word grid association challenge. Group 16 words into four secret themed categories with 4 mistake allowances.
+4. **Queens (`/games/queens`)**: 6x6 colored region puzzle. Place crowns so each row, column, and color has 1 crown with no orthogonal or diagonal neighbors.
+5. **Mini Sudoku (`/games/mini-sudoku`)**: 6x6 grid with 2x3 boxes and solver-verified single-solution clue bank.
+6. **Strands (`/games/strands`)**: Theme word search with a yellow "spangram" spanning opposite edges of the letter matrix.
+7. **Tango (`/games/tango`)**: Sun & Moon binary logic puzzle enforcing line balance, no triples, and equality/difference relations.
+8. **Patches (`/games/patches`)**: 6x6 exact-cover quilt puzzle partitioning grids into clue-owned rectangles.
+9. **Zip (`/games/zip`)**: Ordered wall labyrinth with consecutive numbered checkpoints and single Hamiltonian path.
+10. **Wend (`/games/wend`)**: Orthogonal word trail puzzle covering 25 cells with target vocabulary paths.
+11. **Chess Puzzles (`/games/chess-puzzles`)**: Tactical endgame deduction problems (mate-in-1, mate-in-2) powered by client-side chess board validation.
+12. **Nonogram (`/games/nonogram`)**: Picross picture logic grid using row and column run constraints.
+13. **Mini Crossword (`/games/mini-crossword`)**: Daily 5x5 speed crossword with keyboard navigation and timer.
+14. **Orbit Dash (`/games/orbit-dash`)**: 3D orthographic cyber dodge arcade in Babylon.js.
+15. **Signal Switch (`/games/signal-switch`)**: Four-pad reaction reflex game with synthesized Web Audio tones.
+16. **Circuit Shift (`/games/circuit-shift`)**: 4x4 path trace rotation puzzle with deterministic Daily Challenge seed.
+17. **Logic Lab (`/games/logic-lab`)**: Sandbox puzzle solver and generator catalog.
+
+## Platform SEO, Social Virality & Notification System
+
+- **23 OpenGraph Social Share Cards (`client/public/og/`)**: High-resolution 1200x630 PNGs generated by `scripts/generate-og-images.ts` using `sharp`. Covers categories, games, tools hub, and site defaults.
+- **XML Sitemap (`client/public/sitemap.xml`)**: Built via `scripts/generate-sitemap.ts` covering all 90 canonical URLs (59 tools, 17 games, 5 guides, core routes).
+- **Personalized Challenge Sharing (`?by=`)**: Secure sharing mechanism with `sanitizeUserParam` and HTML entity escaping to eliminate XSS vectors.
+- **Daily Reminder Notification**: PWA Periodic Background Sync and Web Notification API integration (`dailyReminder.ts`) triggering daily reminder nudges for completed puzzle players with clean opt-in/opt-out toggles.
+- **Tool of the Day Engine (`toolOfTheDay.ts`)**: Pure deterministic modulo calendar rotation across all 59 tools guaranteeing 100% cyclic fairness over 3,650 days.
+- **Cookieless & Privacy Invariants**: Zero tracking scripts, zero Google Analytics without explicit user env key, full DNT honor, and zero backend transmission of user data.
+

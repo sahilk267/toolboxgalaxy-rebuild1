@@ -10,7 +10,7 @@
     "start": "tsx server/index.ts",
     "lint": "tsc --noEmit",
     "preview": "vite preview --host 0.0.0.0 --port 3000",
-    "check": "tsc --noEmit && tsx scripts/verify-sitemap.ts && tsx scripts/verify-og-images.ts && tsx scripts/verify-tool-jsonld.ts && tsx scripts/verify-daily-reminder.ts && tsx scripts/verify-analytics.ts && tsx scripts/verify-tool-share.ts",
+    "check": "tsc --noEmit && tsx scripts/verify-sitemap.ts && tsx scripts/verify-og-images.ts && tsx scripts/verify-tool-jsonld.ts && tsx scripts/verify-daily-reminder.ts && tsx scripts/verify-analytics.ts && tsx scripts/verify-tool-share.ts && tsx scripts/verify-tool-of-the-day.ts",
     "verify:tool-share": "tsx scripts/verify-tool-share.ts",
     "verify:analytics": "tsx scripts/verify-analytics.ts",
     "verify:reminder": "tsx scripts/verify-daily-reminder.ts",

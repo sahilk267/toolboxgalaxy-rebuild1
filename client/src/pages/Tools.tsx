@@ -6,7 +6,8 @@ import SectionHeading from "@/components/SectionHeading";
 import ToolCard from "@/components/ToolCard";
 import { categories, tools } from "@/data/toolRegistry";
 import { Search, SlidersHorizontal } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { trackEvent } from "@/lib/analytics";
 
 const orbitMark = "/orbit-mark.svg";
 
@@ -27,6 +28,23 @@ export default function Tools() {
       return matchesQuery && matchesCategory;
     });
   }, [activeCategory, query]);
+
+  // Track search queries to understand real visitor demand and missing tool searches
+  useEffect(() => {
+    const trimmed = query.trim();
+    if (trimmed.length < 2) return;
+
+    const timer = setTimeout(() => {
+      trackEvent("search", {
+        search_term: trimmed,
+        category: activeCategory,
+        results_count: visibleTools.length,
+        has_results: visibleTools.length > 0,
+      });
+    }, 750);
+
+    return () => clearTimeout(timer);
+  }, [query, activeCategory, visibleTools.length]);
 
   const categoryGroups = useMemo(() => {
     return categories

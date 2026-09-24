@@ -45,6 +45,7 @@ import {
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { MutableRefObject, ReactNode } from "react";
 import { Link, useRoute } from "wouter";
+import { trackEvent } from "@/lib/analytics";
 
 const orbitMark = "/orbit-mark.svg";
 const demoMode = () => new URLSearchParams(window.location.search).has("demo");
@@ -56,7 +57,11 @@ function usePuzzleCompletion(slug: string, daily: LogicDaily, solved: boolean, d
   useEffect(() => { 
     if (solved && !demo) { 
       markPuzzleFieldComplete(slug, daily.id); 
-      setCompleted(true); 
+      setCompleted(true);
+      trackEvent("complete_puzzle", {
+        puzzle_slug: slug,
+        daily_id: daily.id,
+      });
     } 
   }, [daily.id, demo, slug, solved]);
   return completed;

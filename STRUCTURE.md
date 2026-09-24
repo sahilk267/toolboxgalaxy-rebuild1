@@ -75,3 +75,67 @@ Batch 2 extends the same typed registry and `dailyToolEngines.ts` with three add
 `client/src/components/ImageMetadataTool.tsx` owns the controlled current-tab file picker, source decoding, native-dimension canvas re-export, source/output object-URL cleanup, explicit clean-output action, download, Reset, unsupported/decode error state, and accessible privacy limitation copy for the unique `imageMetadata` runner kind. It provides no crop, rotation, resize, format, quality, upload, or source-file mutation flow. `ToolWorkspace.tsx` only maps the unique route and `CLEAN RE-EXPORT` telemetry.
 
 `verify-image-metadata.ts` validates supported formats, file/pixel bounds, native output dimensions, clean re-export assumptions, and 37-entry registry uniqueness. `playtest-image-metadata.ts` drives real Chromium local file selection, pointer clean re-export/download, keyboard clear, unsupported-file feedback, and unchanged local-storage/network state.
+
+## PDF & Document Studio Suite Structure (Modules 38-44)
+
+The PDF and Document Studio operates fully inside client memory with isolated workers:
+- `scripts/ensure-pdf-worker.js`: Synchronization script running during `prebuild` that guarantees `client/public/pdf.worker.min.mjs` matches `pdfjs-dist` version.
+- `client/src/components/PdfDocStudio/PdfVisualEditor.tsx`: PDF viewer and canvas markup layer. Renders pages at 2x resolution via PDF.js worker, maintains vector annotation layers (shapes, text, signatures), and writes flattened PDF files via `pdf-lib`.
+- `client/src/components/PdfDocStudio/PdfMergeSplit.tsx`: Client-side multi-file assembler. Manages page drag-and-drop ordering, page range selections, rotation transforms, and unified document compilation using `pdf-lib`.
+- `client/src/components/PdfDocStudio/PdfSecurityRedactor.tsx`: Permanent raster redaction workspace. Eliminates data recovery risks by converting pages to high-resolution bitmaps, applying irreversible pixel overlays, and stripping document metadata before re-encoding to a clean PDF.
+- `client/src/components/PdfDocStudio/ExcelSpreadsheetStudio.tsx`: Workbook manager powered by `exceljs`. Loads `.xlsx` and `.csv` files into a multi-tab sheet grid, evaluates arithmetic cell relationships, formats column widths, and produces downloadable workbooks.
+- `client/src/components/PdfDocStudio/DocumentOcrStudio.tsx`: Local optical character recognition using Tesseract WebAssembly (`tesseract.js`). Extracts plain text directly from images and PDF scans without cloud OCR APIs.
+- `client/src/components/PdfDocStudio/WordToMarkdown.tsx`: Document parser converting `.docx` binary archives into standardized CommonMark/GFM markdown via `mammoth.js`.
+
+## Regional & India Utilities Structure (Modules 45-50)
+
+Located in `client/src/components/RegionalRunners.tsx` with dedicated pure engines:
+- `gstCalculator.ts`: Intrastate (CGST 50% / SGST 50%) and Interstate (IGST 100%) tax calculation, gross-to-net and net-to-gross calculations, and reverse charge handling.
+- `upiGenerator.ts`: NPCI-compliant payment URI builder (`upi://pay?pa=...`) and local canvas QR renderer with user-configurable amounts and note parameters.
+- `ifscDirectory.ts`: Offline lookup table for Indian commercial and cooperative banks with branch MICR, address, and electronic clearing status.
+- `salaryTaxEngine.ts`: FY 2024-25 / AY 2025-26 Indian tax slab calculator comparing Old vs. New Tax Regimes, Section 87A rebates, 80C/80D deductions, standard deductions (₹75,000 in New Regime), employee EPF, and professional tax.
+- `pincodeDirectory.ts`: Indexed directory mapping 6-digit Indian PIN codes to administrative postal circles, districts, and states.
+- `epfEstimator.ts`: EPFO compounding engine simulating EPF corpus accumulation across employee (12%), employer EPF (3.67%), EPS (8.33%), and statutory annual interest rate (8.25%).
+
+## Developer Tools & Code Generators Structure (Modules 51-56)
+
+Integrated into `client/src/components/DeveloperToolRunners.tsx`:
+- `jsonToZod.ts`: TypeScript AST recursive parser analyzing JSON literals and inferring Zod schema declarations (`z.object({...})`, `z.array()`, `z.union()`) and corresponding TypeScript types (`z.infer<typeof ...>`).
+- `jwtDebugger.ts`: RFC 7519 JWT decoder, token payload formatting, expiry countdown clock, and client-side HMAC-SHA256 signature verification via Web Crypto API (`crypto.subtle`).
+- `fakeDataGenerator.ts`: Deterministic mock data factory producing seedable test records (names, email addresses, credit card numbers, coordinates, timestamps) in JSON or CSV format.
+- `ogImageGenerator.ts`: SVG-based 1200x630 social card layout canvas generator. Emits clean PNG buffers with category gradients and verified typography.
+- `cronParser.ts`: 5-field cron syntax parser calculating human-readable descriptions and generating upcoming trigger schedules.
+- `sqlFormatter.ts`: Tokenizing SQL beautifier with indent hierarchy, clause line breaks, and reserved keyword uppercase formatting.
+
+## Image & Vector Utilities Structure (Modules 57-59)
+
+- `passportPhotoEngine.ts`: Geometry and file-size quantization engine. Clamps photos to standard dimensions (e.g. 2x2 in, 35x45 mm) and iteratively compresses JPEG quality to satisfy exact government upload constraints (20KB–50KB).
+- `svgToPngEngine.ts`: High-DPI canvas rasterizer converting vector `<svg>` markup to lossless PNG or WebP with configurable scale multipliers.
+- `colorContrastEngine.ts`: WCAG 2.1 relative luminance calculator computing contrast ratios against black, white, and custom backgrounds with AA/AAA pass/fail badges.
+
+## Full 17 Games Bay Architecture
+
+- `client/src/pages/Games.tsx`: Hub component mounting category navigation (Daily Puzzles, Arcade & Reflex, Logic Lab) and the Weekly Local Streak Calendar.
+- `client/src/game/logicPuzzles/`: Independent engines for all 17 games:
+  - `TheHiveGame.tsx`: 7-letter honeycomb grid, word length verification, pangram scorer.
+  - `WordleGame.tsx`: 5-letter deduction engine with letter-frequency tracking.
+  - `ConnectionsGame.tsx`: 4x4 category sorter with 4 difficulty color bands (Yellow, Green, Blue, Purple).
+  - `QueensGame.tsx`: Connected region queen placement validator with 7 authored editions.
+  - `MiniSudokuGame.tsx`: 6x6 grid with 2x3 box constraint solver and 7 authored editions.
+  - `StrandsGame.tsx`: Theme word trail finder with spangram endpoint detection.
+  - `TangoGame.tsx`: Binary balance and relation constraint solver with 7 authored editions.
+  - `PatchesGame.tsx`: Exact-cover rectangle partition engine with 7 authored editions.
+  - `ZipGame.tsx`: Ordered wall-avoiding Hamiltonian path validator with 7 authored editions.
+  - `WendGame.tsx`: Orthogonal word path exact-cover solver with 7 authored editions.
+  - `ChessPuzzlesGame.tsx`: Legal move validation and tactical mate solving.
+  - `NonogramGame.tsx`: Picross line-clue solver checking consecutive marked cell runs.
+  - `MiniCrosswordGame.tsx`: 5x5 crossword grid with intersecting clue definitions.
+  - `OrbitDash.tsx`, `SignalSwitch.tsx`, `CircuitShift.tsx`: Babylon.js 3D/2D games with procedural geometry and Web Audio sound effects.
+
+## Dynamic SEO, Social Sharing & Sitemap Pipeline
+
+- `scripts/generate-og-images.ts`: Node/Sharp script generating 23 high-resolution 1200x630 OpenGraph PNG images for all categories and games.
+- `scripts/generate-sitemap.ts`: Automated sitemap compiler writing `client/public/sitemap.xml` with 90 canonical URLs directly derived from `shared/toolsData.ts` and `shared/gamesData.ts`.
+- `server/index.ts`: Full-stack Express server mounting Vite middleware in dev and injecting dynamic `<title>`, `<meta>`, OpenGraph, Twitter card, and Schema.org `WebApplication` JSON-LD tags into `index.html` per route.
+- `shared/seoCatalog.ts` & `shared/ogCatalog.ts`: Shared isomorphic catalogs enabling synchronized route and social card resolution between client and server.
+

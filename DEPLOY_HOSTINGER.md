@@ -1,38 +1,33 @@
 # Hostinger Shared Hosting Deployment
 
-This project is designed to publish as a **static Vite build**. Hostinger does not need a permanent Node.js process to run the Tools and Games UI. The current thirty-six tools, three arcade games, and six Logic Lab modules are browser-local, so the core experience does not require an API or database.
+This project is designed to publish as a **static Vite build**. Hostinger does not need a permanent Node.js process to run the Tools and Games UI. The current fifty-nine tools, seventeen games, and complete Logic Lab suite are 100% browser-local, so the core experience does not require an API or database.
 
 ## Build and upload
 
 Run the following from the project directory:
 
 ```bash
-# Using bun (recommended - lockfile present):
-bun install
-bun run check
-bun run build
-
-# Or using npm:
+# Using npm:
 npm install
 npm run check
 npm run build
 ```
 
-Upload the contents of `dist/` to the domain document root, usually `public_html/` in Hostinger File Manager or SFTP. Upload the **contents** of that folder rather than the folder itself. The generated `.htaccess` file is copied from `client/public/` into the output and ensures direct visits to routes such as `/tools/json-station` or `/games/orbit-dash` serve the React application.
+Upload the contents of `dist/` to the domain document root, usually `public_html/` in Hostinger File Manager or SFTP. Upload the **contents** of that folder rather than the folder itself. The generated `.htaccess` file is copied from `client/public/` into the output and ensures direct visits to routes such as `/tools/pdf-visual-editor`, `/tools/gst-tax-calculator`, `/games/the-hive`, or `/games/queens` serve the React application seamlessly without 404 errors.
 
 ## Hostinger checklist
 
 | Check | Expected result |
 |---|---|
 | Root document | `public_html/index.html` exists after upload |
-| SPA fallback | `/tools`, `/tools/image-resizer`, `/games/orbit-dash`, `/games/signal-switch`, `/games/circuit-shift`, `/games/mini-sudoku`, `/games/tango`, `/games/queens`, `/games/patches`, `/games/zip`, and `/games/wend` open directly without 404 errors |
+| SPA fallback | `/tools`, `/studio`, `/games`, and all 59 tool / 17 game routes open directly without 404 errors via `.htaccess` rewriting |
 | HTTPS | `https://toolboxgalaxy.com` is enabled and the HTTP version redirects to HTTPS |
-| Assets | `/manus-storage/` URLs must be replaced by equivalent permanent image URLs if deploying outside Manus hosting |
-| Headers | Confirm the `.htaccess` header directives work with the selected Hostinger server stack |
+| PDF Worker | `public_html/pdf.worker.min.mjs` is present and served with `application/javascript` MIME type |
+| Headers | Confirm the `.htaccess` header directives work with the selected Hostinger Apache/LiteSpeed server stack |
 | PWA files | `manifest.webmanifest`, `service-worker.js`, and `offline.html` are present at the document root after upload |
 | Offline fallback | After one successful load over HTTPS, temporarily disable the network and reload a recently visited route; the cached app shell or the explicit offline screen appears |
-| Sitemap | `https://toolboxgalaxy.com/sitemap.xml` returns the new sitemap |
-| Social share cards | Open Graph and Twitter share images exist in `public_html/og/` (generated during `npm run build` via `npm run generate:og`) |
+| Sitemap | `https://toolboxgalaxy.com/sitemap.xml` returns the 90-URL XML sitemap |
+| Social share cards | All 23 high-resolution Open Graph and Twitter share images exist in `public_html/og/` (generated during `npm run build`) |
 
 ## Important asset note
 

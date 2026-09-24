@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import { useEffect, useState, useMemo } from "react";
 import { useLocation } from "wouter";
+import { trackEvent } from "@/lib/analytics";
 
 const routes = [
   { label: "Workbench Overview", href: "/", detail: "Home Hub & Quick Telemetry", icon: Orbit },
@@ -53,12 +54,26 @@ const editable = (target: EventTarget | null) =>
 export default function CommandPalette() {
   const [location, navigate] = useLocation();
   const [open, setOpen] = useState(() => new URLSearchParams(window.location.search).has("command"));
+  const [searchVal, setSearchVal] = useState("");
   const { favorites } = useFavorites();
 
   const go = (href: string) => {
     if (href !== location) navigate(href);
     setOpen(false);
   };
+
+  // Debounced tracking of command palette searches
+  useEffect(() => {
+    const trimmed = searchVal.trim();
+    if (trimmed.length < 2) return;
+    const timer = setTimeout(() => {
+      trackEvent("search", {
+        search_term: trimmed,
+        source: "command_palette",
+      });
+    }, 800);
+    return () => clearTimeout(timer);
+  }, [searchVal]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -128,7 +143,11 @@ export default function CommandPalette() {
           </p>
         </div>
 
-        <CommandInput placeholder="Search by tool name, language, category (e.g. 'jwt', 'pdf', 'wordle', 'curl')..." />
+        <CommandInput
+          value={searchVal}
+          onValueChange={setSearchVal}
+          placeholder="Search by tool name, language, category (e.g. 'jwt', 'pdf', 'wordle', 'curl')..."
+        />
 
         <CommandList className="max-h-[60vh] overflow-y-auto">
           <CommandEmpty>No matching route, tool, or game found.</CommandEmpty>
