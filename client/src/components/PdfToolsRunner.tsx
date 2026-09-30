@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { PDFDocument } from "pdf-lib";
+import { trackPageView } from "@/lib/analytics";
 import {
   FilePlus,
   Scissors,
@@ -105,6 +106,10 @@ export function PdfMergeSplitTool() {
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
       setMergeDone(true);
+      trackPageView(undefined, undefined, "pdf-merged", {
+        file_count: files.length,
+        tool_slug: "pdf-merge-split",
+      });
       setTimeout(() => setMergeDone(false), 3000);
     } catch (err) {
       alert("Error merging documents: " + (err instanceof Error ? err.message : "Unknown error"));

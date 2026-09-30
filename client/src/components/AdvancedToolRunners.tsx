@@ -2,6 +2,7 @@
 import QRCode from "qrcode";
 import { Check, Clipboard, RefreshCw } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+import { trackPageView } from "@/lib/analytics";
 
 function Output({ value, error }: { value: string; error?: string }) {
   const [copied, setCopied] = useState(false);
@@ -320,7 +321,17 @@ export function TextCaseTool() {
     <div className="runner-stack">
       <label>
         Case
-        <select value={mode} onChange={(event) => setMode(event.target.value)}>
+        <select
+          value={mode}
+          onChange={(event) => {
+            const nextMode = event.target.value;
+            setMode(nextMode);
+            trackPageView(undefined, undefined, "text-formatted", {
+              format: nextMode,
+              tool_slug: "text-case",
+            });
+          }}
+        >
           <option value="title">Title Case</option>
           <option value="sentence">Sentence case</option>
           <option value="upper">UPPERCASE</option>

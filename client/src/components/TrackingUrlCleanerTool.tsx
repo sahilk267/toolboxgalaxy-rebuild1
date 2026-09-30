@@ -1,4 +1,5 @@
 import { useState, useMemo } from "react";
+import { trackPageView } from "@/lib/analytics";
 import { 
   Link2, 
   ShieldCheck, 
@@ -149,6 +150,10 @@ export default function TrackingUrlCleanerTool() {
     if (!cleanResult || !cleanResult.success) return;
     await navigator.clipboard.writeText(cleanResult.cleanUrl);
     setCopied(true);
+    trackPageView(undefined, undefined, "url-cleaned", {
+      trackers_removed: cleanResult.removedParams.length,
+      tool_slug: "clean-url",
+    });
     setTimeout(() => setCopied(false), 2000);
   };
 

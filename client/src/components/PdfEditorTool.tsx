@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { PDFDocument, rgb, StandardFonts, degrees } from "pdf-lib";
 import * as pdfjsLib from "pdfjs-dist";
+import { trackPageView } from "../lib/analytics";
 import {
   Download,
   FileText,
@@ -678,6 +679,10 @@ export default function PdfEditorTool() {
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
       setExportSuccess(true);
+      trackPageView(undefined, undefined, "pdf-edited", {
+        pages: numPages,
+        tool_slug: "pdf-editor",
+      });
       if (flattenRedactions && pagesWithWhiteout.size > 0) {
         showToast("PDF exported! Redacted pages permanently flattened (underlying text destroyed).");
       } else if (pagesWithWhiteout.size > 0) {

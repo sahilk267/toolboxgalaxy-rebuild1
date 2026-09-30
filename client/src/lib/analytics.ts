@@ -169,44 +169,161 @@ export function initAnalytics(): void {
 }
 
 /**
- * Tracks single-page application (SPA) pageviews for Google Analytics and active providers.
+ * Blocklist of property keys that could contain personally identifiable information (PII).
  */
-export function trackPageView(path?: string, title?: string): void {
+const PII_KEY_REGEX = /^(email|user|username|name|token|key|password|secret|auth|phone|ip|address|ssn|content|text|input|raw|prompt|query|href|url)$/i;
+
+const EMAIL_PATTERN = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/;
+const JWT_PATTERN = /ey[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}/;
+const PHONE_PATTERN = /(\+\d{1,3}[- ]?)?\(?\d{3}\)?[- ]?\d{3}[- ]?\d{4}/;
+
+/**
+ * Sanitizes telemetry properties to strictly eliminate user-identifiable data (PII).
+ * Strips blocked keys, email addresses, tokens, and raw user input text.
+ */
+export function sanitizeTelemetryProps(
+  props?: Record<string, unknown>
+): Record<string, string | number | boolean> | undefined {
+  if (!props || typeof props !== "object") return undefined;
+
+  const sanitized: Record<string, string | number | boolean> = {};
+
+  for (const [key, value] of Object.entries(props)) {
+    if (PII_KEY_REGEX.test(key)) {
+      continue;
+    }
+
+    if (typeof value === "number") {
+      if (Number.isFinite(value)) {
+        sanitized[key] = value;
+      }
+    } else if (typeof value === "boolean") {
+      sanitized[key] = value;
+    } else if (typeof value === "string") {
+      const trimmed = value.trim();
+      if (
+        trimmed.length > 0 &&
+        trimmed.length <= 64 &&
+        !EMAIL_PATTERN.test(trimmed) &&
+        !JWT_PATTERN.test(trimmed) &&
+        !PHONE_PATTERN.test(trimmed)
+      ) {
+        sanitized[key] = trimmed;
+      }
+    }
+  }
+
+  return Object.keys(sanitized).length > 0 ? sanitized : undefined;
+}
+
+export interface ToolActionTelemetry {
+  action: string;
+  toolSlug?: string;
+  category?: string;
+  metadata?: Record<string, unknown>;
+}
+
+/**
+ * Sends event-based telemetry when a user completes an action in a tool workspace.
+ * Strictly maintains privacy by stripping all personally identifiable data (PII).
+ */
+export function trackToolAction(
+  action: string,
+  metadata?: Record<string, unknown>,
+  toolSlug?: string
+): void {
+  if (typeof window === "undefined" || !action) return;
+
+  const normalizedAction = action.trim().toLowerCase().replace(/[^a-z0-9-_]/g, "-");
+  const payload: Record<string, string | number | boolean> = {};
+
+  if (toolSlug) {
+    const safeSlug = toolSlug.trim().toLowerCase().replace(/[^a-z0-9-_]/g, "").slice(0, 48);
+    if (safeSlug) {
+      payload.tool_slug = safeSlug;
+    }
+  }
+
+  const safeProps = sanitizeTelemetryProps(metadata);
+  if (safeProps) {
+    Object.assign(payload, safeProps);
+  }
+
+  trackEvent(normalizedAction, Object.keys(payload).length > 0 ? payload : undefined);
+}
+
+/**
+ * Tracks single-page application (SPA) pageviews for Google Analytics and active providers.
+ * Extended to dispatch event-based telemetry when an action completion is provided,
+ * while strictly maintaining privacy by avoiding user-identifiable data.
+ */
+export function trackPageView(
+  path?: string,
+  title?: string,
+  toolAction?: string | ToolActionTelemetry,
+  actionMetadata?: Record<string, unknown>
+): void {
   if (typeof window === "undefined") return;
-  const pagePath = path || window.location.pathname + window.location.search;
-  const pageTitle = title || document.title;
+  const rawPath = path || (window.location && window.location.pathname ? window.location.pathname : "/");
+  // Ensure query strings and hashes containing user names or referral tokens are stripped
+  const pagePath = rawPath.split(/[?#]/)[0] || "/";
+  const pageTitle = title || (typeof document !== "undefined" && document.title ? document.title : "Toolbox Galaxy");
 
   try {
     if (typeof window.gtag === "function") {
       const config = getAnalyticsConfig();
       if (config.measurementId) {
+        const origin = window.location && window.location.origin ? window.location.origin : "";
         window.gtag("config", config.measurementId, {
           page_path: pagePath,
           page_title: pageTitle,
-          page_location: window.location.href,
+          page_location: origin ? `${origin}${pagePath}` : pagePath,
         });
       }
     }
+    if (typeof window.plausible === "function") {
+      window.plausible("pageview", {
+        props: {
+          path: pagePath,
+        },
+      });
+    }
   } catch {
     // Analytics failures must never crash application logic
+  }
+
+  // Handle extended event-based telemetry for tool workspace action completion
+  if (toolAction) {
+    if (typeof toolAction === "string") {
+      trackToolAction(toolAction, actionMetadata);
+    } else if (typeof toolAction === "object" && toolAction.action) {
+      const mergedMetadata = {
+        ...(toolAction.category ? { category: toolAction.category } : {}),
+        ...(toolAction.metadata || {}),
+      };
+      trackToolAction(toolAction.action, mergedMetadata, toolAction.toolSlug);
+    }
   }
 }
 
 /**
  * Safely tracks custom events (e.g., tool run, puzzle completion, share click).
+ * Sanitizes all properties through a privacy filter to guarantee zero PII leakage.
  * Cleanly no-ops if analytics is unconfigured, disabled, or blocked.
  */
-export function trackEvent(eventName: string, props?: Record<string, string | number | boolean>): void {
-  if (typeof window === "undefined") return;
+export function trackEvent(eventName: string, props?: Record<string, unknown>): void {
+  if (typeof window === "undefined" || !eventName) return;
+
+  const safeProps = sanitizeTelemetryProps(props);
 
   try {
     if (typeof window.gtag === "function") {
-      window.gtag("event", eventName, props);
+      window.gtag("event", eventName, safeProps);
     }
     if (typeof window.plausible === "function") {
-      window.plausible(eventName, props ? { props } : undefined);
+      window.plausible(eventName, safeProps ? { props: safeProps } : undefined);
     } else if (window.umami && typeof window.umami.track === "function") {
-      window.umami.track(eventName, props);
+      window.umami.track(eventName, safeProps);
     }
   } catch {
     // Analytics failures must never crash application logic

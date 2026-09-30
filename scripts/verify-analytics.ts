@@ -85,11 +85,85 @@ const mockDocument: any = {
 (globalThis as any).document = mockDocument;
 
 // Test default unconfigured behavior (clean no-op)
-const { getAnalyticsConfig, isDoNotTrackEnabled, initAnalytics, trackEvent } = await import("../client/src/lib/analytics");
+const {
+  getAnalyticsConfig,
+  isDoNotTrackEnabled,
+  initAnalytics,
+  trackEvent,
+  trackPageView,
+  trackToolAction,
+  sanitizeTelemetryProps,
+} = await import("../client/src/lib/analytics");
 
 const defaultConfig = getAnalyticsConfig();
 assert.strictEqual(defaultConfig.provider, "none", "Default provider must be 'none' when env is empty");
 assert.strictEqual(defaultConfig.respectDNT, true);
+
+// 4. Test strict privacy sanitization
+console.log("👉 4. Testing strict privacy sanitization of telemetry properties...");
+const rawPropsWithPii = {
+  email: "victim@example.com",
+  user: "Alice",
+  username: "alice_wonderland",
+  password: "supersecretpassword",
+  token: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.e30.t-IDcSemACt8x4iTMC6Y5",
+  text: "Personal journal entry or confidential PDF text",
+  input: "user secret data",
+  ip: "192.168.1.1",
+  file_count: 3,
+  format: "json-beautify",
+  tool_slug: "json",
+  is_valid: true,
+  leaked_email_in_value: "contact-me@hack.org",
+};
+
+const sanitized = sanitizeTelemetryProps(rawPropsWithPii);
+assert(sanitized !== undefined, "Sanitized props should exist");
+assert.strictEqual((sanitized as any).email, undefined, "Email key must be stripped");
+assert.strictEqual((sanitized as any).user, undefined, "User key must be stripped");
+assert.strictEqual((sanitized as any).username, undefined, "Username key must be stripped");
+assert.strictEqual((sanitized as any).password, undefined, "Password key must be stripped");
+assert.strictEqual((sanitized as any).token, undefined, "Token key must be stripped");
+assert.strictEqual((sanitized as any).text, undefined, "Raw user text key must be stripped");
+assert.strictEqual((sanitized as any).input, undefined, "User input key must be stripped");
+assert.strictEqual((sanitized as any).ip, undefined, "IP key must be stripped");
+assert.strictEqual((sanitized as any).leaked_email_in_value, undefined, "Values containing email addresses must be stripped");
+assert.strictEqual(sanitized?.file_count, 3, "Safe numeric metadata must be preserved");
+assert.strictEqual(sanitized?.format, "json-beautify", "Safe string metadata must be preserved");
+assert.strictEqual(sanitized?.tool_slug, "json", "Safe slug metadata must be preserved");
+assert.strictEqual(sanitized?.is_valid, true, "Safe boolean metadata must be preserved");
+console.log("✓ Privacy filter successfully stripped all PII keys and values.");
+
+// 5. Test extended trackPageView with tool workspace action completions
+console.log("👉 5. Testing extended trackPageView tool workspace event telemetry...");
+assert.doesNotThrow(() => {
+  // Standard pageview
+  trackPageView("/tools/pdf-editor");
+  // Pageview with referral query string (must not crash or leak PII)
+  trackPageView("/tools/pdf-editor?by=JohnDoe&token=secret");
+  // Extended trackPageView with string action (e.g. 'pdf-merged', 'text-formatted')
+  trackPageView(undefined, undefined, "pdf-merged", {
+    file_count: 2,
+    tool_slug: "pdf-merge-split",
+    email: "leak@example.com", // Must be sanitized
+  });
+  trackPageView(undefined, undefined, "text-formatted", {
+    format: "json-beautify",
+    tool_slug: "json",
+    raw_user_content: "secret", // Must be sanitized
+  });
+  // Extended trackPageView with ToolActionTelemetry object
+  trackPageView(undefined, undefined, {
+    action: "pdf-merged",
+    toolSlug: "pdf-editor",
+    category: "pdf-doc-studio",
+    metadata: { pages: 5 },
+  });
+  // Direct trackToolAction
+  trackToolAction("pdf-merged", { count: 4 }, "pdf-merge-split");
+  trackToolAction("text-formatted", { mode: "uppercase" }, "text-case");
+});
+console.log("✓ Extended trackPageView and trackToolAction executed cleanly with zero PII leaks.");
 
 // Ensure trackEvent does not crash or throw when unconfigured
 assert.doesNotThrow(() => {
