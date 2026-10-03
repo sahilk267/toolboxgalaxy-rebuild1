@@ -1,6 +1,7 @@
 /* Orbital Workbench / EXIF & GPS Metadata Remover & Privacy Relay */
 import { Download, FileOutput, ImageUp, RotateCcw, ShieldCheck, Sparkles, MapPin, Camera, Clock, ExternalLink, AlertTriangle, CheckCircle2 } from "lucide-react";
 import { type ChangeEvent, useEffect, useMemo, useState } from "react";
+import { trackPageView } from "@/lib/analytics";
 import { imageMetadataLimits, metadataDimensionError, metadataFileError, metadataFormatExtension, metadataFormatLabel, type MetadataImageFormat } from "@/lib/localImageMetadata";
 import { parseExifFromBlob, type ExifTagSummary } from "@/lib/exifReader";
 
@@ -127,6 +128,10 @@ export default function ImageMetadataTool() {
       setOutput((current) => {
         if (current) URL.revokeObjectURL(current.url);
         return { blob, url, width: source.width, height: source.height, format: source.format };
+      });
+      trackPageView(undefined, undefined, "image-metadata-cleaned", {
+        format: source.format,
+        tool_slug: "image-metadata",
       });
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "The clean re-export could not be created.");

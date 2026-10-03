@@ -166,8 +166,19 @@ export default function AppShell({ children }: { children: ReactNode }) {
             <Link href="/terms">Terms</Link>
           </div>
 
-          <div className="pt-2 border-t border-white/5 text-[11px] font-mono text-white/40 text-center">
-            By <span className="text-white/70 font-semibold">Aaditech Solution</span>
+          <div className="pt-2 border-t border-white/5 text-[11px] font-mono text-white/40 text-center flex items-center justify-center gap-1.5 flex-wrap">
+            <span>By <span className="text-white/70 font-semibold">Aaditech Solution</span></span>
+            <span>·</span>
+            <a
+              href="https://www.linkedin.com/in/mohdazizshaikh"
+              target="_blank"
+              rel="noreferrer"
+              className="text-[#00a0dc] hover:text-[#c7f36b] transition-colors font-medium inline-flex items-center gap-0.5"
+              title="Mohd Aziz Shaikh on LinkedIn"
+            >
+              <span>LinkedIn</span>
+              <span>↗</span>
+            </a>
           </div>
         </div>
       </aside>

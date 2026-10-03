@@ -1,6 +1,7 @@
 import { cn } from "@/lib/utils";
 import { AlertTriangle, RotateCcw } from "lucide-react";
 import { Component, ReactNode } from "react";
+import { reportToolError } from "@/lib/telegramAlerts";
 
 interface Props {
   children: ReactNode;
@@ -19,6 +20,12 @@ class ErrorBoundary extends Component<Props, State> {
 
   static getDerivedStateFromError(error: Error): State {
     return { hasError: true, error };
+  }
+
+  componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
+    reportToolError("Application Component", error.message, {
+      stack: errorInfo.componentStack?.slice(0, 150),
+    });
   }
 
   handleRetry = () => {
