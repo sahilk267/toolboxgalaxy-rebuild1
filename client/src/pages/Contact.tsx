@@ -47,7 +47,8 @@ export default function Contact() {
   const relayBody = [form.name && `Name: ${form.name}`, form.email && `Email: ${form.email}`, "", form.message]
     .filter(Boolean)
     .join("\n");
-  const relayHref = `mailto:support@toolboxgalaxy.com?subject=${encodeURIComponent(form.subject || "Toolbox Galaxy feedback")}&body=${encodeURIComponent(relayBody)}`;
+  const supportEmail = (import.meta.env.VITE_CONTACT_EMAIL || "support@toolboxgalaxy.com").trim();
+  const relayHref = `mailto:${supportEmail}?subject=${encodeURIComponent(form.subject || "Toolbox Galaxy feedback")}&body=${encodeURIComponent(relayBody)}`;
 
   return (
     <AppShell>
