@@ -6,6 +6,12 @@ import { DailyReminderToggle } from "@/components/DailyReminderToggle";
 import ShortcutReference from "@/components/ShortcutReference";
 import CommandPalette from "@/components/CommandPalette";
 import SupportModal from "@/components/SupportModal";
+import WhatsNewModal, { hasUnseenUpdates } from "@/components/WhatsNewModal";
+import { QuickScratchpad } from "@/components/QuickScratchpad";
+import { AchievementsModal } from "@/components/AchievementsModal";
+import { getUnlockedBadges, badgeUnlockedEventName } from "@/lib/achievementBadges";
+import { toast } from "sonner";
+import { recordVisitorCohort } from "@/lib/telegramAlerts";
 import { useTheme } from "@/contexts/ThemeContext";
 import {
   FileText,
@@ -19,9 +25,12 @@ import {
   Coffee,
   Sun,
   Moon,
+  Sparkles,
+  Trophy,
+  Edit3,
 } from "lucide-react";
 import type { ReactNode } from "react";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
 const orbitMark = "/orbit-mark.svg";
 
@@ -37,7 +46,44 @@ export default function AppShell({ children }: { children: ReactNode }) {
   const [location] = useLocation();
   const [open, setOpen] = useState(false);
   const [supportOpen, setSupportOpen] = useState(false);
+  const [whatsNewOpen, setWhatsNewOpen] = useState(false);
+  const [hasNewBadge, setHasNewBadge] = useState(false);
+  const [scratchpadOpen, setScratchpadOpen] = useState(false);
+  const [achievementsOpen, setAchievementsOpen] = useState(false);
+  const [unlockedCount, setUnlockedCount] = useState(() => Object.keys(getUnlockedBadges()).length);
   const { theme, toggleTheme } = useTheme();
+
+  useEffect(() => {
+    recordVisitorCohort();
+    setHasNewBadge(hasUnseenUpdates());
+
+    // Listen for real-time badge unlock events
+    const handleBadgeUnlocked = (e: Event) => {
+      const detail = (e as CustomEvent).detail;
+      setUnlockedCount(Object.keys(getUnlockedBadges()).length);
+      if (detail?.badge) {
+        toast.success(`Achievement Unlocked! ${detail.badge.icon}`, {
+          description: `${detail.badge.title} — ${detail.badge.description || "Milestone achieved!"}`,
+          duration: 4000,
+        });
+      }
+    };
+
+    // Hotkey listener: Ctrl+Shift+S or Cmd+Shift+S to open Scratchpad
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === "S" || e.key === "s")) {
+        e.preventDefault();
+        setScratchpadOpen((prev) => !prev);
+      }
+    };
+
+    window.addEventListener(badgeUnlockedEventName(), handleBadgeUnlocked);
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      window.removeEventListener(badgeUnlockedEventName(), handleBadgeUnlocked);
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, []);
 
   const [collapsed, setCollapsed] = useState(() => {
     if (typeof window !== "undefined") {
@@ -129,8 +175,65 @@ export default function AppShell({ children }: { children: ReactNode }) {
             </span>
           </button>
 
+          <button
+            type="button"
+            onClick={() => {
+              setWhatsNewOpen(true);
+              setHasNewBadge(false);
+            }}
+            className="flex w-full items-center justify-between rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2 text-xs font-medium text-white/80 hover:bg-white/[0.08] hover:text-white transition-all group"
+            aria-label="What's New in Toolbox Galaxy"
+          >
+            <span className="flex items-center gap-2">
+              <Sparkles size={15} className="text-[#c7f36b] group-hover:rotate-12 transition-transform" />
+              <span>What&apos;s New</span>
+            </span>
+            {hasNewBadge ? (
+              <span className="flex items-center gap-1 text-[10px] font-mono uppercase px-1.5 py-0.5 rounded-full bg-[#c7f36b] text-[#090d18] font-bold animate-pulse">
+                New
+              </span>
+            ) : (
+              <span className="text-[10px] font-mono uppercase px-1.5 py-0.5 rounded bg-white/10 text-white/50">
+                Oct 26
+              </span>
+            )}
+          </button>
+
           <CommandPalette />
           <ShortcutReference />
+
+          {/* Quick Scratchpad Button */}
+          <button
+            type="button"
+            onClick={() => setScratchpadOpen(true)}
+            className="flex w-full items-center justify-between rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2 text-xs font-medium text-white/80 hover:bg-white/[0.08] hover:text-white transition-all group"
+            aria-label="Open Quick Scratchpad (Ctrl+Shift+S)"
+          >
+            <span className="flex items-center gap-2">
+              <Edit3 size={15} className="text-[#6fd5ff] group-hover:scale-110 transition-transform" />
+              <span>Scratchpad</span>
+            </span>
+            <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-white/10 text-white/50">
+              ^⇧S
+            </span>
+          </button>
+
+          {/* Achievements Button */}
+          <button
+            type="button"
+            onClick={() => setAchievementsOpen(true)}
+            className="flex w-full items-center justify-between rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2 text-xs font-medium text-white/80 hover:bg-white/[0.08] hover:text-white transition-all group"
+            aria-label="View Workbench Achievements"
+          >
+            <span className="flex items-center gap-2">
+              <Trophy size={15} className="text-amber-400 group-hover:rotate-12 transition-transform" />
+              <span>Achievements</span>
+            </span>
+            <span className="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-400">
+              {unlockedCount}/10
+            </span>
+          </button>
+
           <PWAInstallButton variant="rail" />
           <DailyReminderToggle variant="rail" />
 
@@ -238,6 +341,21 @@ export default function AppShell({ children }: { children: ReactNode }) {
       </main>
 
       <SupportModal open={supportOpen} onClose={() => setSupportOpen(false)} />
+      <WhatsNewModal open={whatsNewOpen} onClose={() => setWhatsNewOpen(false)} />
+      <QuickScratchpad isOpen={scratchpadOpen} onClose={() => setScratchpadOpen(false)} />
+      <AchievementsModal isOpen={achievementsOpen} onClose={() => setAchievementsOpen(false)} />
+
+      {/* Floating Scratchpad Quick Pill (Desktop & Mobile) */}
+      <button
+        type="button"
+        onClick={() => setScratchpadOpen((prev) => !prev)}
+        className="fixed bottom-4 left-4 z-40 flex items-center gap-2 rounded-full border border-white/15 bg-[#0e1628]/95 px-3 py-2 text-xs font-semibold text-white shadow-2xl backdrop-blur-md hover:border-[#6fd5ff]/50 hover:bg-[#121f38] hover:text-[#6fd5ff] transition-all group"
+        title="Open Quick Scratchpad (Ctrl+Shift+S)"
+        aria-label="Open Quick Scratchpad"
+      >
+        <Edit3 size={15} className="text-[#6fd5ff] group-hover:scale-110 transition-transform" />
+        <span className="hidden sm:inline">Scratchpad</span>
+      </button>
 
       <OfflineIndicator />
       <DailyReminderPrompt />

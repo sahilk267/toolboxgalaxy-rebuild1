@@ -59,6 +59,18 @@ export function useFavorites() {
         try {
           localStorage.setItem("toolbox-galaxy-favorite-tools-v1", JSON.stringify(next));
           window.dispatchEvent(new Event(favoriteToolsEvent()));
+          if (next.length >= 3) {
+            try {
+              const ach = JSON.parse(localStorage.getItem("toolboxgalaxy:achievements-v1") ?? "{}");
+              if (!ach["workbench-architect"]) {
+                ach["workbench-architect"] = new Date().toISOString();
+                localStorage.setItem("toolboxgalaxy:achievements-v1", JSON.stringify(ach));
+                window.dispatchEvent(new CustomEvent("toolboxgalaxy:badge-unlocked", {
+                  detail: { badge: { id: "workbench-architect", title: "Workbench Architect", icon: "⭐" } }
+                }));
+              }
+            } catch {}
+          }
         } catch {
           // ignore
         }

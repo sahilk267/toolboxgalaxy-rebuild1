@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<OpenSearchDescription xmlns="http://a9.com/-/spec/opensearch/1.1/">
+  <ShortName>Toolbox Galaxy</ShortName>
+  <Description>Search 60+ verified in-browser developer tools, PDF studio, and daily logic puzzles.</Description>
+  <Tags>tools developer pdf games puzzles</Tags>
+  <Contact>contact@toolboxgalaxy.com</Contact>
+  <Url type="text/html" template="https://toolboxgalaxy.com/tools?q={searchTerms}"/>
+  <Image height="16" width="16" type="image/svg+xml">https://toolboxgalaxy.com/orbit-mark.svg</Image>
+  <InputEncoding>UTF-8</InputEncoding>
+  <OutputEncoding>UTF-8</OutputEncoding>
+</OpenSearchDescription>

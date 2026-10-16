@@ -41,6 +41,8 @@ import { getTool } from "@/data/toolRegistry";
 import { recordToolVisit } from "@/lib/recentToolHistory";
 import { trackEvent, trackPageView } from "@/lib/analytics";
 import { recordToolTelemetry } from "@/lib/telegramAlerts";
+import { markDailyToolVisited } from "@/lib/dailyHabitTracker";
+import { unlockBadge, checkTimeBasedBadges } from "@/lib/achievementBadges";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { Check, Clipboard, RotateCcw, ShieldCheck, X } from "lucide-react";
 import { Link, useRoute } from "wouter";
@@ -129,6 +131,26 @@ export default function ToolWorkspace() {
   useEffect(() => {
     if (tool) {
       recordToolVisit(tool);
+      markDailyToolVisited();
+      checkTimeBasedBadges();
+
+      if (
+        tool.slug === "clean-tracking-parameters" ||
+        tool.slug === "image-metadata-viewer-exif" ||
+        tool.slug === "password-strength-checker"
+      ) {
+        unlockBadge("privacy-purist");
+      }
+
+      if (
+        tool.slug === "pdf-visual-editor" ||
+        tool.slug === "word-docx-studio" ||
+        tool.slug === "excel-studio" ||
+        tool.slug === "pdf-merge-split"
+      ) {
+        unlockBadge("studio-artisan");
+      }
+
       trackEvent("view_tool", {
         tool_slug: tool.slug,
         tool_name: tool.name,

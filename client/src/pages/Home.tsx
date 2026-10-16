@@ -5,6 +5,8 @@ import ToolCard from "@/components/ToolCard";
 import DailyDuaCard from "@/components/DailyDuaCard";
 import ToolOfTheDayCard from "@/components/ToolOfTheDayCard";
 import { PinnedQuickDock } from "@/components/PinnedQuickDock";
+import { DailyHabitPulse } from "@/components/DailyHabitPulse";
+import { CommunityToolBallot } from "@/components/CommunityToolBallot";
 import { tools } from "@/data/toolRegistry";
 import { GameBayVisual, HeroWorkbenchVisual, StoryToolsVisual } from "@/components/HomeVisuals";
 import { ArrowRight, CheckCircle2, Gamepad2, ShieldCheck, Sparkles, Wrench, Globe, Lock, Cpu } from "lucide-react";
@@ -14,9 +16,23 @@ export default function Home() {
   return <AppShell>
     <section className="hero-section">
       <div className="hero-copy">
-        <div className="page-kicker"><span>00</span><span>BY AADITECH SOLUTION · PRIVACY FIRST</span></div>
-        <h1 className="font-display mt-9 max-w-3xl text-5xl font-semibold leading-[0.93] tracking-[-0.075em] text-[#f4f2ea] sm:text-6xl lg:text-8xl">Make the small thing <em>easy.</em></h1>
-        <p className="mt-7 max-w-xl text-lg leading-8 text-white/65">Verified browser tools for the work in front of you, plus a quick game when your brain needs to clear the board.</p>
+        <div className="inline-flex items-center gap-2 rounded-full border border-[#6fd5ff]/35 bg-[#6fd5ff]/10 px-3.5 py-1.5 backdrop-blur-md shadow-[0_0_20px_rgba(111,213,255,0.18)]">
+          <span className="flex h-2 w-2 rounded-full bg-[#6fd5ff] animate-pulse" />
+          <span className="font-mono text-xs font-semibold tracking-wide text-[#6fd5ff]">
+            AIR-GAPPED PRIVACY ARCHITECTURE
+          </span>
+          <span className="text-white/30">|</span>
+          <span className="text-xs text-white/80 font-medium">100% In-Browser Memory</span>
+        </div>
+        <h1 className="font-display mt-6 max-w-3xl text-5xl font-semibold leading-[0.94] tracking-[-0.07em] text-[#f4f2ea] sm:text-6xl lg:text-7xl">
+          Your files never leave your machine.{" "}
+          <span className="block mt-2 text-transparent bg-clip-text bg-gradient-to-r from-[#6fd5ff] via-[#a3e8ff] to-[#c7f36b]">
+            Processed 100% in local memory.
+          </span>
+        </h1>
+        <p className="mt-6 max-w-2xl text-lg leading-relaxed text-white/75">
+          Edit sensitive PDFs, clean spreadsheets, convert docs, and format code without trusting third-party servers. Everything runs inside your browser&apos;s isolated RAM sandbox—plus quick brain-clearing logic games when you need a mental break.
+        </p>
         <div className="mt-10 flex flex-wrap gap-3">
           <Link href="/studio" className="signal-button bg-[#c7f36b] text-[#0b1020]">
             Open PDF & Doc Studio <ArrowRight size={17} />
@@ -29,15 +45,22 @@ export default function Home() {
           </Link>
         </div>
         <div className="hero-trust">
-          <span><Globe size={15} className="text-[#c7f36b]" /> Global Edge Ready</span>
-          <span><Lock size={15} className="text-[#6fd5ff]" /> 100% In-Browser Memory</span>
-          <span><Cpu size={15} className="text-[#ff9b54]" /> Zero Server Uploads</span>
+          <span><Globe size={15} className="text-[#c7f36b]" /> Instant Zero-Install Edge</span>
+          <span className="rounded-full border border-[#6fd5ff]/30 bg-[#6fd5ff]/10 px-2.5 py-1 text-white shadow-[0_0_12px_rgba(111,213,255,0.15)]">
+            <Lock size={15} className="text-[#6fd5ff]" /> <strong className="font-semibold text-[#6fd5ff]">Isolated RAM Sandbox</strong>
+          </span>
+          <span><Cpu size={15} className="text-[#ff9b54]" /> Zero Cloud Logs</span>
         </div>
       </div>
       <div className="hero-visual">
         <HeroWorkbenchVisual />
         <div className="hero-caption"><span className="status-dot" /><span>Signal received · version 01</span></div>
       </div>
+    </section>
+
+    {/* Daily Habit & Streak Pulse */}
+    <section className="my-6 max-w-6xl mx-auto px-4">
+      <DailyHabitPulse />
     </section>
 
     {/* Pinned Quick Dock for Personalized 1-Click Access */}
@@ -53,6 +76,11 @@ export default function Home() {
     {/* Soulful Daily Dua & Quote Card for Positivity & Blessings */}
     <section className="my-8 max-w-4xl mx-auto px-4">
       <DailyDuaCard />
+    </section>
+
+    {/* Community Vote: Next Friday's Tool Drop */}
+    <section className="my-8 max-w-4xl mx-auto px-4">
+      <CommunityToolBallot />
     </section>
 
     {/* Regional & Daily High-Demand Essentials */}

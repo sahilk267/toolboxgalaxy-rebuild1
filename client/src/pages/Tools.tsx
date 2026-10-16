@@ -12,7 +12,13 @@ import { trackEvent } from "@/lib/analytics";
 const orbitMark = "/orbit-mark.svg";
 
 export default function Tools() {
-  const [query, setQuery] = useState("");
+  const [query, setQuery] = useState(() => {
+    if (typeof window !== "undefined") {
+      const q = new URLSearchParams(window.location.search).get("q");
+      return q ? q.trim() : "";
+    }
+    return "";
+  });
   const [activeCategory, setActiveCategory] = useState<(typeof categories)[number]>("All");
 
   const visibleTools = useMemo(() => {

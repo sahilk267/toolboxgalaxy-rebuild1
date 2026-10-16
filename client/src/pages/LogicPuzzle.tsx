@@ -46,6 +46,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { MutableRefObject, ReactNode } from "react";
 import { Link, useRoute } from "wouter";
 import { trackEvent } from "@/lib/analytics";
+import { unlockBadge } from "@/lib/achievementBadges";
 
 const orbitMark = "/orbit-mark.svg";
 const demoMode = () => new URLSearchParams(window.location.search).has("demo");
@@ -109,6 +110,13 @@ function PuzzleFrame({
     const interval = window.setInterval(() => setSeconds((s) => s + 1), 1000);
     return () => window.clearInterval(interval);
   }, [solved]);
+
+  // Check Lightning Solver badge on victory
+  useEffect(() => {
+    if (solved && seconds > 0 && seconds <= 90) {
+      unlockBadge("lightning-solver");
+    }
+  }, [solved, seconds]);
 
   // Peer-to-Peer Automated Challenge System
   const challengeInfo = useMemo(() => {

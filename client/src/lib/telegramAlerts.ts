@@ -1,16 +1,19 @@
-// Toolbox Galaxy - Telegram Pulse & Error Telemetry
+// Toolbox Galaxy - Telegram Pulse, Error Telemetry, and Visitor Cohort Analytics
 // Client-side direct dispatch via standard Telegram Bot API (Option A).
 // Safe, privacy-first, zero personally identifiable information (PII).
 
 interface DailyPulseLedger {
   date: string;
   uniqueVisits: number;
+  newVisitors: number;
+  returningVisitors: number;
   totalExecutions: number;
   toolUsage: Record<string, number>;
   lastSentTimestamp?: number;
 }
 
 const STORAGE_KEY = "tg_telemetry_pulse";
+const COHORT_STORAGE_KEY = "tg_visitor_cohort";
 
 function getTelegramEnv() {
   let botToken = "";
@@ -60,6 +63,78 @@ export async function sendTelegramMessage(htmlText: string): Promise<boolean> {
 }
 
 /**
+ * Records visitor cohort (New vs Returning User) on daily session basis.
+ * Safe and private: no IP address, no cookies, 100% device-local.
+ */
+export function recordVisitorCohort(): { isNew: boolean } {
+  if (typeof window === "undefined") return { isNew: false };
+
+  try {
+    const today = new Date().toISOString().slice(0, 10);
+    const rawCohort = localStorage.getItem(COHORT_STORAGE_KEY);
+    const rawLedger = localStorage.getItem(STORAGE_KEY);
+
+    let isNew = false;
+    let cohort: { firstSeen: number; lastDate: string };
+
+    if (!rawCohort) {
+      isNew = true;
+      cohort = { firstSeen: Date.now(), lastDate: today };
+      localStorage.setItem(COHORT_STORAGE_KEY, JSON.stringify(cohort));
+    } else {
+      cohort = JSON.parse(rawCohort);
+    }
+
+    let ledger: DailyPulseLedger = rawLedger
+      ? JSON.parse(rawLedger)
+      : {
+          date: today,
+          uniqueVisits: 0,
+          newVisitors: 0,
+          returningVisitors: 0,
+          totalExecutions: 0,
+          toolUsage: {},
+        };
+
+    // If date rolled over, dispatch previous day's report
+    if (ledger.date !== today) {
+      if (isTelegramAlertsConfigured() && (ledger.totalExecutions > 0 || ledger.uniqueVisits > 0)) {
+        dispatchDailyPulse(ledger);
+      }
+      ledger = {
+        date: today,
+        uniqueVisits: 0,
+        newVisitors: 0,
+        returningVisitors: 0,
+        totalExecutions: 0,
+        toolUsage: {},
+      };
+    }
+
+    // Check if session has already been counted for today
+    const sessionKey = `tg_session_${today}`;
+    if (!sessionStorage.getItem(sessionKey)) {
+      sessionStorage.setItem(sessionKey, "1");
+      ledger.uniqueVisits = (ledger.uniqueVisits || 0) + 1;
+
+      if (isNew) {
+        ledger.newVisitors = (ledger.newVisitors || 0) + 1;
+      } else {
+        ledger.returningVisitors = (ledger.returningVisitors || 0) + 1;
+      }
+
+      cohort.lastDate = today;
+      localStorage.setItem(COHORT_STORAGE_KEY, JSON.stringify(cohort));
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(ledger));
+    }
+
+    return { isNew };
+  } catch {
+    return { isNew: false };
+  }
+}
+
+/**
  * Sends a real-time error alert to Telegram when a tool fails or throws an unexpected exception.
  */
 export function reportToolError(
@@ -71,7 +146,6 @@ export function reportToolError(
 
   const now = new Date().toISOString().replace("T", " ").slice(0, 19);
   const userAgent = typeof navigator !== "undefined" ? navigator.userAgent : "Unknown";
-  // Extract simple browser name (no IP, no private data)
   const isMobile = /Mobi|Android/i.test(userAgent) ? "Mobile" : "Desktop";
   const path = window.location.pathname;
 
@@ -134,18 +208,21 @@ export function recordToolTelemetry(toolId: string, toolName: string): void {
       : {
           date: today,
           uniqueVisits: 1,
+          newVisitors: 1,
+          returningVisitors: 0,
           totalExecutions: 0,
           toolUsage: {},
         };
 
-    // If date changed, we can send yesterday's summary
     if (ledger.date !== today) {
-      if (isTelegramAlertsConfigured() && ledger.totalExecutions > 0) {
+      if (isTelegramAlertsConfigured() && (ledger.totalExecutions > 0 || ledger.uniqueVisits > 0)) {
         dispatchDailyPulse(ledger);
       }
       ledger = {
         date: today,
         uniqueVisits: 1,
+        newVisitors: 0,
+        returningVisitors: 1,
         totalExecutions: 0,
         toolUsage: {},
       };
@@ -163,24 +240,32 @@ export function recordToolTelemetry(toolId: string, toolName: string): void {
 
 /**
  * Dispatches a formatted Daily Pulse Summary report to Telegram.
+ * Accurately breaks down New vs. Returning Visitors and Top Tools.
  */
-function dispatchDailyPulse(ledger: DailyPulseLedger) {
-  const sorted = Object.entries(ledger.toolUsage)
+export function dispatchDailyPulse(ledger: DailyPulseLedger) {
+  const sorted = Object.entries(ledger.toolUsage || {})
     .sort(([, a], [, b]) => b - a)
     .slice(0, 7);
 
   const topToolsList = sorted
-    .map(([name, count], index) => `${index + 1}. <b>${escapeHtml(name)}</b>: ${count} runs`)
+    .map(([name, count], index) => `   ${index + 1}. <b>${escapeHtml(name)}</b>: ${count} runs`)
     .join("\n");
+
+  const totalVisitors = (ledger.newVisitors || 0) + (ledger.returningVisitors || 0) || ledger.uniqueVisits || 0;
+  const newPct = totalVisitors > 0 ? Math.round(((ledger.newVisitors || 0) / totalVisitors) * 100) : 0;
+  const retPct = totalVisitors > 0 ? Math.round(((ledger.returningVisitors || 0) / totalVisitors) * 100) : 0;
 
   const message = [
     `📊 <b>Toolbox Galaxy · Daily Pulse (${ledger.date})</b>`,
     `━━━━━━━━━━━━━━━━━━━━━━━━━`,
-    `👥 <b>Estimated Visitors:</b> ~${ledger.uniqueVisits}`,
-    `⚡ <b>Total Tool Executions:</b> ${ledger.totalExecutions}`,
+    `👥 <b>Total Daily Visitors:</b> ~${totalVisitors}`,
+    `   ├ 🟢 <b>New Users:</b> ${ledger.newVisitors || 0} (${newPct}%)`,
+    `   └ 🔁 <b>Returning Users:</b> ${ledger.returningVisitors || 0} (${retPct}%)`,
+    ``,
+    `⚡ <b>Total Tool Executions:</b> ${ledger.totalExecutions || 0}`,
     ``,
     `🔥 <b>Top Tools Used:</b>`,
-    topToolsList || "No specific tools logged.",
+    topToolsList || "   (No individual tools logged)",
   ].join("\n");
 
   sendTelegramMessage(message);

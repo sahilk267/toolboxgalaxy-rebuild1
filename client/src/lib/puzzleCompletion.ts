@@ -21,5 +21,16 @@ export function markPuzzleFieldComplete(slug: string, fieldId: string) {
   const next = read(); next[keyFor(slug, fieldId)] = true;
   try {
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+    window.dispatchEvent(new CustomEvent("toolboxgalaxy:daily-habit-updated"));
+    try {
+      const achievements = JSON.parse(localStorage.getItem("toolboxgalaxy:achievements-v1") ?? "{}");
+      if (!achievements["first-win"]) {
+        achievements["first-win"] = new Date().toISOString();
+        localStorage.setItem("toolboxgalaxy:achievements-v1", JSON.stringify(achievements));
+        window.dispatchEvent(new CustomEvent("toolboxgalaxy:badge-unlocked", {
+          detail: { badge: { id: "first-win", title: "First Spark", icon: "🧩" } }
+        }));
+      }
+    } catch {}
   } catch {}
 }
