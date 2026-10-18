@@ -1,0 +1,6 @@
+{
+  "summary": "Comprehensive, zero-duplication, phase-wise implementation plan to expand the enterprise PDF suite within existing architecture: visual thumbnail page reordering, image/link annotations, client-side PDF to DOCX/XLSX text & table extraction, and client-side Tesseract WASM WebWorker OCR.",
+  "updatedAt": "2026-10-16T23:32:31.968913921Z",
+  "requestFeedback": true,
+  "userFacing": true
+}

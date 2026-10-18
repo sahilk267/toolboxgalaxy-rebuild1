@@ -1,5 +1,7 @@
 import { useState, useMemo } from "react";
 import * as XLSX from "xlsx";
+import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
+import { sanitizeWinAnsiText } from "../lib/pdfTextSanitizer";
 import {
   FileSpreadsheet,
   Download,
@@ -200,6 +202,127 @@ export default function ExcelStudioTool() {
     }
   };
 
+  const exportToPdfTable = async () => {
+    try {
+      if (rawData.length === 0) return;
+      const pdfDoc = await PDFDocument.create();
+      const helvetica = await pdfDoc.embedFont(StandardFonts.Helvetica);
+      const helveticaBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+
+      const pageWidth = 841.89; // landscape A4 for spreadsheet tables
+      const pageHeight = 595.28;
+      const margin = 36;
+      const availableWidth = pageWidth - margin * 2;
+      const headers = rawData[0] || [];
+      const rows = rawData.slice(1);
+      const colCount = Math.max(headers.length, 1);
+      const colWidth = availableWidth / colCount;
+      const rowHeight = 18;
+
+      let currentPage = pdfDoc.addPage([pageWidth, pageHeight]);
+      let currentY = pageHeight - margin;
+
+      // Title & Sheet Name
+      const titleText = sanitizeWinAnsiText(`${fileName} - Sheet: ${activeSheet}`);
+      currentPage.drawText(titleText, {
+        x: margin,
+        y: currentY,
+        size: 13,
+        font: helveticaBold,
+        color: rgb(0.12, 0.22, 0.54),
+      });
+      currentY -= 24;
+
+      // Draw Header row background
+      currentPage.drawRectangle({
+        x: margin,
+        y: currentY - 4,
+        width: availableWidth,
+        height: rowHeight,
+        color: rgb(0.92, 0.94, 0.98),
+      });
+
+      // Draw Headers
+      headers.forEach((h: any, i: number) => {
+        const text = sanitizeWinAnsiText(String(h ?? `Col ${i + 1}`).substring(0, 22));
+        currentPage.drawText(text, {
+          x: margin + i * colWidth + 4,
+          y: currentY,
+          size: 9,
+          font: helveticaBold,
+          color: rgb(0.12, 0.22, 0.54),
+        });
+      });
+      currentY -= rowHeight;
+
+      // Draw Data Rows
+      for (let r = 0; r < rows.length; r++) {
+        if (currentY <= margin + 20) {
+          currentPage = pdfDoc.addPage([pageWidth, pageHeight]);
+          currentY = pageHeight - margin;
+          // Redraw Header row on new page
+          currentPage.drawRectangle({
+            x: margin,
+            y: currentY - 4,
+            width: availableWidth,
+            height: rowHeight,
+            color: rgb(0.92, 0.94, 0.98),
+          });
+          headers.forEach((h: any, i: number) => {
+            const text = sanitizeWinAnsiText(String(h ?? `Col ${i + 1}`).substring(0, 22));
+            currentPage.drawText(text, {
+              x: margin + i * colWidth + 4,
+              y: currentY,
+              size: 9,
+              font: helveticaBold,
+              color: rgb(0.12, 0.22, 0.54),
+            });
+          });
+          currentY -= rowHeight;
+        }
+
+        const row = rows[r];
+        // Zebra striping
+        if (r % 2 === 1) {
+          currentPage.drawRectangle({
+            x: margin,
+            y: currentY - 4,
+            width: availableWidth,
+            height: rowHeight,
+            color: rgb(0.97, 0.98, 0.99),
+          });
+        }
+
+        headers.forEach((_: any, colIdx: number) => {
+          const val = row[colIdx] !== undefined && row[colIdx] !== null ? String(row[colIdx]) : "";
+          const text = sanitizeWinAnsiText(val.substring(0, 24));
+          currentPage.drawText(text, {
+            x: margin + colIdx * colWidth + 4,
+            y: currentY,
+            size: 8.5,
+            font: helvetica,
+            color: rgb(0.15, 0.15, 0.15),
+          });
+        });
+
+        currentY -= rowHeight;
+      }
+
+      const pdfBytes = await pdfDoc.save();
+      const blob = new Blob([pdfBytes], { type: "application/pdf" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${fileName.replace(/\.[^/.]+$/, "")}_${activeSheet}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      alert("Failed to export PDF Table: " + (err instanceof Error ? err.message : "Error"));
+    }
+  };
+
   const copyAsJson = async () => {
     try {
       if (rawData.length < 2) return;
@@ -382,6 +505,13 @@ export default function ExcelStudioTool() {
                 className="flex-1 flex items-center justify-center gap-1 rounded-lg border border-white/20 bg-white/10 py-1.5 text-xs text-white hover:bg-white/20"
               >
                 <Download size={13} /> .json
+              </button>
+              <button
+                onClick={exportToPdfTable}
+                className="flex-1 flex items-center justify-center gap-1 rounded-lg border border-red-500/30 bg-red-500/10 py-1.5 text-xs text-red-300 hover:bg-red-500/20"
+                title="Export current sheet as formatted PDF table"
+              >
+                <Download size={13} /> .pdf
               </button>
             </div>
           </div>

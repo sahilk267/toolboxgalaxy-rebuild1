@@ -1,6 +1,7 @@
 import { useState } from "react";
 import AppShell from "@/components/AppShell";
 import PdfEditorTool from "@/components/PdfEditorTool";
+import EnterprisePdfTool from "@/components/EnterprisePdfTool";
 import { ImagesToPdfTool, PdfMergeSplitTool } from "@/components/PdfToolsRunner";
 import ExcelStudioTool from "@/components/ExcelStudioTool";
 import WordDocxTool from "@/components/WordDocxTool";
@@ -13,10 +14,11 @@ import {
   ShieldCheck,
   Zap,
   Sparkles,
-  Lock
+  Lock,
+  Tag
 } from "lucide-react";
 
-type StudioModule = "editor" | "merge-split" | "images-to-pdf" | "excel" | "docx";
+type StudioModule = "editor" | "enterprise" | "merge-split" | "images-to-pdf" | "excel" | "docx";
 
 interface ModuleConfig {
   id: StudioModule;
@@ -30,11 +32,19 @@ interface ModuleConfig {
 const modules: ModuleConfig[] = [
   {
     id: "editor",
-    title: "PDF Visual Editor & Annotator",
-    shortTitle: "Visual Editor",
-    badge: "Interactive Canvas",
-    description: "Fill forms, add text, whiteout/flatten permanent redactions, draw signatures, stamps & watermarks.",
+    title: "PDF Visual & Enterprise Studio",
+    shortTitle: "Visual Studio",
+    badge: "Interactive Canvas & Bates",
+    description: "Live Bates numbering preview, permanent pixel redactions, deep metadata purge, visual signatures & SHA-256 audit certs.",
     icon: FileText,
+  },
+  {
+    id: "enterprise",
+    title: "Enterprise PDF Suite (Legal & Audit)",
+    shortTitle: "Enterprise Suite",
+    badge: "Audit & Bates",
+    description: "Legal Bates numbering, deep metadata purge, AcroForm editor/flattening, and SHA-256 audit certificates.",
+    icon: ShieldCheck,
   },
   {
     id: "merge-split",
@@ -111,7 +121,7 @@ export default function DocumentStudio() {
         </section>
 
         {/* Studio Module Switcher Bar */}
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
           {modules.map((m) => {
             const Icon = m.icon;
             const isSelected = activeModule === m.id;
@@ -178,6 +188,7 @@ export default function DocumentStudio() {
           {/* Render Active Tool */}
           <div className="mt-2">
             {activeModule === "editor" && <PdfEditorTool />}
+            {activeModule === "enterprise" && <EnterprisePdfTool />}
             {activeModule === "merge-split" && <PdfMergeSplitTool />}
             {activeModule === "images-to-pdf" && <ImagesToPdfTool />}
             {activeModule === "excel" && <ExcelStudioTool />}

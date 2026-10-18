@@ -1,6 +1,9 @@
 import { useState } from "react";
 import mammoth from "mammoth";
 import DOMPurify from "dompurify";
+import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
+import { Document, Packer, Paragraph, TextRun, HeadingLevel } from "docx";
+import { sanitizeWinAnsiText } from "../lib/pdfTextSanitizer";
 import {
   FileText,
   Download,
@@ -141,45 +144,221 @@ No document packets are ever transferred over network sockets. The document is c
     URL.revokeObjectURL(url);
   };
 
-  // Generate basic HTML-based doc file for MS Word
-  const generateWordDoc = () => {
-    const html = `
-      <html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>
-      <head>
-        <title>${docTitle}</title>
-        <style>
-          body { font-family: Calibri, Arial, sans-serif; font-size: 11pt; line-height: 1.5; color: #111827; }
-          h1 { font-size: 18pt; color: #1e3a8a; border-bottom: 2px solid #3b82f6; padding-bottom: 4px; }
-          h2 { font-size: 14pt; color: #1e40af; margin-top: 18px; }
-          p { margin: 8px 0; }
-          ul, ol { margin: 8px 0; padding-left: 24px; }
-          li { margin-bottom: 4px; }
-        </style>
-      </head>
-      <body>
-        ${docBody
-          .replace(/^# (.*$)/gim, "<h1>$1</h1>")
-          .replace(/^## (.*$)/gim, "<h2>$1</h2>")
-          .replace(/^### (.*$)/gim, "<h3>$1</h3>")
-          .replace(/^\- (.*$)/gim, "<li>$1</li>")
-          .replace(/\*\*(.*?)\*\*/gim, "<strong>$1</strong>")
-          .replace(/\n\n/gim, "<p></p>")
-          .replace(/\n/gim, "<br/>")}
-      </body>
-      </html>
-    `;
+  // Generate genuine OpenXML .docx file for MS Word with fallback
+  const generateWordDoc = async () => {
+    try {
+      const docChildren: Paragraph[] = [];
 
-    const blob = new Blob(["\ufeff" + html], {
-      type: "application/msword;charset=utf-8",
-    });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `${docTitle.toLowerCase().replace(/[^a-z0-9]/g, "_")}.doc`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+      docChildren.push(
+        new Paragraph({
+          text: docTitle,
+          heading: HeadingLevel.TITLE,
+          spacing: { after: 240 },
+        })
+      );
+
+      const lines = docBody.split("\n");
+      for (const line of lines) {
+        if (!line.trim()) continue;
+
+        if (line.startsWith("# ")) {
+          docChildren.push(
+            new Paragraph({
+              text: line.replace(/^#\s*/, ""),
+              heading: HeadingLevel.HEADING_1,
+              spacing: { before: 240, after: 120 },
+            })
+          );
+        } else if (line.startsWith("## ")) {
+          docChildren.push(
+            new Paragraph({
+              text: line.replace(/^##\s*/, ""),
+              heading: HeadingLevel.HEADING_2,
+              spacing: { before: 180, after: 80 },
+            })
+          );
+        } else if (line.startsWith("### ")) {
+          docChildren.push(
+            new Paragraph({
+              text: line.replace(/^###\s*/, ""),
+              heading: HeadingLevel.HEADING_3,
+              spacing: { before: 140, after: 60 },
+            })
+          );
+        } else if (/^[\-\*•]\s+/.test(line)) {
+          docChildren.push(
+            new Paragraph({
+              text: line.replace(/^[\-\*•]\s+/, ""),
+              bullet: { level: 0 },
+              spacing: { after: 60 },
+            })
+          );
+        } else {
+          docChildren.push(
+            new Paragraph({
+              text: line,
+              spacing: { after: 120, line: 276 },
+            })
+          );
+        }
+      }
+
+      const doc = new Document({
+        sections: [
+          {
+            properties: {},
+            children: docChildren,
+          },
+        ],
+      });
+
+      const blob = await Packer.toBlob(doc);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${docTitle.toLowerCase().replace(/[^a-z0-9]/g, "_")}.docx`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch {
+      // Fallback to legacy HTML-based .doc format if needed
+      const html = `
+        <html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>
+        <head>
+          <title>${docTitle}</title>
+          <style>
+            body { font-family: Calibri, Arial, sans-serif; font-size: 11pt; line-height: 1.5; color: #111827; }
+            h1 { font-size: 18pt; color: #1e3a8a; border-bottom: 2px solid #3b82f6; padding-bottom: 4px; }
+            h2 { font-size: 14pt; color: #1e40af; margin-top: 18px; }
+            p { margin: 8px 0; }
+            ul, ol { margin: 8px 0; padding-left: 24px; }
+            li { margin-bottom: 4px; }
+          </style>
+        </head>
+        <body>
+          ${docBody
+            .replace(/^# (.*$)/gim, "<h1>$1</h1>")
+            .replace(/^## (.*$)/gim, "<h2>$1</h2>")
+            .replace(/^### (.*$)/gim, "<h3>$1</h3>")
+            .replace(/^\- (.*$)/gim, "<li>$1</li>")
+            .replace(/\*\*(.*?)\*\*/gim, "<strong>$1</strong>")
+            .replace(/\n\n/gim, "<p></p>")
+            .replace(/\n/gim, "<br/>")}
+        </body>
+        </html>
+      `;
+
+      const blob = new Blob(["\ufeff" + html], {
+        type: "application/msword;charset=utf-8",
+      });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${docTitle.toLowerCase().replace(/[^a-z0-9]/g, "_")}.doc`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }
+  };
+
+  const exportTextToPdf = async (textToExport: string, defaultName: string) => {
+    try {
+      if (!textToExport.trim()) return;
+      const sanitizedText = sanitizeWinAnsiText(textToExport);
+      const sanitizedTitle = sanitizeWinAnsiText(defaultName || "Converted Document");
+
+      const pdfDoc = await PDFDocument.create();
+      const helvetica = await pdfDoc.embedFont(StandardFonts.Helvetica);
+      const helveticaBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+
+      const pageWidth = 595.28;
+      const pageHeight = 841.89;
+      const margin = 45;
+      const contentWidth = pageWidth - margin * 2;
+      const lineHeight = 16;
+
+      let currentPage = pdfDoc.addPage([pageWidth, pageHeight]);
+      let currentY = pageHeight - margin;
+
+      currentPage.drawText(sanitizedTitle, {
+        x: margin,
+        y: currentY,
+        size: 15,
+        font: helveticaBold,
+        color: rgb(0.12, 0.22, 0.54),
+      });
+      currentY -= 28;
+
+      const paragraphs = sanitizedText.split("\n");
+      for (const para of paragraphs) {
+        if (!para.trim()) {
+          currentY -= 8;
+          continue;
+        }
+
+        const isHeading = para.startsWith("#");
+        const cleanPara = para.replace(/^#+\s*/, "");
+        const fontSize = isHeading ? 12 : 9.5;
+        const font = isHeading ? helveticaBold : helvetica;
+        const color = isHeading ? rgb(0.12, 0.22, 0.54) : rgb(0.15, 0.15, 0.15);
+
+        const words = cleanPara.split(/\s+/);
+        let currentLine = "";
+
+        for (const word of words) {
+          const testLine = currentLine ? `${currentLine} ${word}` : word;
+          const textWidth = font.widthOfTextAtSize(testLine, fontSize);
+
+          if (textWidth > contentWidth && currentLine) {
+            if (currentY <= margin + 20) {
+              currentPage = pdfDoc.addPage([pageWidth, pageHeight]);
+              currentY = pageHeight - margin;
+            }
+            currentPage.drawText(currentLine, {
+              x: margin,
+              y: currentY,
+              size: fontSize,
+              font,
+              color,
+            });
+            currentY -= lineHeight;
+            currentLine = word;
+          } else {
+            currentLine = testLine;
+          }
+        }
+
+        if (currentLine) {
+          if (currentY <= margin + 20) {
+            currentPage = pdfDoc.addPage([pageWidth, pageHeight]);
+            currentY = pageHeight - margin;
+          }
+          currentPage.drawText(currentLine, {
+            x: margin,
+            y: currentY,
+            size: fontSize,
+            font,
+            color,
+          });
+          currentY -= lineHeight + (isHeading ? 6 : 4);
+        }
+      }
+
+      const pdfBytes = await pdfDoc.save();
+      const blob = new Blob([pdfBytes], { type: "application/pdf" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${defaultName.toLowerCase().replace(/[^a-z0-9]/g, "_")}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      alert("Failed to export PDF: " + (err instanceof Error ? err.message : "Error"));
+    }
   };
 
   return (
@@ -275,7 +454,7 @@ No document packets are ever transferred over network sockets. The document is c
                   </button>
                 </div>
 
-                <div className="flex gap-2">
+                <div className="flex flex-wrap gap-2">
                   <button
                     onClick={() => downloadTextFile(markdownContent, "md")}
                     className="signal-button flex items-center gap-1.5 bg-[#c7f36b] text-[#0b1020] text-xs font-semibold"
@@ -287,6 +466,12 @@ No document packets are ever transferred over network sockets. The document is c
                     className="reset-button flex items-center gap-1.5 text-xs"
                   >
                     <Download size={14} /> Download .html
+                  </button>
+                  <button
+                    onClick={() => exportTextToPdf(rawText || markdownContent, fileName ? fileName.replace(/\.[^/.]+$/, "") : "converted_document")}
+                    className="flex items-center gap-1.5 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-1.5 text-xs font-medium text-red-300 hover:bg-red-500/20 transition-colors"
+                  >
+                    <Download size={14} /> Download .pdf
                   </button>
                 </div>
               </div>
@@ -348,12 +533,18 @@ No document packets are ever transferred over network sockets. The document is c
             </div>
           </div>
 
-          <div className="flex justify-end pt-2">
+          <div className="flex flex-wrap justify-end gap-2 pt-2">
+            <button
+              onClick={() => exportTextToPdf(docBody, docTitle || "document")}
+              className="flex items-center gap-2 rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-2 text-xs font-semibold text-red-300 hover:bg-red-500/20 transition-colors"
+            >
+              <Download size={15} /> Export as PDF Document
+            </button>
             <button
               onClick={generateWordDoc}
-              className="signal-button flex items-center gap-2 bg-[#c7f36b] text-[#0b1020] font-semibold"
+              className="signal-button flex items-center gap-2 bg-[#c7f36b] text-[#0b1020] font-semibold text-xs"
             >
-              <Download size={16} /> Compile & Download Word Document
+              <Download size={15} /> Compile & Download Word Document
             </button>
           </div>
         </div>

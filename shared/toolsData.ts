@@ -38,6 +38,7 @@ export type ToolKind =
   | "lineSorter"
   | "imageMetadata"
   | "pdfEditor"
+  | "enterprisePdf"
   | "pdfMergeSplit"
   | "imagesToPdf"
   | "excelStudio"
@@ -415,6 +416,17 @@ export const tools: ToolDefinition[] = [
     kind: "pdfEditor",
     accent: "lime",
     tags: ["Local", "Private", "PDF"],
+  },
+  {
+    slug: "enterprise-pdf-suite",
+    name: "Enterprise PDF Suite (Legal & Audit)",
+    category: "Create",
+    description: "Legal Bates numbering, deep metadata purge & XMP sanitization, AcroForm editor/flattening, and SHA-256 audit certificates.",
+    kind: "enterprisePdf",
+    accent: "lime",
+    tags: ["Local", "Private", "PDF", "Popular"],
+    hindiName: "एंटरप्राइज़ पीडीएफ सूट (लीगल और ऑडिट)",
+    hindiDescription: "लीगल बेट्स नंबरिंग, डीप मेटाडेटा क्लिनर, एक्रोफॉर्म्स एडिटर और SHA-256 ऑडिट सर्टिफिकेट।",
   },
   {
     slug: "pdf-merge-split",

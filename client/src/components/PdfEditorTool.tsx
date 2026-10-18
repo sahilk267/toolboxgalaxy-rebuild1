@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { PDFDocument, rgb, StandardFonts, degrees } from "pdf-lib";
+import { PDFDocument, rgb, StandardFonts, degrees, PDFString } from "pdf-lib";
 import * as pdfjsLib from "pdfjs-dist";
 import { trackPageView } from "../lib/analytics";
 import {
@@ -29,9 +29,60 @@ import {
   ShieldAlert,
   ShieldCheck,
   AlertTriangle,
-  Info
+  Info,
+  QrCode,
+  Tag,
+  CheckCircle2,
+  FileCheck2,
+  FileSpreadsheet,
+  Link as LinkIcon,
+  Highlighter,
+  Image as ImageIcon,
+  Copy,
+  ChevronLeft,
+  ChevronRight,
+  FilePlus,
+  ScanText,
+  FileDown,
+  FileCode,
+  Undo2,
+  Redo2,
+  Circle,
+  Shapes,
+  Maximize2,
+  Minimize2,
 } from "lucide-react";
 import { REDACTION_DISCLAIMER, rasterizePageWithAnnotations } from "../lib/pdfRedaction";
+import {
+  calculateSha256,
+  inspectPdfMetadata,
+  sanitizePdfDocument,
+  applyBatesStamping,
+  appendAuditCertificate,
+  PdfMetadataReport,
+  BatesStampingOptions,
+} from "../lib/enterprisePdf";
+import {
+  exportPdfToTextFile,
+  exportPdfToExcelWorkbook,
+  exportPdfToWordDocx,
+  exportPdfToPresentationPpt,
+} from "../lib/pdfExtraction";
+import {
+  runClientSidePdfOcr,
+  exportSearchablePdf,
+  OcrPageProgress,
+} from "../lib/pdfOcr";
+import {
+  inspectPdfNature,
+  parseDigitalPdfStructure,
+  parseScannedPdfWithLayoutOcr,
+  exportStructureToDocx,
+  exportStructureToHtml,
+  exportStructureToMarkdown,
+  DocumentStructure,
+} from "../lib/pdfLayoutEngine";
+import { sanitizeWinAnsiText } from "../lib/pdfTextSanitizer";
 
 // Configure pdfjs worker safely with local, same-origin bundled worker
 if (typeof window !== "undefined") {
@@ -85,7 +136,234 @@ export interface StampAnnotation {
   color: string;
 }
 
-export type Annotation = TextAnnotation | WhiteoutAnnotation | DrawingPath | StampAnnotation;
+export interface ImageAnnotation {
+  id: string;
+  pageIndex: number;
+  type: "image";
+  imageDataUrl: string;
+  bytes: Uint8Array;
+  mimeType: "image/png" | "image/jpeg";
+  name: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+export interface LinkAnnotation {
+  id: string;
+  pageIndex: number;
+  type: "link";
+  url: string;
+  label?: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+export interface HighlightAnnotation {
+  id: string;
+  pageIndex: number;
+  type: "highlight";
+  color: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+export interface ShapeAnnotation {
+  id: string;
+  pageIndex: number;
+  type: "shape";
+  shapeType: "rectangle" | "circle" | "arrow" | "line";
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  strokeColor: string;
+  fillColor?: string;
+  strokeWidth: number;
+}
+
+export type Annotation =
+  | TextAnnotation
+  | WhiteoutAnnotation
+  | DrawingPath
+  | StampAnnotation
+  | ImageAnnotation
+  | LinkAnnotation
+  | HighlightAnnotation
+  | ShapeAnnotation;
+
+interface PdfPageThumbnailProps {
+  pageIndex: number;
+  pdfBytes: Uint8Array;
+  isActive: boolean;
+  rotation: number;
+  annotationCount: number;
+  onClick: () => void;
+  onRotate: () => void;
+  onDuplicate: () => void;
+  onDelete: () => void;
+  canDelete: boolean;
+  onMoveLeft: () => void;
+  canMoveLeft: boolean;
+  onMoveRight: () => void;
+  canMoveRight: boolean;
+  onDragStart: (e: React.DragEvent) => void;
+  onDragOver: (e: React.DragEvent) => void;
+  onDrop: (e: React.DragEvent) => void;
+}
+
+function PdfPageThumbnail({
+  pageIndex,
+  pdfBytes,
+  isActive,
+  rotation,
+  annotationCount,
+  onClick,
+  onRotate,
+  onDuplicate,
+  onDelete,
+  canDelete,
+  onMoveLeft,
+  canMoveLeft,
+  onMoveRight,
+  canMoveRight,
+  onDragStart,
+  onDragOver,
+  onDrop,
+}: PdfPageThumbnailProps) {
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+
+  useEffect(() => {
+    let isCancelled = false;
+    const renderThumb = async () => {
+      try {
+        const loadingTask = pdfjsLib.getDocument({ data: pdfBytes.slice() });
+        const pdf = await loadingTask.promise;
+        if (isCancelled) return;
+        const page = await pdf.getPage(pageIndex + 1);
+        const viewport = page.getViewport({ scale: 0.22, rotation });
+        const canvas = canvasRef.current;
+        if (!canvas) return;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) return;
+        canvas.width = viewport.width;
+        canvas.height = viewport.height;
+        await (page.render as any)({
+          canvasContext: ctx,
+          viewport,
+          canvas,
+        }).promise;
+      } catch {
+        // ignore cancelled renders
+      }
+    };
+    renderThumb();
+    return () => {
+      isCancelled = true;
+    };
+  }, [pdfBytes, pageIndex, rotation]);
+
+  return (
+    <div
+      draggable
+      onDragStart={onDragStart}
+      onDragOver={onDragOver}
+      onDrop={onDrop}
+      className={`group relative flex flex-col items-center rounded-lg border p-1.5 transition-all select-none cursor-pointer flex-shrink-0 ${
+        isActive
+          ? "border-[#c7f36b] bg-[#c7f36b]/15 ring-2 ring-[#c7f36b]/40 shadow-lg"
+          : "border-white/10 bg-white/[0.03] hover:border-white/20 hover:bg-white/[0.06]"
+      }`}
+      onClick={onClick}
+    >
+      <div className="relative overflow-hidden rounded shadow-sm bg-white min-h-[85px] min-w-[60px] flex items-center justify-center">
+        <canvas ref={canvasRef} className="block max-w-[80px] max-h-[110px]" />
+        {rotation ? (
+          <span className="absolute top-0.5 right-0.5 rounded bg-black/80 px-1 py-0.2 text-[9px] font-mono text-[#c7f36b]">
+            {rotation}°
+          </span>
+        ) : null}
+        {annotationCount > 0 && (
+          <span className="absolute bottom-0.5 left-0.5 rounded bg-black/80 px-1 py-0.2 text-[9px] font-mono text-white/90">
+            {annotationCount} edit{annotationCount > 1 ? "s" : ""}
+          </span>
+        )}
+      </div>
+
+      <div className="mt-1 flex items-center justify-between w-full px-1 text-[11px] font-mono text-white/70">
+        <span className={isActive ? "text-[#c7f36b] font-bold" : ""}>{pageIndex + 1}</span>
+        <div className="flex items-center gap-0.5 opacity-60 group-hover:opacity-100 transition-opacity">
+          {canMoveLeft && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onMoveLeft();
+              }}
+              className="p-0.5 hover:text-[#c7f36b]"
+              title="Move left"
+            >
+              <ChevronLeft size={11} />
+            </button>
+          )}
+          {canMoveRight && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onMoveRight();
+              }}
+              className="p-0.5 hover:text-[#c7f36b]"
+              title="Move right"
+            >
+              <ChevronRight size={11} />
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onRotate();
+            }}
+            className="p-0.5 hover:text-[#c7f36b]"
+            title="Rotate 90°"
+          >
+            <RotateCw size={11} />
+          </button>
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onDuplicate();
+            }}
+            className="p-0.5 hover:text-[#c7f36b]"
+            title="Duplicate"
+          >
+            <Copy size={11} />
+          </button>
+          {canDelete && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onDelete();
+              }}
+              className="p-0.5 text-red-400 hover:text-red-300"
+              title="Delete"
+            >
+              <Trash2 size={11} />
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export default function PdfEditorTool() {
   const [pdfBytes, setPdfBytes] = useState<Uint8Array | null>(null);
@@ -94,19 +372,39 @@ export default function PdfEditorTool() {
   const [currentPage, setCurrentPage] = useState<number>(0);
   const [pageRotations, setPageRotations] = useState<number[]>([]);
   const [annotations, setAnnotations] = useState<Annotation[]>([]);
-  const [activeTool, setActiveTool] = useState<"select" | "text" | "whiteout" | "draw" | "stamp">("text");
+  const [activeTool, setActiveTool] = useState<
+    "select" | "text" | "whiteout" | "draw" | "stamp" | "image" | "link" | "highlight" | "shape"
+  >("text");
   
+  // History Undo / Redo Stack Engine (GAP-01)
+  const undoStackRef = useRef<{ annotations: Annotation[]; pageRotations: number[] }[]>([]);
+  const redoStackRef = useRef<{ annotations: Annotation[]; pageRotations: number[] }[]>([]);
+  const [canUndo, setCanUndo] = useState<boolean>(false);
+  const [canRedo, setCanRedo] = useState<boolean>(false);
+
   // Active text tool configuration & draft text
   const [inputText, setInputText] = useState<string>("Sample Note");
   const [textColor, setTextColor] = useState<string>("#1e293b");
   const [fontSize, setFontSize] = useState<number>(14);
   const [isBold, setIsBold] = useState<boolean>(false);
   const [textBgColor, setTextBgColor] = useState<string>("transparent");
+  const [editingTextId, setEditingTextId] = useState<string | null>(null);
 
-  // Selected annotation for on-canvas editing / dragging
+  // Selected annotation for on-canvas editing / dragging & Resizing (GAP-03)
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [isDraggingSelected, setIsDraggingSelected] = useState<boolean>(false);
   const [dragOffset, setDragOffset] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
+  const [resizeHandle, setResizeHandle] = useState<"nw" | "ne" | "se" | "sw" | null>(null);
+  const [resizeInitialBox, setResizeInitialBox] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
+  const [resizeStartMouse, setResizeStartMouse] = useState<{ x: number; y: number } | null>(null);
+
+  // Geometric Vector Shape Tool State (GAP-05)
+  const [shapeType, setShapeType] = useState<"rectangle" | "circle" | "arrow" | "line">("rectangle");
+  const [shapeStrokeColor, setShapeStrokeColor] = useState<string>("#2563eb");
+  const [shapeFillColor, setShapeFillColor] = useState<string>("transparent");
+  const [shapeStrokeWidth, setShapeStrokeWidth] = useState<number>(3);
+  const [shapeStart, setShapeStart] = useState<{ x: number; y: number } | null>(null);
+  const [tempShape, setTempShape] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
 
   // Other tools options
   const [whiteoutColor, setWhiteoutColor] = useState<string>("#ffffff");
@@ -115,16 +413,57 @@ export default function PdfEditorTool() {
   const [stampText, setStampText] = useState<string>("CONFIDENTIAL");
   const [stampColor, setStampColor] = useState<string>("#ef4444");
   
-  // Watermark & Page Numbering
+  // Watermark & Page Numbering & Header/Footer
   const [watermarkText, setWatermarkText] = useState<string>("");
   const [includePageNumbers, setIncludePageNumbers] = useState<boolean>(false);
+  const [headerText, setHeaderText] = useState<string>("");
+  const [footerText, setFooterText] = useState<string>("");
 
   // Security & Permanent Redaction options
   const [flattenRedactions, setFlattenRedactions] = useState<boolean>(true);
   const [showRedactionInfo, setShowRedactionInfo] = useState<boolean>(false);
 
-  // Zoom scale for canvas viewport
+  // Zoom scale for canvas viewport & container ref for Fit to Width (GAP-07)
   const [zoomScale, setZoomScale] = useState<number>(1.0);
+  const containerRef = useRef<HTMLDivElement | null>(null);
+
+  // Custom export filename (GAP-08)
+  const [customExportName, setCustomExportName] = useState<string>("");
+
+  // Enterprise Legal, Bates & Audit Suite State
+  const [enableBates, setEnableBates] = useState<boolean>(false);
+  const [batesPrefix, setBatesPrefix] = useState<string>("CASE-2026-");
+  const [batesStart, setBatesStart] = useState<number>(1);
+  const [batesDigits, setBatesDigits] = useState<number>(6);
+  const [batesSuffix, setBatesSuffix] = useState<string>("");
+  const [batesPosition, setBatesPosition] = useState<BatesStampingOptions["position"]>("bottom-right");
+  const [batesFontSize, setBatesFontSize] = useState<number>(9);
+  const [batesColor, setBatesColor] = useState<string>("#1f2937");
+  const [sanitizeMetadata, setSanitizeMetadata] = useState<boolean>(false);
+  const [includeAuditCertificate, setIncludeAuditCertificate] = useState<boolean>(false);
+  const [originalSha256, setOriginalSha256] = useState<string>("");
+  const [metadataReport, setMetadataReport] = useState<PdfMetadataReport | null>(null);
+
+  // Rich Annotations State (Images, Links, Highlights)
+  const [linkUrl, setLinkUrl] = useState<string>("https://");
+  const [highlightColor, setHighlightColor] = useState<string>("rgba(250, 204, 21, 0.45)");
+  const [highlightStart, setHighlightStart] = useState<{ x: number; y: number } | null>(null);
+  const [tempHighlight, setTempHighlight] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
+
+  // Document Management & Thumbnails
+  const [showThumbnails, setShowThumbnails] = useState<boolean>(true);
+  const [draggedPageIndex, setDraggedPageIndex] = useState<number | null>(null);
+
+  // OCR & Export Engine State
+  const [isOcrRunning, setIsOcrRunning] = useState<boolean>(false);
+  const [ocrStatus, setOcrStatus] = useState<string>("");
+  const [ocrProgressPercent, setOcrProgressPercent] = useState<number>(0);
+  const [showOcrModal, setShowOcrModal] = useState<boolean>(false);
+  const [ocrResultText, setOcrResultText] = useState<string>("");
+  const [isConverting, setIsConverting] = useState<boolean>(false);
+  const [detectedPdfNature, setDetectedPdfNature] = useState<{ isScanned: boolean; totalChars: number; numPages: number } | null>(null);
+  const [documentStructure, setDocumentStructure] = useState<DocumentStructure | null>(null);
+  const [ocrActiveTab, setOcrActiveTab] = useState<"formatted" | "raw">("formatted");
 
   // Canvas drawing state
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -141,6 +480,130 @@ export default function PdfEditorTool() {
     setStatusMessage(msg);
     setTimeout(() => setStatusMessage(null), 3500);
   };
+
+  // Push current state into undo stack before mutating (GAP-01)
+  const pushHistorySnapshot = () => {
+    undoStackRef.current.push({
+      annotations: JSON.parse(JSON.stringify(annotations)),
+      pageRotations: [...pageRotations],
+    });
+    if (undoStackRef.current.length > 30) {
+      undoStackRef.current.shift();
+    }
+    redoStackRef.current = [];
+    setCanUndo(true);
+    setCanRedo(false);
+  };
+
+  const handleUndo = () => {
+    if (undoStackRef.current.length === 0) return;
+    const prev = undoStackRef.current.pop()!;
+    redoStackRef.current.push({
+      annotations: JSON.parse(JSON.stringify(annotations)),
+      pageRotations: [...pageRotations],
+    });
+    setAnnotations(prev.annotations);
+    setPageRotations(prev.pageRotations);
+    setSelectedId(null);
+    setEditingTextId(null);
+    setCanUndo(undoStackRef.current.length > 0);
+    setCanRedo(true);
+    showToast("Reverted change (Undo)");
+  };
+
+  const handleRedo = () => {
+    if (redoStackRef.current.length === 0) return;
+    const next = redoStackRef.current.pop()!;
+    undoStackRef.current.push({
+      annotations: JSON.parse(JSON.stringify(annotations)),
+      pageRotations: [...pageRotations],
+    });
+    setAnnotations(next.annotations);
+    setPageRotations(next.pageRotations);
+    setSelectedId(null);
+    setEditingTextId(null);
+    setCanUndo(true);
+    setCanRedo(redoStackRef.current.length > 0);
+    showToast("Restored change (Redo)");
+  };
+
+  // Viewport Presets: Fit to Width & Standard (GAP-07)
+  const fitToWidth = () => {
+    if (!containerRef.current || !canvasRef.current) return;
+    const containerW = containerRef.current.clientWidth - 48;
+    const canvasNaturalW = canvasRef.current.width / (zoomScale * 1.5) || 595;
+    if (canvasNaturalW > 0) {
+      const calculatedScale = Math.max(0.4, Math.min(2.0, Number((containerW / (canvasNaturalW * 1.5)).toFixed(2))));
+      setZoomScale(calculatedScale);
+      showToast(`Fit to Width: ${Math.round(calculatedScale * 100)}%`);
+    }
+  };
+
+  const fitToPage = () => {
+    setZoomScale(1.0);
+    showToast("Reset to Standard View (100%)");
+  };
+
+  // Global Keyboard Shortcuts (GAP-02)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const activeEl = document.activeElement;
+      const isTyping =
+        activeEl &&
+        (activeEl.tagName === "INPUT" ||
+          activeEl.tagName === "TEXTAREA" ||
+          (activeEl as HTMLElement).isContentEditable);
+
+      // Undo: Ctrl+Z / Cmd+Z (without shift)
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z" && !e.shiftKey) {
+        if (!isTyping) {
+          e.preventDefault();
+          handleUndo();
+        }
+        return;
+      }
+
+      // Redo: Ctrl+Y / Cmd+Y or Ctrl+Shift+Z
+      if (
+        ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "y") ||
+        ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === "z")
+      ) {
+        if (!isTyping) {
+          e.preventDefault();
+          handleRedo();
+        }
+        return;
+      }
+
+      // Delete / Backspace: delete selected annotation
+      if ((e.key === "Delete" || e.key === "Backspace") && selectedId && !isTyping) {
+        e.preventDefault();
+        pushHistorySnapshot();
+        deleteAnnotation(selectedId);
+        showToast("Annotation deleted");
+        return;
+      }
+
+      // Escape: deselect annotation or tool
+      if (e.key === "Escape") {
+        setSelectedId(null);
+        setEditingTextId(null);
+        return;
+      }
+
+      // Page Navigation: ArrowLeft / ArrowRight
+      if (!isTyping) {
+        if (e.key === "ArrowLeft") {
+          setCurrentPage((p) => Math.max(0, p - 1));
+        } else if (e.key === "ArrowRight") {
+          setCurrentPage((p) => Math.min(numPages - 1, p + 1));
+        }
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [selectedId, annotations, pageRotations, numPages]);
 
   // Load sample PDF for instant testing
   const loadSamplePdf = async () => {
@@ -217,6 +680,10 @@ export default function PdfEditorTool() {
       });
 
       const bytes = await doc.save();
+      const sha = await calculateSha256(bytes);
+      const meta = inspectPdfMetadata(doc);
+      setOriginalSha256(sha);
+      setMetadataReport(meta);
       setPdfBytes(bytes);
       setFileName("sample_document.pdf");
       setNumPages(2);
@@ -240,8 +707,12 @@ export default function PdfEditorTool() {
     try {
       const buffer = await file.arrayBuffer();
       const bytes = new Uint8Array(buffer);
+      const sha = await calculateSha256(bytes);
       const pdfDoc = await PDFDocument.load(bytes, { ignoreEncryption: true });
+      const meta = inspectPdfMetadata(pdfDoc);
       const count = pdfDoc.getPageCount();
+      setOriginalSha256(sha);
+      setMetadataReport(meta);
       setPdfBytes(bytes);
       setFileName(file.name);
       setNumPages(count);
@@ -298,7 +769,7 @@ export default function PdfEditorTool() {
     };
   }, [pdfBytes, currentPage, pageRotations, zoomScale]);
 
-  // Handle overlay click to add Text, Whiteout, Stamp
+  // Handle overlay click to add Text, Whiteout, Stamp, Shape
   const handleOverlayMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
     if (!overlayRef.current) return;
     const rect = overlayRef.current.getBoundingClientRect();
@@ -306,7 +777,7 @@ export default function PdfEditorTool() {
     const y = Math.max(0, Math.min(98, ((e.clientY - rect.top) / rect.height) * 100));
 
     if (activeTool === "text") {
-      // Create new text annotation immediately using the current input text or default
+      pushHistorySnapshot();
       const textToAdd = inputText.trim() || "Type here...";
       const newAnnotation: TextAnnotation = {
         id: `text-${Date.now()}`,
@@ -322,8 +793,9 @@ export default function PdfEditorTool() {
       };
       setAnnotations((prev) => [...prev, newAnnotation]);
       setSelectedId(newAnnotation.id);
-      showToast("Text placed! Click on it or use sidebar to edit");
+      showToast("Text placed! Double-click to edit directly on canvas");
     } else if (activeTool === "stamp") {
+      pushHistorySnapshot();
       const newStamp: StampAnnotation = {
         id: `stamp-${Date.now()}`,
         pageIndex: currentPage,
@@ -336,15 +808,37 @@ export default function PdfEditorTool() {
       setAnnotations((prev) => [...prev, newStamp]);
       setSelectedId(newStamp.id);
       showToast(`Placed "${stampText}" stamp`);
+    } else if (activeTool === "shape") {
+      setShapeStart({ x, y });
+      setTempShape({ x, y, w: 0, h: 0 });
     } else if (activeTool === "whiteout") {
       setWhiteoutStart({ x, y });
       setTempWhiteout({ x, y, w: 0, h: 0 });
+    } else if (activeTool === "highlight") {
+      setHighlightStart({ x, y });
+      setTempHighlight({ x, y, w: 0, h: 0 });
+    } else if (activeTool === "link") {
+      pushHistorySnapshot();
+      const newLink: LinkAnnotation = {
+        id: `link-${Date.now()}`,
+        pageIndex: currentPage,
+        type: "link",
+        url: linkUrl || "https://",
+        x,
+        y,
+        width: 24,
+        height: 4.5,
+      };
+      setAnnotations((prev) => [...prev, newLink]);
+      setSelectedId(newLink.id);
+      showToast("Link annotation box placed! Drag or resize corners.");
     } else if (activeTool === "draw") {
       setIsDrawing(true);
       setCurrentPath([{ x, y }]);
     } else if (activeTool === "select") {
       // Clicked on empty space
       setSelectedId(null);
+      setEditingTextId(null);
     }
   };
 
@@ -353,6 +847,48 @@ export default function PdfEditorTool() {
     const rect = overlayRef.current.getBoundingClientRect();
     const x = Math.max(0, Math.min(100, ((e.clientX - rect.left) / rect.width) * 100));
     const y = Math.max(0, Math.min(100, ((e.clientY - rect.top) / rect.height) * 100));
+
+    // Handle corner resizing of selected annotation (GAP-03)
+    if (resizeHandle && resizeInitialBox && resizeStartMouse && selectedId) {
+      const dx = x - resizeStartMouse.x;
+      const dy = y - resizeStartMouse.y;
+      setAnnotations((prev) =>
+        prev.map((ann) => {
+          if (ann.id !== selectedId || !("width" in ann) || !("height" in ann)) return ann;
+          let newX = resizeInitialBox.x;
+          let newY = resizeInitialBox.y;
+          let newW = resizeInitialBox.w;
+          let newH = resizeInitialBox.h;
+
+          if (resizeHandle === "se") {
+            newW = Math.max(2, resizeInitialBox.w + dx);
+            newH = Math.max(2, resizeInitialBox.h + dy);
+          } else if (resizeHandle === "sw") {
+            newX = Math.min(resizeInitialBox.x + resizeInitialBox.w - 2, resizeInitialBox.x + dx);
+            newW = Math.max(2, resizeInitialBox.w - dx);
+            newH = Math.max(2, resizeInitialBox.h + dy);
+          } else if (resizeHandle === "ne") {
+            newY = Math.min(resizeInitialBox.y + resizeInitialBox.h - 2, resizeInitialBox.y + dy);
+            newW = Math.max(2, resizeInitialBox.w + dx);
+            newH = Math.max(2, resizeInitialBox.h - dy);
+          } else if (resizeHandle === "nw") {
+            newX = Math.min(resizeInitialBox.x + resizeInitialBox.w - 2, resizeInitialBox.x + dx);
+            newY = Math.min(resizeInitialBox.y + resizeInitialBox.h - 2, resizeInitialBox.y + dy);
+            newW = Math.max(2, resizeInitialBox.w - dx);
+            newH = Math.max(2, resizeInitialBox.h - dy);
+          }
+
+          return {
+            ...ann,
+            x: Math.max(0, Math.min(98, newX)),
+            y: Math.max(0, Math.min(98, newY)),
+            width: Math.min(100 - newX, newW),
+            height: Math.min(100 - newY, newH),
+          };
+        })
+      );
+      return;
+    }
 
     if (isDraggingSelected && selectedId) {
       setAnnotations((prev) =>
@@ -369,21 +905,41 @@ export default function PdfEditorTool() {
       );
     } else if (activeTool === "draw" && isDrawing) {
       setCurrentPath((prev) => [...prev, { x, y }]);
+    } else if (activeTool === "shape" && shapeStart) {
+      const startX = Math.min(shapeStart.x, x);
+      const startY = Math.min(shapeStart.y, y);
+      const width = Math.abs(x - shapeStart.x);
+      const height = Math.abs(y - shapeStart.y);
+      setTempShape({ x: startX, y: startY, w: width, h: height });
     } else if (activeTool === "whiteout" && whiteoutStart) {
       const startX = Math.min(whiteoutStart.x, x);
       const startY = Math.min(whiteoutStart.y, y);
       const width = Math.abs(x - whiteoutStart.x);
       const height = Math.abs(y - whiteoutStart.y);
       setTempWhiteout({ x: startX, y: startY, w: width, h: height });
+    } else if (activeTool === "highlight" && highlightStart) {
+      const startX = Math.min(highlightStart.x, x);
+      const startY = Math.min(highlightStart.y, y);
+      const width = Math.abs(x - highlightStart.x);
+      const height = Math.abs(y - highlightStart.y);
+      setTempHighlight({ x: startX, y: startY, w: width, h: height });
     }
   };
 
   const handleOverlayMouseUp = () => {
+    if (resizeHandle) {
+      setResizeHandle(null);
+      setResizeInitialBox(null);
+      setResizeStartMouse(null);
+      pushHistorySnapshot();
+    }
     if (isDraggingSelected) {
       setIsDraggingSelected(false);
+      pushHistorySnapshot();
     }
     if (activeTool === "draw" && isDrawing) {
       if (currentPath.length > 1) {
+        pushHistorySnapshot();
         const newDraw: DrawingPath = {
           id: `draw-${Date.now()}`,
           pageIndex: currentPage,
@@ -396,8 +952,31 @@ export default function PdfEditorTool() {
       }
       setIsDrawing(false);
       setCurrentPath([]);
+    } else if (activeTool === "shape" && shapeStart && tempShape) {
+      if (tempShape.w > 1 && tempShape.h > 1) {
+        pushHistorySnapshot();
+        const newShape: ShapeAnnotation = {
+          id: `shape-${Date.now()}`,
+          pageIndex: currentPage,
+          type: "shape",
+          shapeType,
+          x: tempShape.x,
+          y: tempShape.y,
+          width: tempShape.w,
+          height: tempShape.h,
+          strokeColor: shapeStrokeColor,
+          fillColor: shapeFillColor,
+          strokeWidth: shapeStrokeWidth,
+        };
+        setAnnotations((prev) => [...prev, newShape]);
+        setSelectedId(newShape.id);
+        showToast(`Placed ${shapeType} vector shape`);
+      }
+      setShapeStart(null);
+      setTempShape(null);
     } else if (activeTool === "whiteout" && whiteoutStart && tempWhiteout) {
       if (tempWhiteout.w > 1 && tempWhiteout.h > 1) {
+        pushHistorySnapshot();
         const newWhiteout: WhiteoutAnnotation = {
           id: `whiteout-${Date.now()}`,
           pageIndex: currentPage,
@@ -413,52 +992,412 @@ export default function PdfEditorTool() {
       }
       setWhiteoutStart(null);
       setTempWhiteout(null);
+    } else if (activeTool === "highlight" && highlightStart && tempHighlight) {
+      if (tempHighlight.w > 1 && tempHighlight.h > 1) {
+        pushHistorySnapshot();
+        const newHighlight: HighlightAnnotation = {
+          id: `highlight-${Date.now()}`,
+          pageIndex: currentPage,
+          type: "highlight",
+          x: tempHighlight.x,
+          y: tempHighlight.y,
+          width: tempHighlight.w,
+          height: tempHighlight.h,
+          color: highlightColor,
+        };
+        setAnnotations((prev) => [...prev, newHighlight]);
+        setSelectedId(newHighlight.id);
+      }
+      setHighlightStart(null);
+      setTempHighlight(null);
     }
+  };
+
+  // Rotate specific page by 90 degrees
+  const rotatePageAtIndex = (targetIndex: number, delta = 90) => {
+    pushHistorySnapshot();
+    setPageRotations((prev) => {
+      const updated = [...prev];
+      updated[targetIndex] = ((updated[targetIndex] || 0) + delta) % 360;
+      return updated;
+    });
+    showToast(`Rotated page ${targetIndex + 1} by ${delta}°`);
   };
 
   // Rotate current page
   const rotateCurrentPage = () => {
-    setPageRotations((prev) => {
-      const updated = [...prev];
-      updated[currentPage] = (updated[currentPage] + 90) % 360;
-      return updated;
-    });
-    showToast(`Rotated page ${currentPage + 1}`);
+    rotatePageAtIndex(currentPage, 90);
   };
 
   // Delete an annotation
   const deleteAnnotation = (id: string) => {
+    pushHistorySnapshot();
     setAnnotations((prev) => prev.filter((a) => a.id !== id));
     if (selectedId === id) setSelectedId(null);
+    if (editingTextId === id) setEditingTextId(null);
   };
 
-  // Delete current page
-  const deleteCurrentPage = async () => {
-    if (numPages <= 1) {
+  // Duplicate an annotation with offset (GAP-04)
+  const duplicateAnnotation = (id: string) => {
+    const target = annotations.find((a) => a.id === id);
+    if (!target) return;
+    pushHistorySnapshot();
+    let cloned: Annotation;
+    if (target.type === "draw") {
+      cloned = {
+        ...target,
+        id: `draw-${Date.now()}`,
+        points: target.points.map((p) => ({
+          x: Math.min(100, p.x + 2),
+          y: Math.min(100, p.y + 2),
+        })),
+      };
+    } else {
+      cloned = {
+        ...target,
+        id: `${target.type}-${Date.now()}`,
+        x: Math.min(90, target.x + 2),
+        y: Math.min(90, target.y + 2),
+      };
+    }
+    setAnnotations((prev) => [...prev, cloned]);
+    setSelectedId(cloned.id);
+    showToast(`Duplicated ${target.type} annotation`);
+  };
+
+  // Initiate corner resizing of box-like annotations (GAP-03)
+  const startResize = (
+    e: React.MouseEvent,
+    handle: "nw" | "ne" | "se" | "sw",
+    box: { x: number; y: number; width: number; height: number }
+  ) => {
+    e.stopPropagation();
+    if (!overlayRef.current) return;
+    const rect = overlayRef.current.getBoundingClientRect();
+    const mouseX = ((e.clientX - rect.left) / rect.width) * 100;
+    const mouseY = ((e.clientY - rect.top) / rect.height) * 100;
+    setResizeHandle(handle);
+    setResizeInitialBox({ x: box.x, y: box.y, w: box.width, h: box.height });
+    setResizeStartMouse({ x: mouseX, y: mouseY });
+  };
+
+  // Delete specific page by index
+  const deletePageAtIndex = async (targetIndex: number) => {
+    if (!pdfBytes || numPages <= 1) {
       showToast("Document must have at least one page.");
       return;
     }
 
+    setIsProcessing(true);
     try {
-      const doc = await PDFDocument.load(pdfBytes!);
-      doc.removePage(currentPage);
+      const doc = await PDFDocument.load(pdfBytes, { ignoreEncryption: true });
+      doc.removePage(targetIndex);
       const updatedBytes = await doc.save();
-      
-      const newPageRotations = pageRotations.filter((_, idx) => idx !== currentPage);
+
+      const newPageRotations = pageRotations.filter((_, idx) => idx !== targetIndex);
       const newAnnotations = annotations
-        .filter((a) => a.pageIndex !== currentPage)
-        .map((a) => (a.pageIndex > currentPage ? { ...a, pageIndex: a.pageIndex - 1 } : a));
+        .filter((a) => a.pageIndex !== targetIndex)
+        .map((a) => (a.pageIndex > targetIndex ? { ...a, pageIndex: a.pageIndex - 1 } : a));
 
       setPdfBytes(updatedBytes);
       setNumPages(numPages - 1);
       setPageRotations(newPageRotations);
       setAnnotations(newAnnotations);
-      setCurrentPage(Math.max(0, currentPage - 1));
+      if (currentPage >= numPages - 1) {
+        setCurrentPage(Math.max(0, numPages - 2));
+      } else if (currentPage > targetIndex) {
+        setCurrentPage(currentPage - 1);
+      }
       setSelectedId(null);
-      showToast(`Deleted page ${currentPage + 1}`);
+      showToast(`Deleted page ${targetIndex + 1}`);
     } catch (e) {
       console.error(e);
       showToast("Failed to delete page");
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  // Delete current page
+  const deleteCurrentPage = async () => {
+    await deletePageAtIndex(currentPage);
+  };
+
+  // Insert clean blank page
+  const insertBlankPage = async (atIndex = currentPage + 1) => {
+    if (!pdfBytes) return;
+    setIsProcessing(true);
+    try {
+      const doc = await PDFDocument.load(pdfBytes, { ignoreEncryption: true });
+      doc.insertPage(atIndex, [595.28, 841.89]); // Standard A4
+      const updatedBytes = await doc.save();
+      const newRotations = [...pageRotations];
+      newRotations.splice(atIndex, 0, 0);
+      const newAnnotations = annotations.map((a) =>
+        a.pageIndex >= atIndex ? { ...a, pageIndex: a.pageIndex + 1 } : a
+      );
+      setPdfBytes(updatedBytes);
+      setNumPages(numPages + 1);
+      setPageRotations(newRotations);
+      setAnnotations(newAnnotations);
+      setCurrentPage(atIndex);
+      showToast(`Inserted blank page at position ${atIndex + 1}`);
+    } catch {
+      showToast("Failed to insert blank page");
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  // Duplicate specific page by index
+  const duplicatePageAtIndex = async (targetIndex: number) => {
+    if (!pdfBytes) return;
+    setIsProcessing(true);
+    try {
+      const doc = await PDFDocument.load(pdfBytes, { ignoreEncryption: true });
+      const [copiedPage] = await doc.copyPages(doc, [targetIndex]);
+      const insertAt = targetIndex + 1;
+      doc.insertPage(insertAt, copiedPage);
+      const updatedBytes = await doc.save();
+      const newRotations = [...pageRotations];
+      newRotations.splice(insertAt, 0, pageRotations[targetIndex] || 0);
+      setPdfBytes(updatedBytes);
+      setNumPages(numPages + 1);
+      setPageRotations(newRotations);
+      setCurrentPage(insertAt);
+      showToast(`Duplicated page ${targetIndex + 1}`);
+    } catch {
+      showToast("Failed to duplicate page");
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  // Duplicate current page
+  const duplicateCurrentPage = async () => {
+    await duplicatePageAtIndex(currentPage);
+  };
+
+  // Reorder page from one index to another
+  const reorderPage = async (fromIdx: number, toIdx: number) => {
+    if (!pdfBytes || numPages <= 1 || fromIdx === toIdx) return;
+    if (fromIdx < 0 || fromIdx >= numPages || toIdx < 0 || toIdx >= numPages) return;
+
+    setIsProcessing(true);
+    try {
+      const doc = await PDFDocument.load(pdfBytes, { ignoreEncryption: true });
+      const newDoc = await PDFDocument.create();
+      const order = Array.from({ length: numPages }, (_, i) => i);
+      const [movedItem] = order.splice(fromIdx, 1);
+      order.splice(toIdx, 0, movedItem);
+
+      const copied = await newDoc.copyPages(doc, order);
+      copied.forEach((p) => newDoc.addPage(p));
+      const updatedBytes = await newDoc.save();
+
+      const newRotations = [...pageRotations];
+      const [movedRot] = newRotations.splice(fromIdx, 1);
+      newRotations.splice(toIdx, 0, movedRot);
+
+      // Remap annotations
+      const newAnnotations = annotations.map((a) => {
+        if (a.pageIndex === fromIdx) return { ...a, pageIndex: toIdx };
+        if (fromIdx < toIdx && a.pageIndex > fromIdx && a.pageIndex <= toIdx) {
+          return { ...a, pageIndex: a.pageIndex - 1 };
+        }
+        if (fromIdx > toIdx && a.pageIndex >= toIdx && a.pageIndex < fromIdx) {
+          return { ...a, pageIndex: a.pageIndex + 1 };
+        }
+        return a;
+      });
+
+      setPdfBytes(updatedBytes);
+      setPageRotations(newRotations);
+      setAnnotations(newAnnotations);
+      setCurrentPage(toIdx);
+      showToast(`Moved page ${fromIdx + 1} to position ${toIdx + 1}`);
+    } catch {
+      showToast("Failed to reorder page");
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  // Move current page left or right
+  const moveCurrentPage = async (direction: "left" | "right") => {
+    const targetIdx = direction === "left" ? currentPage - 1 : currentPage + 1;
+    await reorderPage(currentPage, targetIdx);
+  };
+
+  // Batch rotate all pages
+  const batchRotateAll = (delta = 90) => {
+    setPageRotations((prev) => prev.map((r) => (r + delta) % 360));
+    showToast(`Rotated all ${numPages} pages by ${delta}°`);
+  };
+
+  // Image Annotation File Upload
+  const handleImageAnnotationUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = reader.result as string;
+      const arrayBuffer = new Uint8Array(
+        atob(result.split(",")[1])
+          .split("")
+          .map((c) => c.charCodeAt(0))
+      );
+
+      const mimeType = file.type === "image/png" ? "image/png" : "image/jpeg";
+      const newImg: ImageAnnotation = {
+        id: `img-${Date.now()}`,
+        pageIndex: currentPage,
+        type: "image",
+        imageDataUrl: result,
+        bytes: arrayBuffer,
+        mimeType,
+        name: file.name,
+        x: 35,
+        y: 35,
+        width: 25,
+        height: 18,
+      };
+
+      setAnnotations((prev) => [...prev, newImg]);
+      setSelectedId(newImg.id);
+      setActiveTool("select");
+      showToast(`Inserted image: ${file.name}`);
+    };
+    reader.readAsDataURL(file);
+    e.target.value = "";
+  };
+
+  // Export Converters handlers
+  const handleExportText = async () => {
+    if (!pdfBytes) return;
+    setIsConverting(true);
+    try {
+      await exportPdfToTextFile(pdfBytes, fileName);
+      showToast("Plain text file (.txt) exported!");
+    } catch (err) {
+      showToast("Failed to export text: " + (err instanceof Error ? err.message : "Error"));
+    } finally {
+      setIsConverting(false);
+    }
+  };
+
+  const handleExportExcel = async () => {
+    if (!pdfBytes) return;
+    setIsConverting(true);
+    try {
+      const res = await exportPdfToExcelWorkbook(pdfBytes, fileName);
+      showToast(`Spreadsheet exported with ${res.sheetCount} page sheets!`);
+    } catch (err) {
+      showToast("Failed to extract spreadsheet: " + (err instanceof Error ? err.message : "Error"));
+    } finally {
+      setIsConverting(false);
+    }
+  };
+
+  const handleExportWord = async () => {
+    if (!pdfBytes) return;
+    setIsConverting(true);
+    try {
+      await exportPdfToWordDocx(pdfBytes, fileName);
+      showToast("Word document (.doc) exported!");
+    } catch (err) {
+      showToast("Failed to export Word doc: " + (err instanceof Error ? err.message : "Error"));
+    } finally {
+      setIsConverting(false);
+    }
+  };
+
+  const handleExportPresentation = async () => {
+    if (!pdfBytes) return;
+    setIsConverting(true);
+    try {
+      await exportPdfToPresentationPpt(pdfBytes, fileName);
+      showToast("Presentation outline (.ppt) exported!");
+    } catch (err) {
+      showToast("Failed to export PPT: " + (err instanceof Error ? err.message : "Error"));
+    } finally {
+      setIsConverting(false);
+    }
+  };
+
+  // Master format-preserving conversion & layout reconstruction pipeline
+  const handleRunLayoutAnalysis = async (targetDownload?: "docx" | "searchable_pdf" | "html" | "md" | "txt") => {
+    if (!pdfBytes) return;
+    setIsOcrRunning(true);
+    setShowOcrModal(true);
+    setOcrStatus("Inspecting document typography & raster streams...");
+    setOcrProgressPercent(5);
+
+    try {
+      const nature = await inspectPdfNature(pdfBytes);
+      setDetectedPdfNature(nature);
+
+      let structure: DocumentStructure;
+      if (nature.isScanned) {
+        setOcrStatus("Scanned image detected. Running Layout-Aware Optical Recognition...");
+        structure = await parseScannedPdfWithLayoutOcr(pdfBytes, (p) => {
+          setOcrStatus(p.status);
+          setOcrProgressPercent(p.progressPercent);
+        });
+      } else {
+        setOcrStatus("Born-digital PDF detected. Reconstructing native headings, typography & tables...");
+        structure = await parseDigitalPdfStructure(pdfBytes, (p) => {
+          setOcrStatus(p.status);
+          setOcrProgressPercent(p.progressPercent);
+        });
+      }
+
+      setDocumentStructure(structure);
+      setOcrResultText(structure.markdown || structure.blocks.map((b) => b.text).filter(Boolean).join("\n\n"));
+
+      if (targetDownload === "docx") {
+        await exportStructureToDocx(structure, fileName, (p) => {
+          setOcrStatus(p.status);
+          setOcrProgressPercent(p.progressPercent);
+        });
+        showToast("Formatted Word (.docx) downloaded successfully!");
+      } else if (targetDownload === "html") {
+        exportStructureToHtml(structure, fileName);
+        showToast("Structured HTML downloaded successfully!");
+      } else if (targetDownload === "md") {
+        exportStructureToMarkdown(structure, fileName);
+        showToast("Structured Markdown (.md) downloaded successfully!");
+      } else {
+        showToast(nature.isScanned ? "Layout-aware OCR complete!" : "Digital structure parsed with full formatting!");
+      }
+    } catch (err) {
+      showToast("Conversion Error: " + (err instanceof Error ? err.message : "Error"));
+    } finally {
+      setIsOcrRunning(false);
+    }
+  };
+
+  const handleRunOcr = async () => {
+    await handleRunLayoutAnalysis();
+  };
+
+  const handleExportSearchablePdf = async () => {
+    if (!pdfBytes) return;
+    setIsOcrRunning(true);
+    setShowOcrModal(true);
+    setOcrStatus("Initializing Searchable PDF OCR pipeline...");
+    setOcrProgressPercent(5);
+    try {
+      await exportSearchablePdf(pdfBytes, fileName, (p: OcrPageProgress) => {
+        setOcrStatus(p.status);
+        setOcrProgressPercent(p.progressPercent);
+      });
+      showToast("Searchable PDF downloaded successfully!");
+    } catch (err) {
+      showToast("Searchable PDF Error: " + (err instanceof Error ? err.message : "Error"));
+    } finally {
+      setIsOcrRunning(false);
     }
   };
 
@@ -573,11 +1512,12 @@ export default function PdfEditorTool() {
             const font = ann.isBold ? helveticaBold : helvetica;
             const pdfX = (ann.x / 100) * width;
             const pdfY = height - (ann.y / 100) * height - ann.fontSize;
+            const safeAnnText = sanitizeWinAnsiText(ann.text);
             
             // Draw background rectangle if requested (e.g. Whiteout background or yellow highlight)
             if (ann.bgColor && ann.bgColor !== "transparent") {
               const bgRgb = parseHexColor(ann.bgColor, { r: 1, g: 1, b: 1 });
-              const textWidth = font.widthOfTextAtSize(ann.text, ann.fontSize);
+              const textWidth = font.widthOfTextAtSize(safeAnnText, ann.fontSize);
               const padding = 3;
               page.drawRectangle({
                 x: pdfX - padding,
@@ -590,7 +1530,7 @@ export default function PdfEditorTool() {
 
             // Draw Text
             const textRgb = parseHexColor(ann.color, { r: 0.1, g: 0.1, b: 0.1 });
-            page.drawText(ann.text, {
+            page.drawText(safeAnnText, {
               x: pdfX,
               y: pdfY,
               size: ann.fontSize,
@@ -619,7 +1559,7 @@ export default function PdfEditorTool() {
             const pdfY = height - (ann.y / 100) * height;
             const stampRgb = parseHexColor(ann.color, { r: 0.9, g: 0.2, b: 0.2 });
 
-            page.drawText(ann.text, {
+            page.drawText(sanitizeWinAnsiText(ann.text), {
               x: pdfX,
               y: pdfY,
               size: 20,
@@ -640,16 +1580,168 @@ export default function PdfEditorTool() {
                 color: rgb(lineRgb.r, lineRgb.g, lineRgb.b),
               });
             }
+          } else if (ann.type === "image") {
+            try {
+              const embeddedImage =
+                ann.mimeType === "image/png"
+                  ? await doc.embedPng(ann.bytes)
+                  : await doc.embedJpg(ann.bytes);
+              const pdfX = (ann.x / 100) * width;
+              const pdfW = (ann.width / 100) * width;
+              const pdfH = (ann.height / 100) * height;
+              const pdfY = height - (ann.y / 100) * height - pdfH;
+              page.drawImage(embeddedImage, {
+                x: pdfX,
+                y: pdfY,
+                width: pdfW,
+                height: pdfH,
+              });
+            } catch (err) {
+              console.warn("Failed to embed image annotation:", err);
+            }
+          } else if (ann.type === "highlight") {
+            const pdfX = (ann.x / 100) * width;
+            const pdfW = (ann.width / 100) * width;
+            const pdfH = (ann.height / 100) * height;
+            const pdfY = height - (ann.y / 100) * height - pdfH;
+            page.drawRectangle({
+              x: pdfX,
+              y: pdfY,
+              width: pdfW,
+              height: pdfH,
+              color: rgb(0.98, 0.85, 0.2),
+              opacity: 0.45,
+            });
+          } else if (ann.type === "shape") {
+            const pdfX = (ann.x / 100) * width;
+            const pdfW = (ann.width / 100) * width;
+            const pdfH = (ann.height / 100) * height;
+            const pdfY = height - (ann.y / 100) * height - pdfH;
+            const strokeRgb = parseHexColor(ann.strokeColor, { r: 0.15, g: 0.35, b: 0.85 });
+            const hasFill = ann.fillColor && ann.fillColor !== "transparent";
+            const fillRgb = hasFill ? parseHexColor(ann.fillColor!, { r: 1, g: 1, b: 1 }) : undefined;
+
+            if (ann.shapeType === "rectangle") {
+              page.drawRectangle({
+                x: pdfX,
+                y: pdfY,
+                width: pdfW,
+                height: pdfH,
+                borderColor: rgb(strokeRgb.r, strokeRgb.g, strokeRgb.b),
+                borderWidth: ann.strokeWidth,
+                color: fillRgb ? rgb(fillRgb.r, fillRgb.g, fillRgb.b) : undefined,
+              });
+            } else if (ann.shapeType === "circle") {
+              page.drawEllipse({
+                x: pdfX + pdfW / 2,
+                y: pdfY + pdfH / 2,
+                xScale: pdfW / 2,
+                yScale: pdfH / 2,
+                borderColor: rgb(strokeRgb.r, strokeRgb.g, strokeRgb.b),
+                borderWidth: ann.strokeWidth,
+                color: fillRgb ? rgb(fillRgb.r, fillRgb.g, fillRgb.b) : undefined,
+              });
+            } else if (ann.shapeType === "line" || ann.shapeType === "arrow") {
+              page.drawLine({
+                start: { x: pdfX, y: pdfY + pdfH },
+                end: { x: pdfX + pdfW, y: pdfY },
+                thickness: ann.strokeWidth,
+                color: rgb(strokeRgb.r, strokeRgb.g, strokeRgb.b),
+              });
+              if (ann.shapeType === "arrow") {
+                const arrowLength = 10;
+                const angle = Math.atan2(-pdfH, pdfW);
+                page.drawLine({
+                  start: { x: pdfX + pdfW, y: pdfY },
+                  end: {
+                    x: pdfX + pdfW - arrowLength * Math.cos(angle - Math.PI / 6),
+                    y: pdfY - arrowLength * Math.sin(angle - Math.PI / 6),
+                  },
+                  thickness: ann.strokeWidth,
+                  color: rgb(strokeRgb.r, strokeRgb.g, strokeRgb.b),
+                });
+                page.drawLine({
+                  start: { x: pdfX + pdfW, y: pdfY },
+                  end: {
+                    x: pdfX + pdfW - arrowLength * Math.cos(angle + Math.PI / 6),
+                    y: pdfY - arrowLength * Math.sin(angle + Math.PI / 6),
+                  },
+                  thickness: ann.strokeWidth,
+                  color: rgb(strokeRgb.r, strokeRgb.g, strokeRgb.b),
+                });
+              }
+            }
+          } else if (ann.type === "link") {
+            const pdfX = (ann.x / 100) * width;
+            const pdfW = (ann.width / 100) * width;
+            const pdfH = (ann.height / 100) * height;
+            const pdfY = height - (ann.y / 100) * height - pdfH;
+            page.drawRectangle({
+              x: pdfX,
+              y: pdfY,
+              width: pdfW,
+              height: pdfH,
+              borderColor: rgb(0.2, 0.4, 0.9),
+              borderWidth: 1,
+              color: rgb(0.2, 0.4, 0.9),
+              opacity: 0.08,
+            });
+            page.drawText(sanitizeWinAnsiText(ann.url), {
+              x: pdfX + 2,
+              y: pdfY + 2,
+              size: 8,
+              font: helvetica,
+              color: rgb(0.1, 0.3, 0.8),
+            });
+            try {
+              const linkAnnot = doc.context.obj({
+                Type: "Annot",
+                Subtype: "Link",
+                Rect: [pdfX, pdfY, pdfX + pdfW, pdfY + pdfH],
+                Border: [0, 0, 0],
+                A: {
+                  Type: "Action",
+                  S: "URI",
+                  URI: PDFString.of(ann.url),
+                },
+              });
+              const linkAnnotRef = doc.context.register(linkAnnot);
+              page.node.addAnnot(linkAnnotRef);
+            } catch (linkErr) {
+              console.warn("Failed to attach interactive PDF link annotation:", linkErr);
+            }
           }
+        }
+
+        // Apply header text if specified
+        if (headerText.trim()) {
+          page.drawText(sanitizeWinAnsiText(headerText.trim()), {
+            x: 36,
+            y: height - 24,
+            size: 9,
+            font: helvetica,
+            color: rgb(0.35, 0.35, 0.35),
+          });
+        }
+
+        // Apply footer text if specified
+        if (footerText.trim()) {
+          page.drawText(sanitizeWinAnsiText(footerText.trim()), {
+            x: 36,
+            y: 20,
+            size: 9,
+            font: helvetica,
+            color: rgb(0.35, 0.35, 0.35),
+          });
         }
 
         // Apply page numbers if enabled
         if (includePageNumbers) {
           const numText = `Page ${p + 1} of ${pageCount}`;
-          page.drawText(numText, {
-            x: width / 2 - 35,
+          page.drawText(sanitizeWinAnsiText(numText), {
+            x: footerText.trim() ? width - 110 : width / 2 - 35,
             y: 20,
-            size: 10,
+            size: 9,
             font: helvetica,
             color: rgb(0.4, 0.4, 0.4),
           });
@@ -657,7 +1749,7 @@ export default function PdfEditorTool() {
 
         // Apply watermark if specified
         if (watermarkText.trim()) {
-          page.drawText(watermarkText.trim(), {
+          page.drawText(sanitizeWinAnsiText(watermarkText.trim()), {
             x: width * 0.18,
             y: height * 0.45,
             size: 40,
@@ -668,12 +1760,57 @@ export default function PdfEditorTool() {
         }
       }
 
+      // Apply Legal Bates Stamping if enabled
+      if (enableBates) {
+        await applyBatesStamping(doc, {
+          prefix: batesPrefix,
+          startNumber: batesStart,
+          digits: batesDigits,
+          suffix: batesSuffix,
+          position: batesPosition,
+          fontSize: batesFontSize,
+          colorHex: batesColor,
+          pageRange: "all",
+        });
+      }
+
+      // Deep Sanitize Metadata if enabled
+      if (sanitizeMetadata) {
+        sanitizePdfDocument(doc);
+      }
+
+      // Append Cryptographic Audit Certificate if enabled
+      if (includeAuditCertificate) {
+        const intermediateBytes = await doc.save();
+        const finalSha256 = await calculateSha256(intermediateBytes);
+        const certId = `CERT-${Date.now().toString(36).toUpperCase()}-${Math.random().toString(36).substring(2, 6).toUpperCase()}`;
+        const actions: string[] = [];
+        if (annotations.length > 0) actions.push(`Applied ${annotations.length} visual annotations & redactions`);
+        if (enableBates) actions.push(`Applied legal Bates numbering (${batesPrefix}..., pos: ${batesPosition})`);
+        if (flattenRedactions && pagesWithWhiteout.size > 0) actions.push(`Permanently flattened raster redactions on ${pagesWithWhiteout.size} pages`);
+        if (sanitizeMetadata) actions.push("Deep purged document metadata dictionary and XMP stream");
+        if (pageRotations.some((r) => r !== 0)) actions.push("Applied custom page rotation transforms");
+
+        await appendAuditCertificate(doc, {
+          documentName: fileName,
+          originalSha256: originalSha256 || "N/A",
+          modifiedSha256: finalSha256,
+          pageCount: pageCount,
+          timestamp: new Date().toISOString(),
+          certificateId: certId,
+          actionsPerformed: actions,
+        });
+      }
+
       const modifiedBytes = await doc.save();
       const blob = new Blob([modifiedBytes], { type: "application/pdf" });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = fileName.replace(/\.pdf$/i, "") + "_edited.pdf";
+      const downloadTarget = customExportName.trim()
+        ? (customExportName.endsWith(".pdf") ? customExportName : `${customExportName}.pdf`)
+        : `${fileName.replace(/\.pdf$/i, "")}_edited.pdf`;
+      a.download = downloadTarget;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
@@ -772,28 +1909,118 @@ export default function PdfEditorTool() {
                 </button>
               </div>
 
-              {/* Zoom Controls */}
+              {/* Zoom & Viewport Controls (GAP-07) */}
               <div className="flex items-center rounded-lg border border-white/10 bg-black/40 p-1 text-xs">
                 <button
-                  onClick={() => setZoomScale((z) => Math.max(0.7, Number((z - 0.15).toFixed(2))))}
+                  type="button"
+                  onClick={() => setZoomScale((z) => Math.max(0.4, Number((z - 0.15).toFixed(2))))}
                   className="p-1 hover:text-[#c7f36b] transition-colors"
                   title="Zoom Out"
                 >
                   <ZoomOut size={13} />
                 </button>
-                <span className="px-2 font-mono text-[11px] text-white/70">{Math.round(zoomScale * 100)}%</span>
                 <button
-                  onClick={() => setZoomScale((z) => Math.min(1.6, Number((z + 0.15).toFixed(2))))}
+                  type="button"
+                  onClick={fitToPage}
+                  className="px-1.5 font-mono text-[11px] text-white/70 hover:text-white transition-colors"
+                  title="Reset Zoom to 100%"
+                >
+                  {Math.round(zoomScale * 100)}%
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setZoomScale((z) => Math.min(2.2, Number((z + 0.15).toFixed(2))))}
                   className="p-1 hover:text-[#c7f36b] transition-colors"
                   title="Zoom In"
                 >
                   <ZoomIn size={13} />
                 </button>
+                <button
+                  type="button"
+                  onClick={fitToWidth}
+                  className="ml-1 rounded bg-white/10 px-1.5 py-0.5 text-[10px] font-mono text-white/80 hover:bg-[#c7f36b]/20 hover:text-[#c7f36b] transition-colors"
+                  title="Fit to Container Width"
+                >
+                  Fit
+                </button>
               </div>
+
+              {/* Undo / Redo Controls (GAP-01) */}
+              <div className="flex items-center rounded-lg border border-white/10 bg-black/40 p-1 text-xs">
+                <button
+                  type="button"
+                  disabled={!canUndo}
+                  onClick={handleUndo}
+                  className="p-1 text-white/80 hover:text-[#c7f36b] disabled:opacity-30 disabled:hover:text-white/80 transition-colors"
+                  title="Undo (Ctrl+Z)"
+                >
+                  <Undo2 size={13} />
+                </button>
+                <button
+                  type="button"
+                  disabled={!canRedo}
+                  onClick={handleRedo}
+                  className="p-1 text-white/80 hover:text-[#c7f36b] disabled:opacity-30 disabled:hover:text-white/80 transition-colors"
+                  title="Redo (Ctrl+Y)"
+                >
+                  <Redo2 size={13} />
+                </button>
+              </div>
+
+              {/* Thumbnails Carousel Toggle */}
+              <button
+                type="button"
+                onClick={() => setShowThumbnails((v) => !v)}
+                className={`flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs transition-colors ${
+                  showThumbnails
+                    ? "border-[#c7f36b] bg-[#c7f36b]/15 text-[#c7f36b] font-medium"
+                    : "border-white/10 bg-black/40 text-white/70 hover:text-white"
+                }`}
+                title="Toggle Page Thumbnails Ribbon"
+              >
+                <Layers size={13} />
+                <span className="hidden sm:inline">Thumbnails</span>
+              </button>
             </div>
 
             {/* Right: Page Actions & Export Button */}
             <div className="flex items-center flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => moveCurrentPage("left")}
+                disabled={currentPage === 0 || isProcessing}
+                className="flex items-center gap-1 rounded-lg border border-white/10 bg-white/5 px-2 py-1.5 text-xs text-white/90 hover:bg-white/10 disabled:opacity-30 transition-colors"
+                title="Move page left in sequence"
+              >
+                <ChevronLeft size={13} />
+              </button>
+              <button
+                type="button"
+                onClick={() => moveCurrentPage("right")}
+                disabled={currentPage >= numPages - 1 || isProcessing}
+                className="flex items-center gap-1 rounded-lg border border-white/10 bg-white/5 px-2 py-1.5 text-xs text-white/90 hover:bg-white/10 disabled:opacity-30 transition-colors"
+                title="Move page right in sequence"
+              >
+                <ChevronRight size={13} />
+              </button>
+              <button
+                type="button"
+                onClick={() => insertBlankPage()}
+                disabled={isProcessing}
+                className="flex items-center gap-1 rounded-lg border border-white/10 bg-white/5 px-2.5 py-1.5 text-xs text-white/90 hover:bg-white/10 transition-colors"
+                title="Insert blank A4 page"
+              >
+                <FilePlus size={13} /> Blank
+              </button>
+              <button
+                type="button"
+                onClick={duplicateCurrentPage}
+                disabled={isProcessing}
+                className="flex items-center gap-1 rounded-lg border border-white/10 bg-white/5 px-2.5 py-1.5 text-xs text-white/90 hover:bg-white/10 transition-colors"
+                title="Duplicate current page"
+              >
+                <Copy size={13} /> Duplicate
+              </button>
               <button
                 type="button"
                 onClick={rotateCurrentPage}
@@ -804,23 +2031,108 @@ export default function PdfEditorTool() {
               </button>
               <button
                 type="button"
+                onClick={() => batchRotateAll(90)}
+                className="hidden sm:flex items-center gap-1 rounded-lg border border-white/10 bg-white/5 px-2 py-1.5 text-[11px] text-white/70 hover:bg-white/10 transition-colors"
+                title="Rotate all pages by 90 degrees"
+              >
+                All 90°
+              </button>
+              <button
+                type="button"
                 onClick={deleteCurrentPage}
                 className="flex items-center gap-1 rounded-lg border border-red-500/30 bg-red-500/10 px-2.5 py-1.5 text-xs text-red-300 hover:bg-red-500/20 transition-colors"
                 title="Delete current page"
               >
-                <Trash2 size={13} /> Delete Page
+                <Trash2 size={13} />
               </button>
-              <label className="cursor-pointer rounded-lg border border-white/15 bg-white/5 px-3 py-1.5 text-xs font-medium text-white hover:bg-white/10 transition-colors">
+
+              {/* Converter Dropdown Menu */}
+              <div className="relative group">
+                <button
+                  type="button"
+                  className="flex items-center gap-1.5 rounded-lg border border-sky-500/30 bg-sky-500/10 px-2.5 py-1.5 text-xs font-medium text-sky-300 hover:bg-sky-500/20 transition-colors"
+                >
+                  <FileDown size={13} /> Convert & OCR
+                </button>
+                <div className="absolute right-0 top-full mt-1 hidden group-hover:flex flex-col w-56 rounded-xl border border-white/15 bg-[#0e1628] p-1.5 shadow-2xl z-50 animate-fade-in text-xs">
+                  <button
+                    onClick={() => handleRunLayoutAnalysis("docx")}
+                    disabled={isConverting || isOcrRunning}
+                    className="flex items-center gap-2 rounded-lg px-2.5 py-2 text-white/90 hover:bg-white/10 text-left font-medium"
+                  >
+                    <FileText size={13} className="text-blue-400" /> Export Word (.docx) <span className="text-[10px] text-blue-300 ml-auto bg-blue-500/20 px-1.5 py-0.5 rounded">Format</span>
+                  </button>
+                  <button
+                    onClick={handleExportExcel}
+                    disabled={isConverting}
+                    className="flex items-center gap-2 rounded-lg px-2.5 py-2 text-white/80 hover:bg-white/10 text-left"
+                  >
+                    <FileSpreadsheet size={13} className="text-emerald-400" /> Export Excel (.xlsx)
+                  </button>
+                  <button
+                    onClick={() => handleRunLayoutAnalysis("html")}
+                    disabled={isConverting || isOcrRunning}
+                    className="flex items-center gap-2 rounded-lg px-2.5 py-2 text-white/80 hover:bg-white/10 text-left"
+                  >
+                    <FileCode size={13} className="text-purple-400" /> Export HTML / Markdown
+                  </button>
+                  <button
+                    onClick={handleExportText}
+                    disabled={isConverting}
+                    className="flex items-center gap-2 rounded-lg px-2.5 py-2 text-white/80 hover:bg-white/10 text-left"
+                  >
+                    <FileText size={13} className="text-amber-400" /> Export Text (.txt)
+                  </button>
+                  <button
+                    onClick={handleExportPresentation}
+                    disabled={isConverting}
+                    className="flex items-center gap-2 rounded-lg px-2.5 py-2 text-white/80 hover:bg-white/10 text-left"
+                  >
+                    <FileText size={13} className="text-orange-400" /> Export Presentation (.ppt)
+                  </button>
+                  <div className="my-1 border-t border-white/10" />
+                  <button
+                    onClick={() => handleRunLayoutAnalysis()}
+                    disabled={isOcrRunning}
+                    className="flex items-center gap-2 rounded-lg px-2.5 py-2 text-[#c7f36b] hover:bg-[#c7f36b]/10 text-left font-semibold"
+                  >
+                    <ScanText size={13} /> Format-Preserving OCR Console
+                  </button>
+                  <button
+                    onClick={handleExportSearchablePdf}
+                    disabled={isOcrRunning}
+                    className="flex items-center gap-2 rounded-lg px-2.5 py-2 text-[#c7f36b] hover:bg-[#c7f36b]/10 text-left"
+                  >
+                    <Sparkles size={13} /> Export Searchable PDF (OCR)
+                  </button>
+                </div>
+              </div>
+
+              {/* Custom Export Filename (GAP-08) */}
+              <div className="hidden lg:flex items-center gap-1.5 rounded-lg border border-white/10 bg-black/40 px-2 py-1 text-xs">
+                <Tag size={12} className="text-[#c7f36b]" />
+                <input
+                  type="text"
+                  value={customExportName}
+                  onChange={(e) => setCustomExportName(e.target.value)}
+                  placeholder={`${fileName.replace(/\.pdf$/i, "")}_edited.pdf`}
+                  className="w-32 xl:w-44 bg-transparent text-[11px] font-mono text-white placeholder-white/30 focus:outline-none"
+                  title="Target file name for exported PDF"
+                />
+              </div>
+
+              <label className="cursor-pointer rounded-lg border border-white/15 bg-white/5 px-2.5 py-1.5 text-xs font-medium text-white hover:bg-white/10 transition-colors">
                 Change PDF
                 <input type="file" accept="application/pdf" onChange={handleFileUpload} className="hidden" />
               </label>
+
               <button
                 onClick={exportModifiedPdf}
                 disabled={isProcessing}
                 className="signal-button flex items-center gap-1.5 bg-[#c7f36b] text-[#0b1020] font-semibold hover:bg-[#b8eb55] shadow-lg shadow-[#c7f36b]/10 py-1.5 px-4 text-xs"
               >
                 {exportSuccess ? <Check size={15} /> : <Download size={15} />}
-                {exportSuccess ? "Exported!" : "Export & Download PDF"}
+                {exportSuccess ? "Exported!" : "Export PDF"}
               </button>
             </div>
           </div>
@@ -845,14 +2157,14 @@ export default function PdfEditorTool() {
                   </button>
                   <button
                     type="button"
-                    onClick={() => { setActiveTool("select"); }}
+                    onClick={() => { setActiveTool("highlight"); setSelectedId(null); }}
                     className={`flex items-center gap-2 rounded-lg border p-2 text-xs font-medium transition-colors ${
-                      activeTool === "select"
+                      activeTool === "highlight"
                         ? "border-[#c7f36b] bg-[#c7f36b]/20 text-[#c7f36b] font-bold"
                         : "border-white/10 bg-white/[0.02] text-white/80 hover:bg-white/5"
                     }`}
                   >
-                    <Move size={14} /> Select & Move
+                    <Highlighter size={14} /> Highlight
                   </button>
                   <button
                     type="button"
@@ -863,7 +2175,7 @@ export default function PdfEditorTool() {
                         : "border-white/10 bg-white/[0.02] text-white/80 hover:bg-white/5"
                     }`}
                   >
-                    <Square size={14} /> Whiteout / Cover
+                    <Square size={14} /> Cover / Redact
                   </button>
                   <button
                     type="button"
@@ -879,13 +2191,61 @@ export default function PdfEditorTool() {
                   <button
                     type="button"
                     onClick={() => { setActiveTool("stamp"); setSelectedId(null); }}
-                    className={`col-span-2 flex items-center justify-center gap-2 rounded-lg border p-2 text-xs font-medium transition-colors ${
+                    className={`flex items-center gap-2 rounded-lg border p-2 text-xs font-medium transition-colors ${
                       activeTool === "stamp"
                         ? "border-[#c7f36b] bg-[#c7f36b]/20 text-[#c7f36b] font-bold"
                         : "border-white/10 bg-white/[0.02] text-white/80 hover:bg-white/5"
                     }`}
                   >
                     <Stamp size={14} /> Stamp Badge
+                  </button>
+                  <label
+                    className={`flex items-center gap-2 rounded-lg border p-2 text-xs font-medium cursor-pointer transition-colors ${
+                      activeTool === "image"
+                        ? "border-[#c7f36b] bg-[#c7f36b]/20 text-[#c7f36b] font-bold"
+                        : "border-white/10 bg-white/[0.02] text-white/80 hover:bg-white/5"
+                    }`}
+                  >
+                    <ImageIcon size={14} /> Add Image
+                    <input
+                      type="file"
+                      accept="image/png, image/jpeg"
+                      onChange={handleImageAnnotationUpload}
+                      className="hidden"
+                    />
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => { setActiveTool("link"); setSelectedId(null); }}
+                    className={`flex items-center gap-2 rounded-lg border p-2 text-xs font-medium transition-colors ${
+                      activeTool === "link"
+                        ? "border-[#c7f36b] bg-[#c7f36b]/20 text-[#c7f36b] font-bold"
+                        : "border-white/10 bg-white/[0.02] text-white/80 hover:bg-white/5"
+                    }`}
+                  >
+                    <LinkIcon size={14} /> Add Link
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setActiveTool("shape"); setSelectedId(null); }}
+                    className={`flex items-center gap-2 rounded-lg border p-2 text-xs font-medium transition-colors ${
+                      activeTool === "shape"
+                        ? "border-[#c7f36b] bg-[#c7f36b]/20 text-[#c7f36b] font-bold shadow-sm"
+                        : "border-white/10 bg-white/[0.02] text-white/80 hover:bg-white/5"
+                    }`}
+                  >
+                    <Shapes size={14} /> Shapes
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setActiveTool("select"); }}
+                    className={`flex items-center gap-2 rounded-lg border p-2 text-xs font-medium transition-colors ${
+                      activeTool === "select"
+                        ? "border-[#c7f36b] bg-[#c7f36b]/20 text-[#c7f36b] font-bold"
+                        : "border-white/10 bg-white/[0.02] text-white/80 hover:bg-white/5"
+                    }`}
+                  >
+                    <Move size={14} /> Select & Move
                   </button>
                 </div>
               </div>
@@ -1170,6 +2530,163 @@ export default function PdfEditorTool() {
                 </div>
               )}
 
+              {/* Geometric Vector Shape Tool Config (GAP-05) */}
+              {activeTool === "shape" && (
+                <div className="space-y-3 rounded-lg border border-blue-500/30 bg-blue-500/[0.04] p-3 shadow-inner">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-semibold text-white/90 flex items-center gap-1.5">
+                      <Shapes size={14} className="text-blue-400" /> Vector Shape Settings
+                    </span>
+                    <span className="text-[10px] font-mono text-blue-300 bg-blue-500/20 px-1.5 py-0.5 rounded capitalize">
+                      {shapeType}
+                    </span>
+                  </div>
+
+                  {/* Shape Type Selector */}
+                  <div>
+                    <label className="text-[10px] font-mono text-white/60 block mb-1">SHAPE TYPE:</label>
+                    <div className="grid grid-cols-4 gap-1 text-[11px]">
+                      {(["rectangle", "circle", "arrow", "line"] as const).map((st) => (
+                        <button
+                          key={st}
+                          type="button"
+                          onClick={() => setShapeType(st)}
+                          className={`rounded border py-1 px-1 text-center capitalize transition-colors ${
+                            shapeType === st
+                              ? "border-[#c7f36b] bg-[#c7f36b]/20 text-[#c7f36b] font-bold"
+                              : "border-white/10 bg-white/5 text-white/70 hover:text-white"
+                          }`}
+                        >
+                          {st === "rectangle" ? "Rect" : st}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Stroke Width Slider */}
+                  <div>
+                    <div className="flex justify-between text-[11px] text-white/70 mb-1">
+                      <span>Stroke Thickness</span>
+                      <span className="font-mono text-[#c7f36b]">{shapeStrokeWidth}px</span>
+                    </div>
+                    <input
+                      type="range"
+                      min={1}
+                      max={12}
+                      value={shapeStrokeWidth}
+                      onChange={(e) => setShapeStrokeWidth(Number(e.target.value))}
+                      className="w-full accent-[#c7f36b]"
+                    />
+                  </div>
+
+                  {/* Stroke Color */}
+                  <div className="space-y-1">
+                    <span className="text-[11px] text-white/70 block">Border / Stroke Color:</span>
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      {["#2563eb", "#ef4444", "#10b981", "#f59e0b", "#8b5cf6", "#000000", "#ffffff"].map((c) => (
+                        <button
+                          key={c}
+                          type="button"
+                          onClick={() => setShapeStrokeColor(c)}
+                          className={`h-5 w-5 rounded-full border border-white/40 ${
+                            shapeStrokeColor === c ? "ring-2 ring-[#c7f36b] scale-110" : ""
+                          }`}
+                          style={{ backgroundColor: c }}
+                        />
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Fill Color */}
+                  {shapeType !== "line" && shapeType !== "arrow" && (
+                    <div className="space-y-1 pt-1 border-t border-white/10">
+                      <span className="text-[11px] text-white/70 block">Fill Color:</span>
+                      <div className="grid grid-cols-4 gap-1 text-[10px] font-mono">
+                        {[
+                          { id: "transparent", label: "None" },
+                          { id: "#ffffff", label: "White" },
+                          { id: "#fef08a", label: "Yellow" },
+                          { id: "#bfdbfe", label: "Blue" },
+                        ].map((fill) => (
+                          <button
+                            key={fill.id}
+                            type="button"
+                            onClick={() => setShapeFillColor(fill.id)}
+                            className={`rounded border py-1 text-center transition-colors ${
+                              shapeFillColor === fill.id
+                                ? "border-[#c7f36b] bg-[#c7f36b]/20 text-[#c7f36b] font-bold"
+                                : "border-white/10 bg-white/5 text-white/60 hover:text-white"
+                            }`}
+                          >
+                            {fill.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  <p className="text-[11px] text-white/60 leading-relaxed bg-white/[0.02] p-2 rounded border border-white/5">
+                    Click & drag directly across the document canvas to draw a vector {shapeType}.
+                  </p>
+                </div>
+              )}
+
+              {/* Highlight Tool Config */}
+              {activeTool === "highlight" && (
+                <div className="space-y-2 rounded-lg border border-amber-500/20 bg-amber-500/[0.04] p-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-semibold text-white/90 flex items-center gap-1.5">
+                      <Highlighter size={13} className="text-amber-400" /> Highlighter Settings
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between text-xs pt-1">
+                    <span>Highlight Tint</span>
+                    <div className="flex gap-1.5">
+                      {[
+                        { color: "rgba(250, 204, 21, 0.45)", name: "Yellow" },
+                        { color: "rgba(34, 197, 94, 0.45)", name: "Green" },
+                        { color: "rgba(244, 114, 182, 0.45)", name: "Pink" },
+                        { color: "rgba(96, 165, 250, 0.45)", name: "Blue" },
+                      ].map((c) => (
+                        <button
+                          key={c.name}
+                          type="button"
+                          title={c.name}
+                          onClick={() => setHighlightColor(c.color)}
+                          className={`h-5 w-5 rounded-full border border-white/40 ${highlightColor === c.color ? "ring-2 ring-[#c7f36b]" : ""}`}
+                          style={{ backgroundColor: c.color }}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                  <p className="text-[11px] text-white/60">
+                    Click and drag across text to apply a translucent highlight marker.
+                  </p>
+                </div>
+              )}
+
+              {/* Link Tool Config */}
+              {activeTool === "link" && (
+                <div className="space-y-2 rounded-lg border border-blue-500/20 bg-blue-500/[0.04] p-3">
+                  <span className="text-xs font-semibold text-white/90 flex items-center gap-1.5">
+                    <LinkIcon size={13} className="text-blue-400" /> Clickable Hyperlink
+                  </span>
+                  <div>
+                    <label className="text-[11px] text-white/70 block mb-1">Target Web URL:</label>
+                    <input
+                      type="url"
+                      value={linkUrl}
+                      onChange={(e) => setLinkUrl(e.target.value)}
+                      placeholder="https://example.com"
+                      className="w-full rounded border border-white/10 bg-black/40 p-1.5 font-mono text-xs text-white"
+                    />
+                  </div>
+                  <p className="text-[11px] text-white/50">
+                    Click anywhere on the document to place this link box.
+                  </p>
+                </div>
+              )}
+
               {/* Select Tool Config */}
               {activeTool === "select" && (
                 <div className="space-y-2 rounded-lg border border-white/10 bg-black/20 p-3">
@@ -1226,7 +2743,7 @@ export default function PdfEditorTool() {
 
               {/* Document Additions */}
               <div className="pt-2 border-t border-white/10 space-y-2">
-                <p className="mono-label text-xs text-white/60">WATERMARK & NUMBERING</p>
+                <p className="mono-label text-xs text-white/60">WATERMARK & HEADER/FOOTER</p>
                 <div>
                   <label className="text-[11px] text-white/70">Diagonal Watermark</label>
                   <input
@@ -1237,6 +2754,28 @@ export default function PdfEditorTool() {
                     className="mt-1 w-full rounded border border-white/10 bg-black/40 p-1.5 text-xs text-white placeholder-white/30"
                   />
                 </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="text-[11px] text-white/70">Header Text (Top)</label>
+                    <input
+                      type="text"
+                      value={headerText}
+                      onChange={(e) => setHeaderText(e.target.value)}
+                      placeholder="e.g. Acme Corp Header"
+                      className="mt-1 w-full rounded border border-white/10 bg-black/40 p-1.5 text-[11px] text-white placeholder-white/30"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[11px] text-white/70">Footer Text (Bottom)</label>
+                    <input
+                      type="text"
+                      value={footerText}
+                      onChange={(e) => setFooterText(e.target.value)}
+                      placeholder="e.g. Internal Confidential"
+                      className="mt-1 w-full rounded border border-white/10 bg-black/40 p-1.5 text-[11px] text-white placeholder-white/30"
+                    />
+                  </div>
+                </div>
                 <label className="flex items-center gap-2 text-xs text-white/80 cursor-pointer pt-1">
                   <input
                     type="checkbox"
@@ -1246,6 +2785,139 @@ export default function PdfEditorTool() {
                   />
                   <span>Add Page Numbers (Page X of Y)</span>
                 </label>
+              </div>
+
+              {/* Enterprise Legal & Audit Suite Controls */}
+              <div className="pt-2 border-t border-white/10 space-y-3">
+                <div className="flex items-center justify-between">
+                  <p className="mono-label text-xs text-[#c7f36b] flex items-center gap-1.5 font-bold">
+                    <ShieldCheck size={13} /> ENTERPRISE LEGAL & AUDIT
+                  </p>
+                  <span className="text-[9px] font-mono bg-[#c7f36b]/15 text-[#c7f36b] px-1.5 py-0.5 rounded border border-[#c7f36b]/30">
+                    LIVE PREVIEW
+                  </span>
+                </div>
+
+                {/* Bates Stamping Accordion */}
+                <div className="rounded-lg border border-white/10 bg-white/[0.02] p-2.5 space-y-2.5">
+                  <label className="flex items-center justify-between text-xs text-white cursor-pointer font-medium">
+                    <span className="flex items-center gap-1.5">
+                      <Tag size={13} className="text-[#c7f36b]" />
+                      Legal Bates Numbering
+                    </span>
+                    <input
+                      type="checkbox"
+                      checked={enableBates}
+                      onChange={(e) => setEnableBates(e.target.checked)}
+                      className="accent-[#c7f36b]"
+                    />
+                  </label>
+
+                  {enableBates && (
+                    <div className="space-y-2 pt-1 border-t border-white/5 animate-fade-in text-xs">
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <label className="text-[10px] text-white/60">Prefix</label>
+                          <input
+                            type="text"
+                            value={batesPrefix}
+                            onChange={(e) => setBatesPrefix(e.target.value)}
+                            placeholder="CASE-2026-"
+                            className="w-full rounded border border-white/10 bg-black/40 p-1 font-mono text-[11px] text-white"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-[10px] text-white/60">Start #</label>
+                          <input
+                            type="number"
+                            min={1}
+                            value={batesStart}
+                            onChange={(e) => setBatesStart(Math.max(1, parseInt(e.target.value) || 1))}
+                            className="w-full rounded border border-white/10 bg-black/40 p-1 font-mono text-[11px] text-white"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <label className="text-[10px] text-white/60">Zero Digits ({batesDigits})</label>
+                          <input
+                            type="range"
+                            min={3}
+                            max={8}
+                            value={batesDigits}
+                            onChange={(e) => setBatesDigits(parseInt(e.target.value))}
+                            className="w-full accent-[#c7f36b]"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-[10px] text-white/60">Position</label>
+                          <select
+                            value={batesPosition}
+                            onChange={(e) => setBatesPosition(e.target.value as any)}
+                            className="w-full rounded border border-white/10 bg-black/40 p-1 text-[11px] text-white"
+                          >
+                            <option value="bottom-right">Bottom-Right</option>
+                            <option value="bottom-center">Bottom-Center</option>
+                            <option value="bottom-left">Bottom-Left</option>
+                            <option value="top-right">Top-Right</option>
+                            <option value="top-center">Top-Center</option>
+                            <option value="top-left">Top-Left</option>
+                          </select>
+                        </div>
+                      </div>
+
+                      <p className="text-[10px] font-mono text-[#c7f36b]">
+                        Live on Canvas: {batesPrefix}{String(batesStart + currentPage).padStart(batesDigits, "0")}{batesSuffix}
+                      </p>
+                    </div>
+                  )}
+                </div>
+
+                {/* Deep Metadata Purge */}
+                <div className="rounded-lg border border-white/10 bg-white/[0.02] p-2.5 space-y-2">
+                  <label className="flex items-center justify-between text-xs text-white cursor-pointer font-medium">
+                    <span className="flex items-center gap-1.5">
+                      <ShieldAlert size={13} className="text-amber-400" />
+                      Deep Sanitize Metadata
+                    </span>
+                    <input
+                      type="checkbox"
+                      checked={sanitizeMetadata}
+                      onChange={(e) => setSanitizeMetadata(e.target.checked)}
+                      className="accent-[#c7f36b]"
+                    />
+                  </label>
+                  {metadataReport && (
+                    <div className="flex items-center justify-between text-[10.5px] text-white/60">
+                      <span>Author: {metadataReport.author || "Clean"}</span>
+                      <span className={metadataReport.hasXmpMetadata ? "text-amber-400" : "text-emerald-400"}>
+                        {metadataReport.hasXmpMetadata ? "XMP Present" : "0 Leaks"}
+                      </span>
+                    </div>
+                  )}
+                </div>
+
+                {/* Audit Certificate with QR */}
+                <div className="rounded-lg border border-white/10 bg-white/[0.02] p-2.5 space-y-1.5">
+                  <label className="flex items-center justify-between text-xs text-white cursor-pointer font-medium">
+                    <span className="flex items-center gap-1.5">
+                      <QrCode size={13} className="text-[#c7f36b]" />
+                      Append SHA-256 Audit Cert
+                    </span>
+                    <input
+                      type="checkbox"
+                      checked={includeAuditCertificate}
+                      onChange={(e) => setIncludeAuditCertificate(e.target.checked)}
+                      className="accent-[#c7f36b]"
+                    />
+                  </label>
+                  {originalSha256 && (
+                    <p className="text-[10px] font-mono text-white/50 truncate">
+                      SHA-256: {originalSha256.slice(0, 16)}...
+                    </p>
+                  )}
+                </div>
               </div>
 
               {/* Page Annotations List */}
@@ -1296,8 +2968,8 @@ export default function PdfEditorTool() {
               )}
             </div>
 
-            {/* Right Column: PDF Canvas Workspace */}
-            <div className="lg:col-span-8 xl:col-span-9 rounded-2xl border border-white/15 bg-[#141a29] p-4 sm:p-6 flex flex-col items-center shadow-2xl min-h-[650px] overflow-auto">
+            {/* Right Column: PDF Canvas Workspace (GAP-07 containerRef attached) */}
+            <div ref={containerRef} className="lg:col-span-8 xl:col-span-9 rounded-2xl border border-white/15 bg-[#141a29] p-4 sm:p-6 flex flex-col items-center shadow-2xl min-h-[650px] overflow-auto">
             {/* Floating Top Status Bar */}
             <div className="mb-4 flex items-center justify-between w-full max-w-4xl px-2">
               <div className="flex items-center gap-2">
@@ -1318,6 +2990,76 @@ export default function PdfEditorTool() {
                 </div>
               )}
             </div>
+
+            {/* Page Manager & Thumbnail Carousel Ribbon */}
+            {showThumbnails && numPages > 0 && (
+              <div className="w-full max-w-4xl mb-5 rounded-xl border border-white/10 bg-black/40 p-2.5 backdrop-blur-sm shadow-md">
+                <div className="flex items-center justify-between mb-2 px-1">
+                  <div className="flex items-center gap-2">
+                    <span className="mono-label text-[11px] text-[#c7f36b]">PAGE MANAGER & THUMBNAILS ({numPages})</span>
+                    <span className="text-[10px] text-white/50 hidden sm:inline">Drag cards or use arrows to reorder</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => batchRotateAll(90)}
+                      className="rounded border border-white/10 bg-white/5 px-2 py-0.5 text-[10px] text-white/70 hover:bg-white/10 hover:text-white transition-colors"
+                    >
+                      Rotate All 90°
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => insertBlankPage()}
+                      className="rounded border border-[#c7f36b]/30 bg-[#c7f36b]/10 px-2 py-0.5 text-[10px] text-[#c7f36b] hover:bg-[#c7f36b]/20 flex items-center gap-1 transition-colors"
+                    >
+                      <Plus size={10} /> Blank Page
+                    </button>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2.5 overflow-x-auto pb-1.5 pt-0.5 px-0.5">
+                  {Array.from({ length: numPages }).map((_, idx) => (
+                    <PdfPageThumbnail
+                      key={`thumb-${idx}-${pageRotations[idx] || 0}-${pdfBytes?.byteLength || 0}`}
+                      pageIndex={idx}
+                      pdfBytes={pdfBytes!}
+                      isActive={currentPage === idx}
+                      rotation={pageRotations[idx] || 0}
+                      annotationCount={annotations.filter((a) => a.pageIndex === idx).length}
+                      onClick={() => {
+                        setCurrentPage(idx);
+                        setSelectedId(null);
+                      }}
+                      onRotate={() => rotatePageAtIndex(idx)}
+                      onDuplicate={() => duplicatePageAtIndex(idx)}
+                      onDelete={() => deletePageAtIndex(idx)}
+                      canDelete={numPages > 1}
+                      onMoveLeft={() => reorderPage(idx, idx - 1)}
+                      canMoveLeft={idx > 0}
+                      onMoveRight={() => reorderPage(idx, idx + 1)}
+                      canMoveRight={idx < numPages - 1}
+                      onDragStart={() => setDraggedPageIndex(idx)}
+                      onDragOver={(e) => e.preventDefault()}
+                      onDrop={(e) => {
+                        e.preventDefault();
+                        if (draggedPageIndex !== null && draggedPageIndex !== idx) {
+                          reorderPage(draggedPageIndex, idx);
+                          setDraggedPageIndex(null);
+                        }
+                      }}
+                    />
+                  ))}
+                  <button
+                    type="button"
+                    onClick={() => insertBlankPage()}
+                    className="flex flex-col items-center justify-center rounded-lg border border-dashed border-white/20 bg-white/[0.02] hover:bg-white/[0.05] p-3 text-white/60 hover:text-[#c7f36b] hover:border-[#c7f36b]/40 min-h-[110px] min-w-[70px] transition-colors flex-shrink-0"
+                    title="Add new blank A4 page"
+                  >
+                    <Plus size={18} />
+                    <span className="text-[10px] mt-1 font-mono">Add Page</span>
+                  </button>
+                </div>
+              </div>
+            )}
 
             {/* Rendered Document Page */}
             <div className="relative inline-block select-none shadow-2xl transition-all">
@@ -1385,22 +3127,32 @@ export default function PdfEditorTool() {
                             className="group transition-shadow inline-block max-w-[90%]"
                           >
                             {isSelected ? (
-                              <input
-                                type="text"
-                                value={ann.text}
-                                autoFocus
-                                onChange={(e) => updateSelectedAnnotationText(e.target.value)}
-                                onClick={(e) => e.stopPropagation()}
-                                style={{
-                                  color: ann.color,
-                                  fontSize: "inherit",
-                                  fontWeight: "inherit",
-                                  backgroundColor: "transparent",
-                                  border: "none",
-                                  outline: "none",
-                                  minWidth: "60px",
-                                }}
-                              />
+                              <>
+                                <input
+                                  type="text"
+                                  value={ann.text}
+                                  autoFocus
+                                  onChange={(e) => updateSelectedAnnotationText(e.target.value)}
+                                  onClick={(e) => e.stopPropagation()}
+                                  style={{
+                                    color: ann.color,
+                                    fontSize: "inherit",
+                                    fontWeight: "inherit",
+                                    backgroundColor: "transparent",
+                                    border: "none",
+                                    outline: "none",
+                                    minWidth: "60px",
+                                  }}
+                                />
+                                <div
+                                  onMouseDown={(e) => e.stopPropagation()}
+                                  className="absolute -top-7 left-0 z-40 flex items-center gap-1 rounded bg-[#0e1628] border border-[#c7f36b]/60 px-1.5 py-0.5 shadow-xl text-[10px] text-white"
+                                >
+                                  <span className="font-mono text-[#c7f36b] uppercase text-[9px]">Text</span>
+                                  <button type="button" onClick={() => duplicateAnnotation(ann.id)} className="p-0.5 hover:text-[#c7f36b]" title="Duplicate"><Copy size={11} /></button>
+                                  <button type="button" onClick={() => deleteAnnotation(ann.id)} className="p-0.5 text-red-400 hover:text-red-300" title="Delete"><Trash2 size={11} /></button>
+                                </div>
+                              </>
                             ) : (
                               <span>{ann.text}</span>
                             )}
@@ -1430,9 +3182,27 @@ export default function PdfEditorTool() {
                               height: `${ann.height}%`,
                               backgroundColor: ann.color,
                               border: isSelected ? "2px solid #c7f36b" : "1px dashed rgba(0,0,0,0.25)",
+                              boxShadow: isSelected ? "0 0 0 2px #c7f36b, 0 0 8px rgba(199,243,107,0.5)" : "none",
                               cursor: "move",
                             }}
-                          />
+                          >
+                            {isSelected && (
+                              <>
+                                <div onMouseDown={(e) => startResize(e, "nw", ann)} className="absolute -top-1.5 -left-1.5 h-3 w-3 rounded-full bg-[#c7f36b] border border-black shadow cursor-nwse-resize z-30" />
+                                <div onMouseDown={(e) => startResize(e, "ne", ann)} className="absolute -top-1.5 -right-1.5 h-3 w-3 rounded-full bg-[#c7f36b] border border-black shadow cursor-nesw-resize z-30" />
+                                <div onMouseDown={(e) => startResize(e, "se", ann)} className="absolute -bottom-1.5 -right-1.5 h-3 w-3 rounded-full bg-[#c7f36b] border border-black shadow cursor-nwse-resize z-30" />
+                                <div onMouseDown={(e) => startResize(e, "sw", ann)} className="absolute -bottom-1.5 -left-1.5 h-3 w-3 rounded-full bg-[#c7f36b] border border-black shadow cursor-nesw-resize z-30" />
+                                <div
+                                  onMouseDown={(e) => e.stopPropagation()}
+                                  className="absolute -top-7 left-0 z-40 flex items-center gap-1 rounded bg-[#0e1628] border border-[#c7f36b]/60 px-1.5 py-0.5 shadow-xl text-[10px] text-white"
+                                >
+                                  <span className="font-mono text-[#c7f36b] uppercase text-[9px]">Redaction</span>
+                                  <button type="button" onClick={() => duplicateAnnotation(ann.id)} className="p-0.5 hover:text-[#c7f36b]" title="Duplicate"><Copy size={11} /></button>
+                                  <button type="button" onClick={() => deleteAnnotation(ann.id)} className="p-0.5 text-red-400 hover:text-red-300" title="Delete"><Trash2 size={11} /></button>
+                                </div>
+                              </>
+                            )}
+                          </div>
                         );
                       }
                       if (ann.type === "stamp") {
@@ -1466,7 +3236,252 @@ export default function PdfEditorTool() {
                               boxShadow: isSelected ? "0 0 0 2px #c7f36b" : "none",
                             }}
                           >
-                            {ann.text}
+                            <span>{ann.text}</span>
+                            {isSelected && (
+                              <div
+                                onMouseDown={(e) => e.stopPropagation()}
+                                className="absolute -top-7 left-0 z-40 flex items-center gap-1 rounded bg-[#0e1628] border border-[#c7f36b]/60 px-1.5 py-0.5 shadow-xl text-[10px] text-white"
+                              >
+                                <span className="font-mono text-[#c7f36b] uppercase text-[9px]">Stamp</span>
+                                <button type="button" onClick={() => duplicateAnnotation(ann.id)} className="p-0.5 hover:text-[#c7f36b]" title="Duplicate"><Copy size={11} /></button>
+                                <button type="button" onClick={() => deleteAnnotation(ann.id)} className="p-0.5 text-red-400 hover:text-red-300" title="Delete"><Trash2 size={11} /></button>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      }
+                      if (ann.type === "image") {
+                        return (
+                          <div
+                            key={ann.id}
+                            onMouseDown={(e) => {
+                              e.stopPropagation();
+                              setSelectedId(ann.id);
+                              if (overlayRef.current) {
+                                const rect = overlayRef.current.getBoundingClientRect();
+                                const mouseX = ((e.clientX - rect.left) / rect.width) * 100;
+                                const mouseY = ((e.clientY - rect.top) / rect.height) * 100;
+                                setDragOffset({ x: mouseX - ann.x, y: mouseY - ann.y });
+                                setIsDraggingSelected(true);
+                              }
+                            }}
+                            style={{
+                              position: "absolute",
+                              left: `${ann.x}%`,
+                              top: `${ann.y}%`,
+                              width: `${ann.width}%`,
+                              height: `${ann.height}%`,
+                              border: isSelected ? "2px solid #c7f36b" : "1px dashed rgba(255,255,255,0.3)",
+                              boxShadow: isSelected ? "0 0 0 2px #c7f36b, 0 0 10px rgba(199,243,107,0.5)" : "none",
+                              cursor: "move",
+                            }}
+                            className="group select-none"
+                          >
+                            <img
+                              src={ann.imageDataUrl}
+                              alt={ann.name || "Embedded image"}
+                              className="w-full h-full object-contain pointer-events-none"
+                            />
+                            {isSelected && (
+                              <>
+                                <div onMouseDown={(e) => startResize(e, "nw", ann)} className="absolute -top-1.5 -left-1.5 h-3 w-3 rounded-full bg-[#c7f36b] border border-black shadow cursor-nwse-resize z-30" />
+                                <div onMouseDown={(e) => startResize(e, "ne", ann)} className="absolute -top-1.5 -right-1.5 h-3 w-3 rounded-full bg-[#c7f36b] border border-black shadow cursor-nesw-resize z-30" />
+                                <div onMouseDown={(e) => startResize(e, "se", ann)} className="absolute -bottom-1.5 -right-1.5 h-3 w-3 rounded-full bg-[#c7f36b] border border-black shadow cursor-nwse-resize z-30" />
+                                <div onMouseDown={(e) => startResize(e, "sw", ann)} className="absolute -bottom-1.5 -left-1.5 h-3 w-3 rounded-full bg-[#c7f36b] border border-black shadow cursor-nesw-resize z-30" />
+                                <div
+                                  onMouseDown={(e) => e.stopPropagation()}
+                                  className="absolute -top-7 left-0 z-40 flex items-center gap-1 rounded bg-[#0e1628] border border-[#c7f36b]/60 px-1.5 py-0.5 shadow-xl text-[10px] text-white"
+                                >
+                                  <span className="font-mono text-[#c7f36b] uppercase text-[9px]">Image</span>
+                                  <button type="button" onClick={() => duplicateAnnotation(ann.id)} className="p-0.5 hover:text-[#c7f36b]" title="Duplicate"><Copy size={11} /></button>
+                                  <button type="button" onClick={() => deleteAnnotation(ann.id)} className="p-0.5 text-red-400 hover:text-red-300" title="Delete"><Trash2 size={11} /></button>
+                                </div>
+                              </>
+                            )}
+                          </div>
+                        );
+                      }
+                      if (ann.type === "highlight") {
+                        return (
+                          <div
+                            key={ann.id}
+                            onMouseDown={(e) => {
+                              e.stopPropagation();
+                              setSelectedId(ann.id);
+                              if (overlayRef.current) {
+                                const rect = overlayRef.current.getBoundingClientRect();
+                                const mouseX = ((e.clientX - rect.left) / rect.width) * 100;
+                                const mouseY = ((e.clientY - rect.top) / rect.height) * 100;
+                                setDragOffset({ x: mouseX - ann.x, y: mouseY - ann.y });
+                                setIsDraggingSelected(true);
+                              }
+                            }}
+                            style={{
+                              position: "absolute",
+                              left: `${ann.x}%`,
+                              top: `${ann.y}%`,
+                              width: `${ann.width}%`,
+                              height: `${ann.height}%`,
+                              backgroundColor: ann.color,
+                              mixBlendMode: "multiply",
+                              border: isSelected ? "2px solid #c7f36b" : "1px dashed rgba(245,158,11,0.4)",
+                              boxShadow: isSelected ? "0 0 0 2px #c7f36b, 0 0 8px rgba(199,243,107,0.5)" : "none",
+                              cursor: "move",
+                            }}
+                          >
+                            {isSelected && (
+                              <>
+                                <div onMouseDown={(e) => startResize(e, "nw", ann)} className="absolute -top-1.5 -left-1.5 h-3 w-3 rounded-full bg-[#c7f36b] border border-black shadow cursor-nwse-resize z-30" />
+                                <div onMouseDown={(e) => startResize(e, "ne", ann)} className="absolute -top-1.5 -right-1.5 h-3 w-3 rounded-full bg-[#c7f36b] border border-black shadow cursor-nesw-resize z-30" />
+                                <div onMouseDown={(e) => startResize(e, "se", ann)} className="absolute -bottom-1.5 -right-1.5 h-3 w-3 rounded-full bg-[#c7f36b] border border-black shadow cursor-nwse-resize z-30" />
+                                <div onMouseDown={(e) => startResize(e, "sw", ann)} className="absolute -bottom-1.5 -left-1.5 h-3 w-3 rounded-full bg-[#c7f36b] border border-black shadow cursor-nesw-resize z-30" />
+                                <div
+                                  onMouseDown={(e) => e.stopPropagation()}
+                                  className="absolute -top-7 left-0 z-40 flex items-center gap-1 rounded bg-[#0e1628] border border-[#c7f36b]/60 px-1.5 py-0.5 shadow-xl text-[10px] text-white"
+                                >
+                                  <span className="font-mono text-[#c7f36b] uppercase text-[9px]">Highlight</span>
+                                  <button type="button" onClick={() => duplicateAnnotation(ann.id)} className="p-0.5 hover:text-[#c7f36b]" title="Duplicate"><Copy size={11} /></button>
+                                  <button type="button" onClick={() => deleteAnnotation(ann.id)} className="p-0.5 text-red-400 hover:text-red-300" title="Delete"><Trash2 size={11} /></button>
+                                </div>
+                              </>
+                            )}
+                          </div>
+                        );
+                      }
+                      if (ann.type === "link") {
+                        return (
+                          <div
+                            key={ann.id}
+                            onMouseDown={(e) => {
+                              e.stopPropagation();
+                              setSelectedId(ann.id);
+                              if (overlayRef.current) {
+                                const rect = overlayRef.current.getBoundingClientRect();
+                                const mouseX = ((e.clientX - rect.left) / rect.width) * 100;
+                                const mouseY = ((e.clientY - rect.top) / rect.height) * 100;
+                                setDragOffset({ x: mouseX - ann.x, y: mouseY - ann.y });
+                                setIsDraggingSelected(true);
+                              }
+                            }}
+                            style={{
+                              position: "absolute",
+                              left: `${ann.x}%`,
+                              top: `${ann.y}%`,
+                              width: `${ann.width}%`,
+                              height: `${ann.height}%`,
+                              backgroundColor: "rgba(37,99,235,0.15)",
+                              border: isSelected ? "2px solid #c7f36b" : "1.5px dashed #2563eb",
+                              boxShadow: isSelected ? "0 0 0 2px #c7f36b, 0 0 8px rgba(199,243,107,0.5)" : "none",
+                              cursor: "move",
+                            }}
+                            className="flex items-center px-1.5 overflow-hidden text-[10px] font-mono text-blue-300 select-none"
+                          >
+                            <LinkIcon size={11} className="mr-1 flex-shrink-0 text-blue-400" />
+                            <span className="truncate flex-1">{ann.url}</span>
+                            {isSelected && (
+                              <>
+                                <div onMouseDown={(e) => startResize(e, "nw", ann)} className="absolute -top-1.5 -left-1.5 h-3 w-3 rounded-full bg-[#c7f36b] border border-black shadow cursor-nwse-resize z-30" />
+                                <div onMouseDown={(e) => startResize(e, "ne", ann)} className="absolute -top-1.5 -right-1.5 h-3 w-3 rounded-full bg-[#c7f36b] border border-black shadow cursor-nesw-resize z-30" />
+                                <div onMouseDown={(e) => startResize(e, "se", ann)} className="absolute -bottom-1.5 -right-1.5 h-3 w-3 rounded-full bg-[#c7f36b] border border-black shadow cursor-nwse-resize z-30" />
+                                <div onMouseDown={(e) => startResize(e, "sw", ann)} className="absolute -bottom-1.5 -left-1.5 h-3 w-3 rounded-full bg-[#c7f36b] border border-black shadow cursor-nesw-resize z-30" />
+                                <div
+                                  onMouseDown={(e) => e.stopPropagation()}
+                                  className="absolute -top-7 left-0 z-40 flex items-center gap-1 rounded bg-[#0e1628] border border-[#c7f36b]/60 px-1.5 py-0.5 shadow-xl text-[10px] text-white"
+                                >
+                                  <span className="font-mono text-[#c7f36b] uppercase text-[9px]">Link</span>
+                                  <a href={ann.url} target="_blank" rel="noopener noreferrer" className="p-0.5 hover:text-[#c7f36b]" title="Open URL in new tab"><Eye size={11} /></a>
+                                  <button type="button" onClick={() => duplicateAnnotation(ann.id)} className="p-0.5 hover:text-[#c7f36b]" title="Duplicate"><Copy size={11} /></button>
+                                  <button type="button" onClick={() => deleteAnnotation(ann.id)} className="p-0.5 text-red-400 hover:text-red-300" title="Delete"><Trash2 size={11} /></button>
+                                </div>
+                              </>
+                            )}
+                          </div>
+                        );
+                      }
+                      if (ann.type === "shape") {
+                        const hasFill = ann.fillColor && ann.fillColor !== "transparent";
+                        return (
+                          <div
+                            key={ann.id}
+                            onMouseDown={(e) => {
+                              e.stopPropagation();
+                              setSelectedId(ann.id);
+                              if (overlayRef.current) {
+                                const rect = overlayRef.current.getBoundingClientRect();
+                                const mouseX = ((e.clientX - rect.left) / rect.width) * 100;
+                                const mouseY = ((e.clientY - rect.top) / rect.height) * 100;
+                                setDragOffset({ x: mouseX - ann.x, y: mouseY - ann.y });
+                                setIsDraggingSelected(true);
+                              }
+                            }}
+                            style={{
+                              position: "absolute",
+                              left: `${ann.x}%`,
+                              top: `${ann.y}%`,
+                              width: `${ann.width}%`,
+                              height: `${ann.height}%`,
+                              boxShadow: isSelected ? "0 0 0 2px #c7f36b, 0 0 8px rgba(199,243,107,0.5)" : "none",
+                              cursor: "move",
+                            }}
+                          >
+                            <svg className="w-full h-full overflow-visible pointer-events-none" viewBox="0 0 100 100" preserveAspectRatio="none">
+                              {ann.shapeType === "rectangle" && (
+                                <rect
+                                  x={2}
+                                  y={2}
+                                  width={96}
+                                  height={96}
+                                  stroke={ann.strokeColor}
+                                  strokeWidth={ann.strokeWidth * 0.8}
+                                  fill={hasFill ? ann.fillColor : "none"}
+                                />
+                              )}
+                              {ann.shapeType === "circle" && (
+                                <ellipse
+                                  cx={50}
+                                  cy={50}
+                                  rx={48}
+                                  ry={48}
+                                  stroke={ann.strokeColor}
+                                  strokeWidth={ann.strokeWidth * 0.8}
+                                  fill={hasFill ? ann.fillColor : "none"}
+                                />
+                              )}
+                              {(ann.shapeType === "line" || ann.shapeType === "arrow") && (
+                                <>
+                                  <line
+                                    x1={0}
+                                    y1={100}
+                                    x2={100}
+                                    y2={0}
+                                    stroke={ann.strokeColor}
+                                    strokeWidth={ann.strokeWidth * 0.8}
+                                  />
+                                  {ann.shapeType === "arrow" && (
+                                    <polygon
+                                      points="100,0 85,12 88,2"
+                                      fill={ann.strokeColor}
+                                    />
+                                  )}
+                                </>
+                              )}
+                            </svg>
+                            {isSelected && (
+                              <>
+                                <div onMouseDown={(e) => startResize(e, "nw", ann)} className="absolute -top-1.5 -left-1.5 h-3 w-3 rounded-full bg-[#c7f36b] border border-black shadow cursor-nwse-resize z-30" />
+                                <div onMouseDown={(e) => startResize(e, "ne", ann)} className="absolute -top-1.5 -right-1.5 h-3 w-3 rounded-full bg-[#c7f36b] border border-black shadow cursor-nesw-resize z-30" />
+                                <div onMouseDown={(e) => startResize(e, "se", ann)} className="absolute -bottom-1.5 -right-1.5 h-3 w-3 rounded-full bg-[#c7f36b] border border-black shadow cursor-nwse-resize z-30" />
+                                <div onMouseDown={(e) => startResize(e, "sw", ann)} className="absolute -bottom-1.5 -left-1.5 h-3 w-3 rounded-full bg-[#c7f36b] border border-black shadow cursor-nesw-resize z-30" />
+                                <div
+                                  onMouseDown={(e) => e.stopPropagation()}
+                                  className="absolute -top-7 left-0 z-40 flex items-center gap-1 rounded bg-[#0e1628] border border-[#c7f36b]/60 px-1.5 py-0.5 shadow-xl text-[10px] text-white"
+                                >
+                                  <span className="font-mono text-[#c7f36b] uppercase text-[9px]">{ann.shapeType}</span>
+                                  <button type="button" onClick={() => duplicateAnnotation(ann.id)} className="p-0.5 hover:text-[#c7f36b]" title="Duplicate"><Copy size={11} /></button>
+                                  <button type="button" onClick={() => deleteAnnotation(ann.id)} className="p-0.5 text-red-400 hover:text-red-300" title="Delete"><Trash2 size={11} /></button>
+                                </div>
+                              </>
+                            )}
                           </div>
                         );
                       }
@@ -1532,6 +3547,132 @@ export default function PdfEditorTool() {
                         }}
                       />
                     )}
+
+                    {/* Temporary Shape drag preview */}
+                    {activeTool === "shape" && tempShape && (
+                      <div
+                        style={{
+                          position: "absolute",
+                          left: `${tempShape.x}%`,
+                          top: `${tempShape.y}%`,
+                          width: `${tempShape.w}%`,
+                          height: `${tempShape.h}%`,
+                          border: `2px dashed ${shapeStrokeColor}`,
+                          backgroundColor: shapeFillColor !== "transparent" ? shapeFillColor : "rgba(37,99,235,0.1)",
+                          pointerEvents: "none",
+                          borderRadius: shapeType === "circle" ? "50%" : "2px",
+                        }}
+                      />
+                    )}
+
+                    {/* Temporary Highlight drag preview */}
+                    {activeTool === "highlight" && tempHighlight && (
+                      <div
+                        style={{
+                          position: "absolute",
+                          left: `${tempHighlight.x}%`,
+                          top: `${tempHighlight.y}%`,
+                          width: `${tempHighlight.w}%`,
+                          height: `${tempHighlight.h}%`,
+                          backgroundColor: highlightColor,
+                          border: "1px dashed #f59e0b",
+                          pointerEvents: "none",
+                        }}
+                      />
+                    )}
+
+                    {/* Live Header Preview */}
+                    {headerText.trim() && (
+                      <div
+                        style={{
+                          position: "absolute",
+                          top: "10px",
+                          left: "20px",
+                          fontSize: `${Math.max(9, 10 * zoomScale)}px`,
+                          pointerEvents: "none",
+                          userSelect: "none",
+                        }}
+                        className="font-mono text-black/60 bg-white/80 px-1.5 py-0.5 rounded shadow-sm border border-black/10"
+                        title="Live Header Preview"
+                      >
+                        {headerText}
+                      </div>
+                    )}
+
+                    {/* Live Footer & Page Numbers Preview */}
+                    {(footerText.trim() || includePageNumbers) && (
+                      <div
+                        style={{
+                          position: "absolute",
+                          bottom: "10px",
+                          left: "20px",
+                          right: "20px",
+                          fontSize: `${Math.max(9, 10 * zoomScale)}px`,
+                          pointerEvents: "none",
+                          userSelect: "none",
+                        }}
+                        className="flex items-center justify-between font-mono text-black/60 bg-white/80 px-2 py-0.5 rounded shadow-sm border border-black/10"
+                        title="Live Footer Preview"
+                      >
+                        <span>{footerText.trim()}</span>
+                        {includePageNumbers && <span>Page {currentPage + 1} of {numPages}</span>}
+                      </div>
+                    )}
+
+                    {/* Live Watermark Preview */}
+                    {watermarkText.trim() && (
+                      <div
+                        style={{
+                          position: "absolute",
+                          top: "50%",
+                          left: "50%",
+                          transform: "translate(-50%, -50%) rotate(-45deg)",
+                          pointerEvents: "none",
+                          userSelect: "none",
+                          fontSize: `${Math.max(26, 44 * zoomScale)}px`,
+                          color: "rgba(0, 0, 0, 0.12)",
+                          fontWeight: "bold",
+                          letterSpacing: "4px",
+                          whiteSpace: "nowrap",
+                        }}
+                        title="Live Watermark Preview"
+                      >
+                        {watermarkText}
+                      </div>
+                    )}
+
+                    {/* Live Bates Stamping Preview Overlay */}
+                    {enableBates && (
+                      <div
+                        style={{
+                          position: "absolute",
+                          fontSize: `${Math.max(9, batesFontSize * 1.1 * zoomScale)}px`,
+                          pointerEvents: "none",
+                          userSelect: "none",
+                          ...(batesPosition === "bottom-right"
+                            ? { bottom: "14px", right: "18px" }
+                            : batesPosition === "bottom-center"
+                            ? { bottom: "14px", left: "50%", transform: "translateX(-50%)" }
+                            : batesPosition === "bottom-left"
+                            ? { bottom: "14px", left: "18px" }
+                            : batesPosition === "top-right"
+                            ? { top: "14px", right: "18px" }
+                            : batesPosition === "top-center"
+                            ? { top: "14px", left: "50%", transform: "translateX(-50%)" }
+                            : { top: "14px", left: "18px" }),
+                        }}
+                        className="rounded bg-black/85 px-2.5 py-1 font-mono font-bold text-[#c7f36b] border border-[#c7f36b]/60 shadow-2xl z-20 flex items-center gap-1.5 backdrop-blur-sm"
+                        title="Live Bates Stamping Preview (Rendered on Export)"
+                      >
+                        <span className="h-1.5 w-1.5 rounded-full bg-[#c7f36b] animate-ping" />
+                        <span>
+                          {batesPrefix}
+                          {String(batesStart + currentPage).padStart(batesDigits, "0")}
+                          {batesSuffix}
+                        </span>
+                        <span className="text-[9px] text-white/50 uppercase font-sans">Bates</span>
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
@@ -1581,6 +3722,304 @@ export default function PdfEditorTool() {
                   className="signal-button text-xs px-4 py-2 cursor-pointer"
                 >
                   Understood & Close
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Format-Preserving Document Converter & OCR Console Modal */}
+        {showOcrModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-md p-4">
+            <div className="max-w-4xl w-full rounded-2xl border border-white/20 bg-[#0c1222] p-6 shadow-2xl space-y-4 text-white animate-fade-in flex flex-col max-h-[90vh]">
+              {/* Modal Header */}
+              <div className="flex items-center justify-between pb-3 border-b border-white/10 shrink-0">
+                <div className="flex items-center gap-3">
+                  <div className="h-10 w-10 rounded-xl bg-[#c7f36b]/10 border border-[#c7f36b]/30 flex items-center justify-center text-[#c7f36b] shadow-inner">
+                    <ScanText size={20} />
+                  </div>
+                  <div>
+                    <h3 className="text-base font-semibold text-white flex items-center gap-2">
+                      Format-Preserving Converter & OCR Console
+                      <span className="text-[10px] font-mono uppercase bg-[#c7f36b]/15 text-[#c7f36b] px-2 py-0.5 rounded-full border border-[#c7f36b]/30">
+                        Zero-Server Local WASM
+                      </span>
+                    </h3>
+                    <p className="text-xs text-white/50">
+                      Preserve headings, tables, typographic hierarchy & layout when converting or extracting PDF documents
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowOcrModal(false)}
+                  disabled={isOcrRunning}
+                  className="text-white/50 hover:text-white text-lg p-1.5 rounded-lg hover:bg-white/5 cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                >
+                  ✕
+                </button>
+              </div>
+
+              {/* Document Nature Pre-Flight Diagnostic Banner */}
+              {detectedPdfNature && (
+                <div
+                  className={`rounded-xl border p-3 flex items-start gap-3 text-xs shrink-0 ${
+                    detectedPdfNature.isScanned
+                      ? "bg-amber-500/10 border-amber-500/30 text-amber-200"
+                      : "bg-sky-500/10 border-sky-500/30 text-sky-200"
+                  }`}
+                >
+                  <div className="mt-0.5 font-bold shrink-0">
+                    {detectedPdfNature.isScanned ? "📷 Scanned Raster PDF" : "🎯 Born-Digital Vector PDF"}
+                  </div>
+                  <div className="leading-relaxed text-[11px] opacity-90">
+                    {detectedPdfNature.isScanned ? (
+                      <span>
+                        Document contains scanned images. Using <strong>Layout-Aware OCR (Tesseract WASM)</strong> with bounding box spatial clustering to reconstruct headings, paragraphs, and columnar alignment.
+                      </span>
+                    ) : (
+                      <span>
+                        Document contains native vector typography ({detectedPdfNature.totalChars} characters detected across {detectedPdfNature.numPages} pages). Extracting native font sizes, tables, and weights directly into <strong>OpenXML DOCX</strong> with zero OCR loss.
+                      </span>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Progress & Live Telemetry */}
+              {isOcrRunning && (
+                <div className="rounded-xl bg-white/[0.03] border border-white/10 p-4 space-y-3 shrink-0">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-[#c7f36b] font-medium flex items-center gap-2">
+                      <span className="h-2 w-2 rounded-full bg-[#c7f36b] animate-ping" />
+                      {ocrStatus || "Analyzing typography & layout..."}
+                    </span>
+                    <span className="font-mono text-white/70">{ocrProgressPercent}%</span>
+                  </div>
+                  <div className="h-2 w-full bg-white/10 rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-gradient-to-r from-[#c7f36b] to-emerald-400 transition-all duration-300 ease-out"
+                      style={{ width: `${ocrProgressPercent}%` }}
+                    />
+                  </div>
+                  <p className="text-[11px] text-white/50">
+                    Running entirely in browser WebAssembly memory. Your private documents never touch an external server or API.
+                  </p>
+                </div>
+              )}
+
+              {/* Direct Format Export Action Grid */}
+              <div className="rounded-xl bg-white/[0.02] border border-white/10 p-3 space-y-2 shrink-0">
+                <div className="text-[11px] font-semibold uppercase tracking-wider text-white/60 flex items-center justify-between">
+                  <span>Export with Preserved Formatting:</span>
+                  <span className="text-[10px] lowercase text-white/40">select a format to download immediately</span>
+                </div>
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2">
+                  <button
+                    type="button"
+                    disabled={isOcrRunning}
+                    onClick={() => {
+                      if (documentStructure) {
+                        exportStructureToDocx(documentStructure, fileName);
+                        showToast("Word (.docx) downloaded!");
+                      } else {
+                        handleRunLayoutAnalysis("docx");
+                      }
+                    }}
+                    className="flex flex-col items-start gap-1 p-2 rounded-lg border border-blue-500/30 bg-blue-500/10 hover:bg-blue-500/20 text-left cursor-pointer transition-all disabled:opacity-40"
+                  >
+                    <div className="flex items-center gap-1.5 font-semibold text-xs text-blue-300">
+                      <FileText size={14} /> Word (.docx)
+                    </div>
+                    <span className="text-[10px] text-white/50 leading-tight">Headings, tables, and typography intact</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    disabled={isOcrRunning}
+                    onClick={handleExportSearchablePdf}
+                    className="flex flex-col items-start gap-1 p-2 rounded-lg border border-[#c7f36b]/30 bg-[#c7f36b]/10 hover:bg-[#c7f36b]/20 text-left cursor-pointer transition-all disabled:opacity-40"
+                  >
+                    <div className="flex items-center gap-1.5 font-semibold text-xs text-[#c7f36b]">
+                      <Sparkles size={14} /> Searchable PDF
+                    </div>
+                    <span className="text-[10px] text-white/50 leading-tight">100% visual fidelity + selectable text</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    disabled={isOcrRunning}
+                    onClick={() => {
+                      if (documentStructure) {
+                        exportStructureToHtml(documentStructure, fileName);
+                        showToast("HTML document downloaded!");
+                      } else {
+                        handleRunLayoutAnalysis("html");
+                      }
+                    }}
+                    className="flex flex-col items-start gap-1 p-2 rounded-lg border border-purple-500/30 bg-purple-500/10 hover:bg-purple-500/20 text-left cursor-pointer transition-all disabled:opacity-40"
+                  >
+                    <div className="flex items-center gap-1.5 font-semibold text-xs text-purple-300">
+                      <FileCode size={14} /> Semantic HTML
+                    </div>
+                    <span className="text-[10px] text-white/50 leading-tight">Styled tables & clean web headings</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    disabled={isOcrRunning}
+                    onClick={() => {
+                      if (documentStructure) {
+                        exportStructureToMarkdown(documentStructure, fileName);
+                        showToast("Markdown (.md) downloaded!");
+                      } else {
+                        handleRunLayoutAnalysis("md");
+                      }
+                    }}
+                    className="flex flex-col items-start gap-1 p-2 rounded-lg border border-teal-500/30 bg-teal-500/10 hover:bg-teal-500/20 text-left cursor-pointer transition-all disabled:opacity-40"
+                  >
+                    <div className="flex items-center gap-1.5 font-semibold text-xs text-teal-300">
+                      <FileText size={14} /> Markdown (.md)
+                    </div>
+                    <span className="text-[10px] text-white/50 leading-tight">Markdown tables & structure for LLMs</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    disabled={isOcrRunning}
+                    onClick={handleExportExcel}
+                    className="flex flex-col items-start gap-1 p-2 rounded-lg border border-emerald-500/30 bg-emerald-500/10 hover:bg-emerald-500/20 text-left cursor-pointer transition-all disabled:opacity-40"
+                  >
+                    <div className="flex items-center gap-1.5 font-semibold text-xs text-emerald-300">
+                      <FileSpreadsheet size={14} /> Excel (.xlsx)
+                    </div>
+                    <span className="text-[10px] text-white/50 leading-tight">Extracted multi-column grid matrix</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* View Mode Switcher */}
+              <div className="flex items-center justify-between border-b border-white/10 pb-2 shrink-0">
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setOcrActiveTab("formatted")}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-medium cursor-pointer transition-colors ${
+                      ocrActiveTab === "formatted"
+                        ? "bg-[#c7f36b] text-[#0c1222] font-semibold"
+                        : "text-white/70 hover:bg-white/10"
+                    }`}
+                  >
+                    Formatted Document Preview
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setOcrActiveTab("raw")}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-medium cursor-pointer transition-colors ${
+                      ocrActiveTab === "raw"
+                        ? "bg-[#c7f36b] text-[#0c1222] font-semibold"
+                        : "text-white/70 hover:bg-white/10"
+                    }`}
+                  >
+                    Raw Stream / Markdown
+                  </button>
+                </div>
+
+                {documentStructure && (
+                  <span className="font-mono text-[11px] text-white/40">
+                    {documentStructure.blocks.length} blocks parsed • {documentStructure.totalWords} words
+                  </span>
+                )}
+              </div>
+
+              {/* Content Viewport */}
+              <div className="flex-1 min-h-[220px] flex flex-col overflow-hidden rounded-xl border border-white/10 bg-[#080d18]">
+                {ocrActiveTab === "formatted" ? (
+                  <div className="flex-1 p-4 overflow-y-auto max-h-[320px] text-slate-200 text-xs leading-relaxed space-y-2">
+                    {documentStructure?.previewHtml ? (
+                      <div
+                        dangerouslySetInnerHTML={{ __html: documentStructure.previewHtml }}
+                        className="prose prose-invert prose-xs max-w-none"
+                      />
+                    ) : isOcrRunning ? (
+                      <div className="flex flex-col items-center justify-center h-full py-12 text-white/50 space-y-2">
+                        <div className="h-6 w-6 rounded-full border-2 border-[#c7f36b] border-t-transparent animate-spin" />
+                        <p className="text-xs">Reconstructing typography hierarchy and layout matrix...</p>
+                      </div>
+                    ) : (
+                      <div className="flex flex-col items-center justify-center h-full py-12 text-white/40 space-y-2">
+                        <FileText size={32} className="opacity-30" />
+                        <p className="text-xs">Click "Format-Preserving OCR Console" or an export format above to run conversion.</p>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <textarea
+                    readOnly={isOcrRunning}
+                    value={
+                      isOcrRunning && !ocrResultText
+                        ? "Extracting character stream and bounding boxes from PDF buffers...\nPlease wait while engine processes."
+                        : ocrResultText
+                    }
+                    onChange={(e) => setOcrResultText(e.target.value)}
+                    placeholder="Extracted document markdown and raw text will appear here..."
+                    className="w-full flex-1 p-3 text-xs font-mono text-white/90 placeholder:text-white/30 focus:border-[#c7f36b] focus:outline-none resize-none leading-relaxed overflow-y-auto bg-transparent border-0"
+                  />
+                )}
+              </div>
+
+              {/* Action Buttons Footer */}
+              <div className="pt-2 flex flex-wrap items-center justify-between gap-2 border-t border-white/10 shrink-0">
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    disabled={isOcrRunning || !ocrResultText}
+                    onClick={() => {
+                      navigator.clipboard.writeText(ocrResultText);
+                      showToast("Document text copied to clipboard!");
+                    }}
+                    className="flex items-center gap-1.5 rounded-lg border border-white/15 bg-white/5 px-3 py-1.5 text-xs text-white hover:bg-white/10 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer transition-colors"
+                  >
+                    <Copy size={13} /> Copy Content
+                  </button>
+
+                  <button
+                    type="button"
+                    disabled={isOcrRunning || !ocrResultText}
+                    onClick={() => {
+                      const blob = new Blob([ocrResultText], { type: "text/plain;charset=utf-8" });
+                      const url = URL.createObjectURL(blob);
+                      const a = document.createElement("a");
+                      a.href = url;
+                      a.download = `${fileName.replace(/\.pdf$/i, "")}_extracted.txt`;
+                      document.body.appendChild(a);
+                      a.click();
+                      document.body.removeChild(a);
+                      URL.revokeObjectURL(url);
+                      showToast("Text file downloaded!");
+                    }}
+                    className="flex items-center gap-1.5 rounded-lg border border-white/15 bg-white/5 px-3 py-1.5 text-xs text-white hover:bg-white/10 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer transition-colors"
+                  >
+                    <Download size={13} /> Download .txt
+                  </button>
+
+                  <button
+                    type="button"
+                    disabled={isOcrRunning}
+                    onClick={() => handleRunLayoutAnalysis()}
+                    className="flex items-center gap-1.5 rounded-lg border border-white/15 bg-white/5 px-3 py-1.5 text-xs text-white hover:bg-white/10 disabled:opacity-40 cursor-pointer transition-colors"
+                  >
+                    <ScanText size={13} /> Re-analyze Document
+                  </button>
+                </div>
+
+                <button
+                  type="button"
+                  disabled={isOcrRunning}
+                  onClick={() => setShowOcrModal(false)}
+                  className="signal-button text-xs px-4 py-2 cursor-pointer disabled:opacity-40"
+                >
+                  Close Console
                 </button>
               </div>
             </div>
