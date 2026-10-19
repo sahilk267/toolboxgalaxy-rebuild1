@@ -1,5 +1,8 @@
 import * as pdfjsLib from "pdfjs-dist";
+import { ensurePdfWorkerConfigured } from "./pdfWorkerSetup";
 import { createWorker } from "tesseract.js";
+
+ensurePdfWorkerConfigured();
 import {
   Document,
   Packer,

@@ -1,5 +1,8 @@
 import * as pdfjsLib from "pdfjs-dist";
+import { ensurePdfWorkerConfigured } from "./pdfWorkerSetup";
 import { StandardFonts, PDFDocument, PDFName } from "pdf-lib";
+
+ensurePdfWorkerConfigured();
 
 export interface DetectedFontProfile {
   rawFontName: string;

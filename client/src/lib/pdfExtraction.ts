@@ -1,6 +1,9 @@
 import * as pdfjsLib from "pdfjs-dist";
+import { ensurePdfWorkerConfigured } from "./pdfWorkerSetup";
 import * as XLSX from "xlsx";
 import { parseDigitalPdfStructure, exportStructureToDocx } from "./pdfLayoutEngine";
+
+ensurePdfWorkerConfigured();
 
 export interface ExtractedPageText {
   pageNumber: number;

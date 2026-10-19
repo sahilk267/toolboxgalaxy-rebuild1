@@ -93,14 +93,10 @@ import {
   DetectedFontProfile,
 } from "../lib/pdfFontDetector";
 
-// Configure pdfjs worker safely with local, same-origin bundled worker
-if (typeof window !== "undefined") {
-  try {
-    pdfjsLib.GlobalWorkerOptions.workerSrc = new URL("/pdf.worker.min.mjs", window.location.origin).href;
-  } catch {
-    // fallback if worker setup fails
-  }
-}
+import { ensurePdfWorkerConfigured } from "../lib/pdfWorkerSetup";
+
+// Configure pdfjs worker safely with local same-origin Blob, .js, and CDN fallbacks
+ensurePdfWorkerConfigured();
 
 export interface TextAnnotation {
   id: string;

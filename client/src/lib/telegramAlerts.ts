@@ -43,6 +43,8 @@ export async function sendTelegramMessage(htmlText: string): Promise<boolean> {
 
   try {
     const url = `https://api.telegram.org/bot${botToken}/sendMessage`;
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 4000);
     const response = await fetch(url, {
       method: "POST",
       headers: {
@@ -54,10 +56,12 @@ export async function sendTelegramMessage(htmlText: string): Promise<boolean> {
         parse_mode: "HTML",
         disable_web_page_preview: true,
       }),
+      signal: controller.signal,
     });
+    clearTimeout(timeout);
     return response.ok;
   } catch {
-    // Telegram dispatch failures must never disrupt client application logic
+    // Telegram dispatch failures (e.g. adblocker, ISP block, offline) must never disrupt client application logic
     return false;
   }
 }

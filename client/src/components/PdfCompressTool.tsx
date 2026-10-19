@@ -1,5 +1,6 @@
 import { useState, useRef } from "react";
 import * as pdfjsLib from "pdfjs-dist";
+import "@/lib/pdfWorkerSetup";
 import { PDFDocument } from "pdf-lib";
 import {
   FileDown,

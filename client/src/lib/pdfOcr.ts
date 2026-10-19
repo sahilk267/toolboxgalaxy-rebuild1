@@ -1,6 +1,9 @@
 import { createWorker } from "tesseract.js";
 import * as pdfjsLib from "pdfjs-dist";
+import { ensurePdfWorkerConfigured } from "./pdfWorkerSetup";
 import { PDFDocument, StandardFonts } from "pdf-lib";
+
+ensurePdfWorkerConfigured();
 
 export interface OcrPageProgress {
   currentPage: number;
