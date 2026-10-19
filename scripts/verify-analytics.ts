@@ -84,6 +84,17 @@ const mockDocument: any = {
 (globalThis as any).window.document = mockDocument;
 (globalThis as any).document = mockDocument;
 
+// Save and isolate env to test default unconfigured behavior
+const originalGa = process.env.VITE_GA_MEASUREMENT_ID;
+const originalGoogle = process.env.VITE_GOOGLE_ANALYTICS_ID;
+const originalGtag = process.env.VITE_GTAG_ID;
+delete process.env.VITE_GA_MEASUREMENT_ID;
+delete process.env.VITE_GOOGLE_ANALYTICS_ID;
+delete process.env.VITE_GTAG_ID;
+delete process.env.VITE_PLAUSIBLE_DOMAIN;
+delete process.env.VITE_ANALYTICS_DOMAIN;
+delete process.env.VITE_UMAMI_WEBSITE_ID;
+
 // Test default unconfigured behavior (clean no-op)
 const {
   getAnalyticsConfig,
@@ -98,6 +109,15 @@ const {
 const defaultConfig = getAnalyticsConfig();
 assert.strictEqual(defaultConfig.provider, "none", "Default provider must be 'none' when env is empty");
 assert.strictEqual(defaultConfig.respectDNT, true);
+
+// Restore GA env and verify configured detection
+if (originalGa) {
+  process.env.VITE_GA_MEASUREMENT_ID = originalGa;
+  const configuredGa = getAnalyticsConfig();
+  assert.strictEqual(configuredGa.provider, "google", "Provider should resolve to 'google' when VITE_GA_MEASUREMENT_ID is set");
+  // Clean back up for remaining no-op tests
+  delete process.env.VITE_GA_MEASUREMENT_ID;
+}
 
 // 4. Test strict privacy sanitization
 console.log("👉 4. Testing strict privacy sanitization of telemetry properties...");

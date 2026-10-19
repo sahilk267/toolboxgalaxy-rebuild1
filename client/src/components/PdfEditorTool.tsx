@@ -51,6 +51,10 @@ import {
   Shapes,
   Maximize2,
   Minimize2,
+  Pipette,
+  Search,
+  Pin,
+  PinOff,
 } from "lucide-react";
 import { REDACTION_DISCLAIMER, rasterizePageWithAnnotations } from "../lib/pdfRedaction";
 import {
@@ -83,6 +87,11 @@ import {
   DocumentStructure,
 } from "../lib/pdfLayoutEngine";
 import { sanitizeWinAnsiText } from "../lib/pdfTextSanitizer";
+import {
+  extractInteractiveTextBlocks,
+  DetectedTextBlock,
+  DetectedFontProfile,
+} from "../lib/pdfFontDetector";
 
 // Configure pdfjs worker safely with local, same-origin bundled worker
 if (typeof window !== "undefined") {
@@ -103,6 +112,9 @@ export interface TextAnnotation {
   fontSize: number;
   color: string;
   isBold?: boolean;
+  isItalic?: boolean;
+  fontFamily?: "Helvetica" | "Times-Roman" | "Courier";
+  cleanFontName?: string;
   bgColor?: string; // "transparent" | "#ffffff" | "#fef08a" | "#000000"
 }
 
@@ -187,6 +199,25 @@ export interface ShapeAnnotation {
   strokeWidth: number;
 }
 
+export interface InPlaceEditAnnotation {
+  id: string;
+  pageIndex: number;
+  type: "inplace-edit";
+  originalText: string;
+  newText: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  color: string;
+  bgColor: string;
+  fontSize: number;
+  fontFamily: "Helvetica" | "Times-Roman" | "Courier";
+  cleanFontName: string;
+  isBold: boolean;
+  isItalic: boolean;
+}
+
 export type Annotation =
   | TextAnnotation
   | WhiteoutAnnotation
@@ -195,7 +226,8 @@ export type Annotation =
   | ImageAnnotation
   | LinkAnnotation
   | HighlightAnnotation
-  | ShapeAnnotation;
+  | ShapeAnnotation
+  | InPlaceEditAnnotation;
 
 interface PdfPageThumbnailProps {
   pageIndex: number;
@@ -365,15 +397,25 @@ function PdfPageThumbnail({
   );
 }
 
-export default function PdfEditorTool() {
-  const [pdfBytes, setPdfBytes] = useState<Uint8Array | null>(null);
-  const [fileName, setFileName] = useState<string>("document.pdf");
+export interface PdfEditorToolProps {
+  initialPdfBytes?: Uint8Array | null;
+  initialFileName?: string;
+  onPdfLoaded?: (bytes: Uint8Array, name: string) => void;
+}
+
+export default function PdfEditorTool({
+  initialPdfBytes = null,
+  initialFileName = "",
+  onPdfLoaded,
+}: PdfEditorToolProps = {}) {
+  const [pdfBytes, setPdfBytes] = useState<Uint8Array | null>(initialPdfBytes);
+  const [fileName, setFileName] = useState<string>(initialFileName || "document.pdf");
   const [numPages, setNumPages] = useState<number>(0);
   const [currentPage, setCurrentPage] = useState<number>(0);
   const [pageRotations, setPageRotations] = useState<number[]>([]);
   const [annotations, setAnnotations] = useState<Annotation[]>([]);
   const [activeTool, setActiveTool] = useState<
-    "select" | "text" | "whiteout" | "draw" | "stamp" | "image" | "link" | "highlight" | "shape"
+    "select" | "smart-edit" | "text" | "whiteout" | "draw" | "stamp" | "image" | "link" | "highlight" | "shape"
   >("text");
   
   // History Undo / Redo Stack Engine (GAP-01)
@@ -387,6 +429,8 @@ export default function PdfEditorTool() {
   const [textColor, setTextColor] = useState<string>("#1e293b");
   const [fontSize, setFontSize] = useState<number>(14);
   const [isBold, setIsBold] = useState<boolean>(false);
+  const [isItalic, setIsItalic] = useState<boolean>(false);
+  const [fontFamily, setFontFamily] = useState<"Helvetica" | "Times-Roman" | "Courier">("Helvetica");
   const [textBgColor, setTextBgColor] = useState<string>("transparent");
   const [editingTextId, setEditingTextId] = useState<string | null>(null);
 
@@ -465,6 +509,85 @@ export default function PdfEditorTool() {
   const [documentStructure, setDocumentStructure] = useState<DocumentStructure | null>(null);
   const [ocrActiveTab, setOcrActiveTab] = useState<"formatted" | "raw">("formatted");
 
+  // Intelligent Auto-Font & In-Place Text Editing State (ILovePDF Model)
+  const [detectedBlocks, setDetectedBlocks] = useState<DetectedTextBlock[]>([]);
+  const [isExtractingBlocks, setIsExtractingBlocks] = useState<boolean>(false);
+  const [hoveredBlockId, setHoveredBlockId] = useState<string | null>(null);
+  const [activeInlineBlock, setActiveInlineBlock] = useState<DetectedTextBlock | null>(null);
+  const [inlineDraftText, setInlineDraftText] = useState<string>("");
+  const [smartEditSearchQuery, setSmartEditSearchQuery] = useState<string>("");
+
+  // Sync initialPdfBytes or sessionStorage load on mount
+  useEffect(() => {
+    if (initialPdfBytes && initialPdfBytes.length > 0) {
+      PDFDocument.load(initialPdfBytes.slice(), { ignoreEncryption: true })
+        .then(async (doc) => {
+          const count = doc.getPageCount();
+          const sha = await calculateSha256(initialPdfBytes);
+          const meta = inspectPdfMetadata(doc);
+          setOriginalSha256(sha);
+          setMetadataReport(meta);
+          setPdfBytes(initialPdfBytes);
+          if (initialFileName) setFileName(initialFileName);
+          setNumPages(count);
+          setCurrentPage(0);
+          setPageRotations(new Array(count).fill(0));
+          setAnnotations([]);
+          setSelectedId(null);
+        })
+        .catch(() => {});
+    } else {
+      try {
+        const storedBase64 = sessionStorage.getItem("tg_studio_load_pdf");
+        const storedName = sessionStorage.getItem("tg_studio_load_name");
+        if (storedBase64) {
+          sessionStorage.removeItem("tg_studio_load_pdf");
+          sessionStorage.removeItem("tg_studio_load_name");
+          const binaryStr = atob(storedBase64);
+          const bytes = new Uint8Array(binaryStr.length);
+          for (let i = 0; i < binaryStr.length; i++) {
+            bytes[i] = binaryStr.charCodeAt(i);
+          }
+          PDFDocument.load(bytes.slice(), { ignoreEncryption: true })
+            .then(async (doc) => {
+              const count = doc.getPageCount();
+              const sha = await calculateSha256(bytes);
+              const meta = inspectPdfMetadata(doc);
+              setOriginalSha256(sha);
+              setMetadataReport(meta);
+              setPdfBytes(bytes);
+              if (storedName) setFileName(storedName);
+              setNumPages(count);
+              setCurrentPage(0);
+              setPageRotations(new Array(count).fill(0));
+              setAnnotations([]);
+              setSelectedId(null);
+            })
+            .catch(() => {});
+        }
+      } catch {
+        // ignore
+      }
+    }
+  }, [initialPdfBytes, initialFileName]);
+
+  // Auto-scan PDF typography and layout when smart-edit mode is active
+  useEffect(() => {
+    if (pdfBytes && activeTool === "smart-edit") {
+      setIsExtractingBlocks(true);
+      extractInteractiveTextBlocks(pdfBytes, currentPage)
+        .then((blocks) => {
+          setDetectedBlocks(blocks);
+          setIsExtractingBlocks(false);
+        })
+        .catch(() => {
+          setIsExtractingBlocks(false);
+        });
+    } else if (activeTool !== "smart-edit") {
+      setActiveInlineBlock(null);
+    }
+  }, [pdfBytes, currentPage, activeTool]);
+
   // Canvas drawing state
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const overlayRef = useRef<HTMLDivElement | null>(null);
@@ -475,6 +598,9 @@ export default function PdfEditorTool() {
   const [tempWhiteout, setTempWhiteout] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
   const [exportSuccess, setExportSuccess] = useState<boolean>(false);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
+  // Panel freeze / sticky status & Studio Viewport mode
+  const [isPanelFrozen, setIsPanelFrozen] = useState<boolean>(true);
+  const [studioViewMode, setStudioViewMode] = useState<"page-scroll" | "viewport">("page-scroll");
 
   const showToast = (msg: string) => {
     setStatusMessage(msg);
@@ -715,6 +841,7 @@ export default function PdfEditorTool() {
       setMetadataReport(meta);
       setPdfBytes(bytes);
       setFileName(file.name);
+      if (onPdfLoaded) onPdfLoaded(bytes, file.name);
       setNumPages(count);
       setCurrentPage(0);
       setPageRotations(new Array(count).fill(0));
@@ -789,6 +916,8 @@ export default function PdfEditorTool() {
         fontSize,
         color: textColor,
         isBold,
+        isItalic,
+        fontFamily,
         bgColor: textBgColor,
       };
       setAnnotations((prev) => [...prev, newAnnotation]);
@@ -1027,6 +1156,136 @@ export default function PdfEditorTool() {
   // Rotate current page
   const rotateCurrentPage = () => {
     rotatePageAtIndex(currentPage, 90);
+  };
+
+  // Select a detected PDF text block for inline in-place editing (ILovePDF model)
+  const handleSelectBlockForEdit = (block: DetectedTextBlock, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    setActiveInlineBlock(block);
+    setInlineDraftText(block.text);
+    setFontSize(block.font.fontSize);
+    setIsBold(block.font.isBold);
+    setIsItalic(block.font.isItalic);
+    setFontFamily(block.font.standardFamily);
+    const detectedColor = block.suggestedColor || "#0f172a";
+    setTextColor(detectedColor);
+    setTextBgColor(block.suggestedBgColor || "#ffffff");
+    setSelectedId(null);
+    showToast(`Detected Font: ${block.font.cleanName} (${block.font.fontSize}pt, ${block.font.isBold ? "Bold" : "Regular"})`);
+  };
+
+  // Re-open an already edited text block for instant seamless re-editing
+  const handleReopenInPlaceEdit = (ann: InPlaceEditAnnotation) => {
+    const virtualBlock: DetectedTextBlock = {
+      id: ann.id,
+      text: ann.newText,
+      pageIndex: ann.pageIndex,
+      x: ann.x,
+      y: ann.y,
+      width: ann.width,
+      height: ann.height,
+      pdfX: 0,
+      pdfY: 0,
+      pdfWidth: 0,
+      pdfHeight: 0,
+      font: {
+        rawFontName: ann.cleanFontName,
+        cleanName: ann.cleanFontName,
+        standardFamily: ann.fontFamily,
+        cssFamily: ann.fontFamily === "Times-Roman" ? "'Times New Roman', serif" : ann.fontFamily === "Courier" ? "'Courier New', monospace" : "Arial, sans-serif",
+        fontSize: ann.fontSize,
+        isBold: ann.isBold,
+        isItalic: ann.isItalic,
+        standardPdfFontKey: StandardFonts.Helvetica,
+      },
+      suggestedColor: ann.color || "#0f172a",
+      suggestedBgColor: ann.bgColor || "#ffffff",
+    };
+    setActiveInlineBlock(virtualBlock);
+    setInlineDraftText(ann.newText);
+    setFontSize(ann.fontSize);
+    setIsBold(ann.isBold);
+    setIsItalic(ann.isItalic);
+    setFontFamily(ann.fontFamily);
+    setTextColor(ann.color || "#0f172a");
+    setTextBgColor(ann.bgColor || "#ffffff");
+    setAnnotations((prev) => prev.filter((a) => a.id !== ann.id));
+    setActiveTool("smart-edit");
+  };
+
+  // Commit and bake inline in-place text replacement
+  const handleCommitInlineEdit = () => {
+    if (!activeInlineBlock) return;
+    const trimmed = inlineDraftText.trim();
+    if (trimmed) {
+      pushHistorySnapshot();
+      const inPlaceAnn: InPlaceEditAnnotation = {
+        id: `inplace-${Date.now()}`,
+        pageIndex: currentPage,
+        type: "inplace-edit",
+        originalText: activeInlineBlock.text,
+        newText: trimmed,
+        x: activeInlineBlock.x,
+        y: activeInlineBlock.y,
+        width: Math.max(activeInlineBlock.width, (trimmed.length / Math.max(1, activeInlineBlock.text.length)) * activeInlineBlock.width),
+        height: Math.max(1.5, activeInlineBlock.height),
+        color: textColor || "#0f172a",
+        bgColor: textBgColor === "transparent" ? "#ffffff" : textBgColor || "#ffffff",
+        fontSize: fontSize || activeInlineBlock.font.fontSize,
+        fontFamily: fontFamily || activeInlineBlock.font.standardFamily,
+        cleanFontName: activeInlineBlock.font.cleanName,
+        isBold: isBold,
+        isItalic: isItalic,
+      };
+      setAnnotations((prev) => [...prev, inPlaceAnn]);
+      setDetectedBlocks((prev) =>
+        prev.map((b) =>
+          b.id === activeInlineBlock.id
+            ? {
+                ...b,
+                text: trimmed,
+                suggestedColor: textColor || b.suggestedColor,
+                font: {
+                  ...b.font,
+                  fontSize: fontSize || b.font.fontSize,
+                  isBold: isBold,
+                  isItalic: isItalic,
+                  standardFamily: fontFamily || b.font.standardFamily,
+                },
+              }
+            : b
+        )
+      );
+      setSelectedId(null);
+      showToast(`Updated text with auto-matched font (${activeInlineBlock.font.cleanName})`);
+    }
+    setActiveInlineBlock(null);
+  };
+
+  // Sample/Eyedropper detected font into the active Text Tool (Option 1 & 2 integration)
+  const sampleFontToTextTool = (block: DetectedTextBlock, switchToText = true) => {
+    setFontFamily(block.font.standardFamily);
+    setFontSize(block.font.fontSize);
+    setIsBold(block.font.isBold);
+    setIsItalic(block.font.isItalic);
+    if (block.suggestedColor) setTextColor(block.suggestedColor);
+    if (block.suggestedBgColor && block.suggestedBgColor !== "transparent") {
+      setTextBgColor(block.suggestedBgColor);
+    }
+    if (selectedId) {
+      updateSelectedAnnotationStyle({
+        fontFamily: block.font.standardFamily,
+        fontSize: block.font.fontSize,
+        isBold: block.font.isBold,
+        isItalic: block.font.isItalic,
+        color: block.suggestedColor,
+        cleanFontName: block.font.cleanName,
+      });
+    }
+    if (switchToText) {
+      setActiveTool("text");
+    }
+    showToast(`Sampled font: ${block.font.cleanName} (${block.font.fontSize}pt, ${block.font.standardFamily})`);
   };
 
   // Delete an annotation
@@ -1440,6 +1699,16 @@ export default function PdfEditorTool() {
       const doc = await PDFDocument.load(pdfBytes, { ignoreEncryption: true });
       const helvetica = await doc.embedFont(StandardFonts.Helvetica);
       const helveticaBold = await doc.embedFont(StandardFonts.HelveticaBold);
+      const helveticaOblique = await doc.embedFont(StandardFonts.HelveticaOblique);
+      const helveticaBoldOblique = await doc.embedFont(StandardFonts.HelveticaBoldOblique);
+      const timesRoman = await doc.embedFont(StandardFonts.TimesRoman);
+      const timesBold = await doc.embedFont(StandardFonts.TimesRomanBold);
+      const timesItalic = await doc.embedFont(StandardFonts.TimesRomanItalic);
+      const timesBoldItalic = await doc.embedFont(StandardFonts.TimesRomanBoldItalic);
+      const courier = await doc.embedFont(StandardFonts.Courier);
+      const courierBold = await doc.embedFont(StandardFonts.CourierBold);
+      const courierOblique = await doc.embedFont(StandardFonts.CourierOblique);
+      const courierBoldOblique = await doc.embedFont(StandardFonts.CourierBoldOblique);
       const pageCount = doc.getPageCount();
 
       // Check which pages contain whiteout annotations
@@ -1509,7 +1778,14 @@ export default function PdfEditorTool() {
 
         for (const ann of pageAnns) {
           if (ann.type === "text") {
-            const font = ann.isBold ? helveticaBold : helvetica;
+            let textFont = helvetica;
+            if (ann.fontFamily === "Times-Roman") {
+              textFont = ann.isBold && ann.isItalic ? timesBoldItalic : ann.isBold ? timesBold : ann.isItalic ? timesItalic : timesRoman;
+            } else if (ann.fontFamily === "Courier") {
+              textFont = ann.isBold && ann.isItalic ? courierBoldOblique : ann.isBold ? courierBold : ann.isItalic ? courierOblique : courier;
+            } else {
+              textFont = ann.isBold && ann.isItalic ? helveticaBoldOblique : ann.isBold ? helveticaBold : ann.isItalic ? helveticaOblique : helvetica;
+            }
             const pdfX = (ann.x / 100) * width;
             const pdfY = height - (ann.y / 100) * height - ann.fontSize;
             const safeAnnText = sanitizeWinAnsiText(ann.text);
@@ -1517,7 +1793,7 @@ export default function PdfEditorTool() {
             // Draw background rectangle if requested (e.g. Whiteout background or yellow highlight)
             if (ann.bgColor && ann.bgColor !== "transparent") {
               const bgRgb = parseHexColor(ann.bgColor, { r: 1, g: 1, b: 1 });
-              const textWidth = font.widthOfTextAtSize(safeAnnText, ann.fontSize);
+              const textWidth = textFont.widthOfTextAtSize(safeAnnText, ann.fontSize);
               const padding = 3;
               page.drawRectangle({
                 x: pdfX - padding,
@@ -1534,7 +1810,41 @@ export default function PdfEditorTool() {
               x: pdfX,
               y: pdfY,
               size: ann.fontSize,
-              font,
+              font: textFont,
+              color: rgb(textRgb.r, textRgb.g, textRgb.b),
+            });
+          } else if (ann.type === "inplace-edit") {
+            const pdfX = (ann.x / 100) * width;
+            const pdfW = (ann.width / 100) * width;
+            const pdfH = (ann.height / 100) * height;
+            const pdfY = height - (ann.y / 100) * height - pdfH;
+            const bgRgb = parseHexColor(ann.bgColor || "#ffffff", { r: 1, g: 1, b: 1 });
+
+            // 1. Mask original text area
+            page.drawRectangle({
+              x: pdfX - 1,
+              y: pdfY - 1,
+              width: pdfW + 2,
+              height: pdfH + 2,
+              color: rgb(bgRgb.r, bgRgb.g, bgRgb.b),
+            });
+
+            // 2. Select matching embedded standard font
+            let targetFont = helvetica;
+            if (ann.fontFamily === "Times-Roman") {
+              targetFont = ann.isBold && ann.isItalic ? timesBoldItalic : ann.isBold ? timesBold : ann.isItalic ? timesItalic : timesRoman;
+            } else if (ann.fontFamily === "Courier") {
+              targetFont = ann.isBold && ann.isItalic ? courierBoldOblique : ann.isBold ? courierBold : ann.isItalic ? courierOblique : courier;
+            } else {
+              targetFont = ann.isBold && ann.isItalic ? helveticaBoldOblique : ann.isBold ? helveticaBold : ann.isItalic ? helveticaOblique : helvetica;
+            }
+
+            const textRgb = parseHexColor(ann.color, { r: 0.1, g: 0.1, b: 0.1 });
+            page.drawText(sanitizeWinAnsiText(ann.newText), {
+              x: pdfX,
+              y: pdfY + Math.max(1, pdfH * 0.15),
+              size: ann.fontSize,
+              font: targetFont,
               color: rgb(textRgb.r, textRgb.g, textRgb.b),
             });
           } else if (ann.type === "whiteout") {
@@ -1870,8 +2180,8 @@ export default function PdfEditorTool() {
         </div>
       ) : (
         <div className="space-y-4 w-full">
-          {/* Top Main Command Bar */}
-          <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-white/10 bg-white/[0.03] p-3 shadow-lg">
+          {/* Top Main Command Bar - Frozen & Sticky */}
+          <div className="sticky top-2 z-40 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-white/15 bg-[#0e1628]/95 backdrop-blur-md p-3 shadow-2xl">
             {/* Left: File Info & Zoom */}
             <div className="flex items-center flex-wrap gap-2 sm:gap-3">
               <div className="flex items-center gap-2 pr-2 border-r border-white/10">
@@ -1980,6 +2290,27 @@ export default function PdfEditorTool() {
               >
                 <Layers size={13} />
                 <span className="hidden sm:inline">Thumbnails</span>
+              </button>
+
+              {/* Studio Viewport vs Full Page Scroll Mode */}
+              <button
+                type="button"
+                onClick={() => setStudioViewMode((m) => (m === "viewport" ? "page-scroll" : "viewport"))}
+                className={`flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs transition-colors ${
+                  studioViewMode === "viewport"
+                    ? "border-[#6fd5ff] bg-[#6fd5ff]/20 text-[#6fd5ff] font-medium shadow-sm shadow-[#6fd5ff]/20"
+                    : "border-white/10 bg-black/40 text-white/70 hover:text-white"
+                }`}
+                title={
+                  studioViewMode === "viewport"
+                    ? "Studio Viewport active: Canvas scrolls in dedicated bay with pinned toolbars. Click for Full Page scroll."
+                    : "Full Page scroll active. Click to switch to dedicated Studio Viewport bay."
+                }
+              >
+                <Maximize2 size={13} />
+                <span className="hidden md:inline">
+                  {studioViewMode === "viewport" ? "Studio Viewport" : "Page Scroll"}
+                </span>
               </button>
             </div>
 
@@ -2139,11 +2470,53 @@ export default function PdfEditorTool() {
 
           {/* Main 2-Column Editor Layout: Left Sticky Controls + Right Canvas */}
           <div className="grid grid-cols-1 gap-5 lg:grid-cols-12 items-start">
-            {/* Left Column: Sticky Control Panel */}
-            <div className="lg:col-span-4 xl:col-span-3 lg:sticky lg:top-16 space-y-4 rounded-xl border border-white/10 bg-[#0e1628]/95 p-4 shadow-xl max-h-[calc(100vh-5rem)] overflow-y-auto">
+            {/* Left Column: Sticky Frozen Control Panel */}
+            <div
+              className={`lg:col-span-4 xl:col-span-3 space-y-4 rounded-xl border border-white/15 bg-[#0e1628]/98 backdrop-blur-md p-4 shadow-2xl transition-all ${
+                isPanelFrozen
+                  ? "sticky top-[4.75rem] z-30 max-h-[calc(100vh-5.5rem)] overflow-y-auto overscroll-contain"
+                  : "relative max-h-none overflow-visible"
+              }`}
+            >
               <div>
-                <p className="mono-label text-xs text-[#c7f36b]">01 · SELECT ACTIVE TOOL</p>
+                <div className="flex items-center justify-between gap-2 pb-2 border-b border-white/10 mb-2">
+                  <p className="mono-label text-xs text-[#c7f36b]">01 · SELECT ACTIVE TOOL</p>
+                  <button
+                    type="button"
+                    onClick={() => setIsPanelFrozen((v) => !v)}
+                    className={`inline-flex items-center gap-1.5 text-[11px] font-mono px-2 py-0.5 rounded-full border transition-all ${
+                      isPanelFrozen
+                        ? "border-[#c7f36b]/40 bg-[#c7f36b]/15 text-[#c7f36b] shadow-sm shadow-[#c7f36b]/20"
+                        : "border-white/15 bg-white/5 text-white/50 hover:text-white hover:border-white/30"
+                    }`}
+                    title={
+                      isPanelFrozen
+                        ? "Panel is frozen & stays visible while scrolling. Click to unfreeze."
+                        : "Panel unpinned. Click to freeze panel while scrolling."
+                    }
+                  >
+                    {isPanelFrozen ? <Pin size={11} className="fill-[#c7f36b]" /> : <PinOff size={11} />}
+                    <span>{isPanelFrozen ? "Panel Frozen" : "Unpinned"}</span>
+                  </button>
+                </div>
                 <div className="mt-2 grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => { setActiveTool("smart-edit"); setSelectedId(null); }}
+                    className={`col-span-2 flex items-center justify-between gap-2 rounded-xl border p-2.5 text-xs font-semibold transition-all ${
+                      activeTool === "smart-edit"
+                        ? "border-[#c7f36b] bg-[#c7f36b]/20 text-[#c7f36b] shadow-md shadow-[#c7f36b]/15"
+                        : "border-sky-500/40 bg-sky-500/10 text-sky-300 hover:bg-sky-500/20"
+                    }`}
+                  >
+                    <div className="flex items-center gap-2">
+                      <Sparkles size={15} className="text-[#c7f36b]" />
+                      <span>Auto Font & Inline Edit</span>
+                    </div>
+                    <span className="text-[10px] font-mono bg-[#c7f36b]/20 text-[#c7f36b] px-2 py-0.5 rounded-full border border-[#c7f36b]/30">
+                      ILovePDF Mode
+                    </span>
+                  </button>
                   <button
                     type="button"
                     onClick={() => { setActiveTool("text"); setSelectedId(null); }}
@@ -2250,6 +2623,250 @@ export default function PdfEditorTool() {
                 </div>
               </div>
 
+              {/* Intelligent Auto-Font & In-Place Text Editing (ILovePDF Model) */}
+              {activeTool === "smart-edit" && (
+                <div className="space-y-3 rounded-lg border border-sky-500/30 bg-sky-500/[0.05] p-3.5 shadow-inner">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-semibold text-white/90 flex items-center gap-1.5">
+                      <Sparkles size={14} className="text-[#c7f36b]" /> Auto Font & Inline Edit
+                    </span>
+                    <span className="text-[10px] font-mono text-[#c7f36b] bg-[#c7f36b]/15 px-1.5 py-0.5 rounded border border-[#c7f36b]/30">
+                      ACTIVE
+                    </span>
+                  </div>
+
+                  {isExtractingBlocks ? (
+                    <div className="flex items-center gap-2 p-2.5 rounded bg-black/40 border border-white/10 text-xs text-white/70">
+                      <div className="h-3 w-3 rounded-full border-2 border-[#c7f36b] border-t-transparent animate-spin" />
+                      <span>Scanning page typography and fonts...</span>
+                    </div>
+                  ) : (
+                    <p className="text-[11px] text-white/70 leading-relaxed">
+                      💡 <b>Hover and click directly on any text</b> on the page. The engine will detect its original font family, size, weight, and color so you can edit it in place.
+                    </p>
+                  )}
+
+                  {activeInlineBlock ? (
+                    <div className="space-y-3 rounded-lg border border-[#c7f36b]/40 bg-black/60 p-3 animate-fade-in text-xs">
+                      <div className="flex items-center justify-between border-b border-white/10 pb-1.5">
+                        <span className="text-[11px] font-mono text-[#c7f36b] font-bold">EDITING TEXT LINE</span>
+                        <span className="text-[10px] font-mono text-white/70">
+                          {fontSize || activeInlineBlock.font.fontSize}pt · {isBold ? "Bold" : "Regular"}
+                        </span>
+                      </div>
+
+                      {/* Detected Font Info Badge */}
+                      <div className="flex items-center justify-between rounded bg-white/5 p-2 text-[10.5px]">
+                        <span className="text-white/60">Detected Font:</span>
+                        <span className="font-mono text-[#c7f36b] font-semibold truncate max-w-[150px]">
+                          {activeInlineBlock.font.cleanName}
+                        </span>
+                      </div>
+
+                      {/* Formatting Controls Bar */}
+                      <div className="flex items-center flex-wrap gap-2 rounded bg-white/[0.04] p-2 border border-white/10">
+                        {/* Bold & Italic */}
+                        <div className="flex items-center gap-1">
+                          <button
+                            type="button"
+                            onClick={() => setIsBold((b) => !b)}
+                            className={`h-7 w-7 rounded font-bold text-xs flex items-center justify-center transition-all cursor-pointer ${
+                              isBold
+                                ? "bg-[#c7f36b] text-[#0b1020] font-black ring-1 ring-[#c7f36b]"
+                                : "text-white/80 hover:bg-white/10 border border-white/20"
+                            }`}
+                            title="Toggle Bold"
+                          >
+                            B
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setIsItalic((it) => !it)}
+                            className={`h-7 w-7 rounded italic font-serif text-xs flex items-center justify-center transition-all cursor-pointer ${
+                              isItalic
+                                ? "bg-[#c7f36b] text-[#0b1020] font-black ring-1 ring-[#c7f36b]"
+                                : "text-white/80 hover:bg-white/10 border border-white/20"
+                            }`}
+                            title="Toggle Italic"
+                          >
+                            I
+                          </button>
+                        </div>
+
+                        {/* Font Size Stepper */}
+                        <div className="flex items-center rounded border border-white/20 bg-black/40 px-1 py-0.5 gap-1">
+                          <button
+                            type="button"
+                            onClick={() => setFontSize((s) => Math.max(6, (s || activeInlineBlock.font.fontSize) - 1))}
+                            className="h-6 w-5 rounded hover:bg-white/20 text-white text-xs font-bold flex items-center justify-center cursor-pointer"
+                            title="Decrease font size"
+                          >
+                            -
+                          </button>
+                          <span className="font-mono text-[11px] text-[#c7f36b] px-1 font-bold min-w-[32px] text-center">
+                            {fontSize || activeInlineBlock.font.fontSize}pt
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => setFontSize((s) => Math.min(72, (s || activeInlineBlock.font.fontSize) + 1))}
+                            className="h-6 w-5 rounded hover:bg-white/20 text-white text-xs font-bold flex items-center justify-center cursor-pointer"
+                            title="Increase font size"
+                          >
+                            +
+                          </button>
+                        </div>
+
+                        {/* Font Family selector */}
+                        <select
+                          value={fontFamily}
+                          onChange={(e) => setFontFamily(e.target.value as any)}
+                          className="bg-black/80 border border-white/20 rounded text-[11px] text-white/90 px-2 py-1 outline-none cursor-pointer flex-1"
+                        >
+                          <option value="Helvetica">Sans (Arial / Helvetica)</option>
+                          <option value="Times-Roman">Serif (Times New Roman)</option>
+                          <option value="Courier">Mono (Courier New)</option>
+                        </select>
+
+                        {/* Text Color Picker & Quick Swatches */}
+                        <div className="flex items-center gap-1.5 w-full pt-1 border-t border-white/10">
+                          <span className="text-[10px] font-mono text-white/60">Color:</span>
+                          <div className="flex items-center gap-1 flex-1">
+                            {[
+                              { color: "#0f172a", label: "Black" },
+                              { color: "#1e3a8a", label: "Navy" },
+                              { color: "#dc2626", label: "Red" },
+                              { color: "#059669", label: "Green" },
+                            ].map((c) => (
+                              <button
+                                key={c.color}
+                                type="button"
+                                onClick={() => setTextColor(c.color)}
+                                style={{ backgroundColor: c.color }}
+                                className={`h-4 w-4 rounded-full border transition-transform cursor-pointer ${
+                                  textColor === c.color ? "ring-2 ring-[#c7f36b] scale-110 border-white" : "border-white/30 hover:scale-105"
+                                }`}
+                                title={`Set color: ${c.label}`}
+                              />
+                            ))}
+                            <input
+                              type="color"
+                              value={textColor || "#0f172a"}
+                              onChange={(e) => setTextColor(e.target.value)}
+                              className="h-5 w-5 rounded cursor-pointer border border-white/20 bg-transparent p-0 ml-1"
+                              title="Choose custom text color"
+                            />
+                            <span className="font-mono text-[10px] text-white/60 ml-auto uppercase">{textColor || "#0f172a"}</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Text Input */}
+                      <div>
+                        <label className="text-[10px] font-mono text-white/60 block mb-1">EDITED TEXT:</label>
+                        <textarea
+                          rows={2}
+                          value={inlineDraftText}
+                          onChange={(e) => setInlineDraftText(e.target.value)}
+                          className="w-full rounded border border-white/20 bg-black/70 p-2 text-xs text-white focus:border-[#c7f36b] focus:outline-none resize-none font-medium"
+                          placeholder="Enter new text..."
+                        />
+                      </div>
+
+                      <div className="flex gap-2 pt-1">
+                        <button
+                          type="button"
+                          onClick={handleCommitInlineEdit}
+                          className="flex-1 rounded bg-[#c7f36b] py-2 text-xs font-bold text-[#0b1020] hover:bg-[#b8eb55] transition-colors cursor-pointer shadow-md"
+                        >
+                          Apply Changes (Enter)
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setActiveInlineBlock(null)}
+                          className="rounded border border-white/20 bg-white/5 px-3 py-2 text-xs text-white/70 hover:bg-white/10 transition-colors cursor-pointer"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between rounded border border-white/10 bg-black/30 p-2 text-[11px] text-white/70">
+                        <span>Found <b className="font-mono text-[#c7f36b]">{detectedBlocks.length}</b> text blocks on P.{currentPage + 1}</span>
+                      </div>
+
+                      {/* Search / Filter Blocks */}
+                      {detectedBlocks.length > 0 && (
+                        <div className="relative">
+                          <Search size={12} className="absolute left-2.5 top-2 text-white/40" />
+                          <input
+                            type="text"
+                            value={smartEditSearchQuery}
+                            onChange={(e) => setSmartEditSearchQuery(e.target.value)}
+                            placeholder="Search page text..."
+                            className="w-full rounded border border-white/15 bg-black/60 pl-7 pr-2 py-1 text-[11px] text-white placeholder-white/40 focus:border-[#c7f36b] focus:outline-none"
+                          />
+                        </div>
+                      )}
+
+                      {/* Scrollable list of detected text items with font badges */}
+                      {detectedBlocks.length > 0 && (
+                        <div className="max-h-48 overflow-y-auto space-y-1.5 pr-1">
+                          {detectedBlocks
+                            .filter((b) => !smartEditSearchQuery || b.text.toLowerCase().includes(smartEditSearchQuery.toLowerCase()))
+                            .slice(0, 30)
+                            .map((b) => (
+                              <div
+                                key={b.id}
+                                onMouseEnter={() => setHoveredBlockId(b.id)}
+                                onMouseLeave={() => setHoveredBlockId(null)}
+                                className={`rounded border p-1.5 transition-all text-[11px] ${
+                                  hoveredBlockId === b.id
+                                    ? "border-[#c7f36b] bg-[#c7f36b]/10"
+                                    : "border-white/10 bg-black/40 hover:border-white/20"
+                                }`}
+                              >
+                                <div className="flex items-center justify-between text-[10px] text-white/60 mb-0.5">
+                                  <div className="flex items-center gap-1.5 truncate max-w-[140px]">
+                                    <span
+                                      className="h-2 w-2 rounded-full border border-white/30 shrink-0"
+                                      style={{ backgroundColor: b.suggestedColor }}
+                                      title={`Detected Color: ${b.suggestedColor}`}
+                                    />
+                                    <span className="font-mono text-[#c7f36b] truncate" title={b.font.rawFontName}>
+                                      {b.font.cleanName}
+                                    </span>
+                                  </div>
+                                  <span className="font-mono shrink-0">{b.font.fontSize}pt · {b.font.isBold ? "Bold" : "Reg"}</span>
+                                </div>
+                                <p className="truncate text-white/90 text-xs mb-1.5 font-medium">{b.text}</p>
+                                <div className="flex items-center gap-1.5">
+                                  <button
+                                    type="button"
+                                    onClick={(e) => handleSelectBlockForEdit(b, e)}
+                                    className="flex-1 rounded bg-[#c7f36b]/20 border border-[#c7f36b]/40 py-0.5 text-[10px] font-semibold text-[#c7f36b] hover:bg-[#c7f36b] hover:text-[#0b1020] transition-colors"
+                                  >
+                                    Edit Text
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => sampleFontToTextTool(b)}
+                                    title="Sample this font into the Add Text tool"
+                                    className="flex items-center gap-1 rounded border border-sky-400/30 bg-sky-500/10 px-2 py-0.5 text-[10px] text-sky-300 hover:bg-sky-500/20 transition-colors"
+                                  >
+                                    <Pipette size={10} />
+                                    <span>Sample Font</span>
+                                  </button>
+                                </div>
+                              </div>
+                            ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+
               {/* Active Tool Config: Text Settings */}
               {activeTool === "text" && (
                 <div className="space-y-3 rounded-lg border border-[#c7f36b]/30 bg-[#0b1322] p-3.5 shadow-inner">
@@ -2298,7 +2915,55 @@ export default function PdfEditorTool() {
                     </div>
                   </div>
 
-                  {/* Font Size & Weight */}
+                  {/* Font Family Selection (Option 1 & 2) */}
+                  <div className="space-y-1.5 pt-1 border-t border-white/10">
+                    <div className="flex items-center justify-between text-[11px] text-white/70">
+                      <span>Typography Family</span>
+                      <span className="font-mono text-[#c7f36b] text-[10.5px]">{fontFamily}</span>
+                    </div>
+                    <div className="grid grid-cols-3 gap-1">
+                      {[
+                        { id: "Helvetica" as const, label: "Sans", sample: "Helvetica" },
+                        { id: "Times-Roman" as const, label: "Serif", sample: "Times" },
+                        { id: "Courier" as const, label: "Mono", sample: "Courier" },
+                      ].map((f) => (
+                        <button
+                          key={f.id}
+                          type="button"
+                          onClick={() => {
+                            setFontFamily(f.id);
+                            if (selectedAnnotation && selectedAnnotation.type === "text") {
+                              updateSelectedAnnotationStyle({ fontFamily: f.id });
+                            }
+                          }}
+                          className={`rounded border px-2 py-1 text-center transition-all ${
+                            fontFamily === f.id
+                              ? "border-[#c7f36b] bg-[#c7f36b]/20 text-[#c7f36b] shadow-sm font-bold"
+                              : "border-white/10 bg-white/5 text-white/70 hover:bg-white/10"
+                          }`}
+                        >
+                          <span className="block text-[11px] leading-tight">{f.sample}</span>
+                          <span className="block text-[9px] opacity-60 leading-tight">{f.label}</span>
+                        </button>
+                      ))}
+                    </div>
+
+                    {/* Font Eyedropper CTA */}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setActiveTool("smart-edit");
+                        setSelectedId(null);
+                        showToast("Font Eyedropper: Click any text on the page to copy its font into the Text Tool!");
+                      }}
+                      className="flex items-center justify-center gap-1.5 w-full rounded-lg border border-sky-400/40 bg-sky-500/10 py-1.5 text-[11px] font-semibold text-sky-300 hover:bg-sky-500/20 transition-colors mt-1"
+                    >
+                      <Pipette size={12} className="text-[#c7f36b]" />
+                      <span>Pick / Sample Font from PDF</span>
+                    </button>
+                  </div>
+
+                  {/* Font Size & Weight / Style */}
                   <div className="grid grid-cols-2 gap-2 pt-1 border-t border-white/10">
                     <div>
                       <div className="flex justify-between text-[11px] text-white/70 mb-1">
@@ -2320,8 +2985,8 @@ export default function PdfEditorTool() {
                         className="w-full h-1 bg-white/20 rounded-lg cursor-pointer accent-[#c7f36b]"
                       />
                     </div>
-                    <div className="flex items-end">
-                      <label className="flex items-center gap-1.5 text-xs text-white/80 cursor-pointer p-1 rounded hover:bg-white/5 w-full">
+                    <div className="flex items-center justify-around gap-1 pt-3">
+                      <label className="flex items-center gap-1 text-xs text-white/80 cursor-pointer p-1 rounded hover:bg-white/5">
                         <input
                           type="checkbox"
                           checked={isBold}
@@ -2334,7 +2999,22 @@ export default function PdfEditorTool() {
                           }}
                           className="accent-[#c7f36b]"
                         />
-                        <span className="font-bold">Bold Text</span>
+                        <span className="font-bold">Bold</span>
+                      </label>
+                      <label className="flex items-center gap-1 text-xs text-white/80 cursor-pointer p-1 rounded hover:bg-white/5">
+                        <input
+                          type="checkbox"
+                          checked={isItalic}
+                          onChange={(e) => {
+                            const val = e.target.checked;
+                            setIsItalic(val);
+                            if (selectedAnnotation && selectedAnnotation.type === "text") {
+                              updateSelectedAnnotationStyle({ isItalic: val });
+                            }
+                          }}
+                          className="accent-[#c7f36b]"
+                        />
+                        <span className="italic">Italic</span>
                       </label>
                     </div>
                   </div>
@@ -2969,7 +3649,14 @@ export default function PdfEditorTool() {
             </div>
 
             {/* Right Column: PDF Canvas Workspace (GAP-07 containerRef attached) */}
-            <div ref={containerRef} className="lg:col-span-8 xl:col-span-9 rounded-2xl border border-white/15 bg-[#141a29] p-4 sm:p-6 flex flex-col items-center shadow-2xl min-h-[650px] overflow-auto">
+            <div
+              ref={containerRef}
+              className={`lg:col-span-8 xl:col-span-9 rounded-2xl border border-white/15 bg-[#141a29] p-4 sm:p-6 flex flex-col items-center shadow-2xl transition-all ${
+                studioViewMode === "viewport"
+                  ? "max-h-[calc(100vh-6rem)] overflow-auto"
+                  : "min-h-[650px] overflow-auto"
+              }`}
+            >
             {/* Floating Top Status Bar */}
             <div className="mb-4 flex items-center justify-between w-full max-w-4xl px-2">
               <div className="flex items-center gap-2">
@@ -3098,6 +3785,8 @@ export default function PdfEditorTool() {
                               setTextColor(ann.color);
                               setFontSize(ann.fontSize);
                               setIsBold(!!ann.isBold);
+                              setIsItalic(!!ann.isItalic);
+                              if (ann.fontFamily) setFontFamily(ann.fontFamily);
                               if (ann.bgColor) setTextBgColor(ann.bgColor);
                               
                               // Start dragging
@@ -3115,7 +3804,9 @@ export default function PdfEditorTool() {
                               top: `${ann.y}%`,
                               color: ann.color,
                               fontSize: `${ann.fontSize * 1.5 * zoomScale}px`,
+                              fontFamily: ann.fontFamily === "Times-Roman" ? "'Times New Roman', Times, Georgia, serif" : ann.fontFamily === "Courier" ? "'Courier New', Courier, monospace" : "Arial, Helvetica, sans-serif",
                               fontWeight: ann.isBold ? "bold" : "normal",
+                              fontStyle: ann.isItalic ? "italic" : "normal",
                               backgroundColor: ann.bgColor && ann.bgColor !== "transparent" ? ann.bgColor : "transparent",
                               padding: "1px 4px",
                               borderRadius: "2px",
@@ -3138,6 +3829,8 @@ export default function PdfEditorTool() {
                                     color: ann.color,
                                     fontSize: "inherit",
                                     fontWeight: "inherit",
+                                    fontStyle: "inherit",
+                                    fontFamily: "inherit",
                                     backgroundColor: "transparent",
                                     border: "none",
                                     outline: "none",
@@ -3148,7 +3841,9 @@ export default function PdfEditorTool() {
                                   onMouseDown={(e) => e.stopPropagation()}
                                   className="absolute -top-7 left-0 z-40 flex items-center gap-1 rounded bg-[#0e1628] border border-[#c7f36b]/60 px-1.5 py-0.5 shadow-xl text-[10px] text-white"
                                 >
-                                  <span className="font-mono text-[#c7f36b] uppercase text-[9px]">Text</span>
+                                  <span className="font-mono text-[#c7f36b] uppercase text-[9px]">
+                                    {ann.fontFamily === "Times-Roman" ? "Serif" : ann.fontFamily === "Courier" ? "Mono" : "Sans"} · {ann.fontSize}pt
+                                  </span>
                                   <button type="button" onClick={() => duplicateAnnotation(ann.id)} className="p-0.5 hover:text-[#c7f36b]" title="Duplicate"><Copy size={11} /></button>
                                   <button type="button" onClick={() => deleteAnnotation(ann.id)} className="p-0.5 text-red-400 hover:text-red-300" title="Delete"><Trash2 size={11} /></button>
                                 </div>
@@ -3485,6 +4180,98 @@ export default function PdfEditorTool() {
                           </div>
                         );
                       }
+                      if (ann.type === "inplace-edit") {
+                        const isSelected = ann.id === selectedId;
+                        return (
+                          <div
+                            key={ann.id}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setSelectedId(ann.id);
+                            }}
+                            onDoubleClick={(e) => {
+                              e.stopPropagation();
+                              handleReopenInPlaceEdit(ann);
+                            }}
+                            onMouseDown={(e) => {
+                              e.stopPropagation();
+                              setSelectedId(ann.id);
+                              if (overlayRef.current) {
+                                const rect = overlayRef.current.getBoundingClientRect();
+                                const mouseX = ((e.clientX - rect.left) / rect.width) * 100;
+                                const mouseY = ((e.clientY - rect.top) / rect.height) * 100;
+                                setDragOffset({ x: mouseX - ann.x, y: mouseY - ann.y });
+                                setIsDraggingSelected(true);
+                              }
+                            }}
+                            style={{
+                              position: "absolute",
+                              left: `${ann.x}%`,
+                              top: `${ann.y}%`,
+                              minWidth: `${ann.width}%`,
+                              backgroundColor: ann.bgColor || "#ffffff",
+                              color: ann.color || "#0f172a",
+                              fontSize: `${ann.fontSize * 1.5 * zoomScale}px`,
+                              fontFamily: ann.fontFamily === "Times-Roman"
+                                ? (ann.cleanFontName ? `"${ann.cleanFontName}", 'Times New Roman', Times, Georgia, serif` : "'Times New Roman', Times, Georgia, serif")
+                                : ann.fontFamily === "Courier"
+                                ? (ann.cleanFontName ? `"${ann.cleanFontName}", 'Courier New', Courier, monospace` : "'Courier New', Courier, monospace")
+                                : (ann.cleanFontName ? `"${ann.cleanFontName}", Arial, Helvetica, -apple-system, sans-serif` : "Arial, Helvetica, -apple-system, sans-serif"),
+                              fontWeight: ann.isBold ? "bold" : "normal",
+                              fontStyle: ann.isItalic ? "italic" : "normal",
+                              lineHeight: "1.2",
+                              padding: "0 2px",
+                              cursor: "pointer",
+                              border: isSelected ? "1px dashed #0284c7" : "1px solid transparent",
+                              boxShadow: isSelected ? "0 0 0 1px rgba(2, 132, 199, 0.4)" : "none",
+                              borderRadius: "2px",
+                              zIndex: isSelected ? 35 : 15,
+                              whiteSpace: "pre-wrap",
+                              display: "inline-flex",
+                              alignItems: "center",
+                              overflow: "visible",
+                            }}
+                            className="select-none transition-shadow"
+                            title="Click to select, double-click to edit text"
+                          >
+                            <span>{ann.newText}</span>
+                            {isSelected && (
+                              <div
+                                onMouseDown={(e) => e.stopPropagation()}
+                                className="absolute -top-7 left-0 z-50 flex items-center gap-1.5 rounded-lg bg-[#0e1628] border border-sky-400/80 px-2 py-0.5 shadow-xl text-[10px] text-white whitespace-nowrap"
+                              >
+                                <span className="font-mono text-sky-300 font-semibold">{ann.cleanFontName}</span>
+                                <span className="text-white/60">{ann.fontSize}pt · {ann.isBold ? "Bold" : "Reg"}</span>
+                                <div className="h-3 w-px bg-white/20 mx-0.5" />
+                                <button
+                                  type="button"
+                                  onClick={() => handleReopenInPlaceEdit(ann)}
+                                  className="text-[#c7f36b] hover:underline font-bold flex items-center gap-0.5 cursor-pointer"
+                                  title="Edit this text line in place"
+                                >
+                                  ✏️ Edit Text
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => duplicateAnnotation(ann.id)}
+                                  className="p-0.5 hover:text-[#c7f36b] ml-1 cursor-pointer"
+                                  title="Duplicate"
+                                >
+                                  <Copy size={11} />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => deleteAnnotation(ann.id)}
+                                  className="p-0.5 text-red-400 hover:text-red-300 cursor-pointer"
+                                  title="Delete text"
+                                >
+                                  <Trash2 size={11} />
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      }
                       if (ann.type === "draw") {
                         const pathD = ann.points.reduce(
                           (acc, pt, idx) => `${acc} ${idx === 0 ? "M" : "L"} ${pt.x} ${pt.y}`,
@@ -3510,6 +4297,244 @@ export default function PdfEditorTool() {
                       }
                       return null;
                     })}
+
+                    {/* Interactive Detected Text Blocks Layer (ILovePDF Auto-Font Mode) */}
+                    {activeTool === "smart-edit" && (
+                      <div className="absolute inset-0 pointer-events-none">
+                        {detectedBlocks.map((block) => {
+                          const isHovered = hoveredBlockId === block.id;
+                          const isActive = activeInlineBlock?.id === block.id;
+
+                          return (
+                            <div
+                              key={block.id}
+                              onMouseEnter={() => setHoveredBlockId(block.id)}
+                              onMouseLeave={() => setHoveredBlockId(null)}
+                              onClick={(e) => handleSelectBlockForEdit(block, e)}
+                              style={{
+                                position: "absolute",
+                                left: `${block.x}%`,
+                                top: `${block.y}%`,
+                                width: `${block.width}%`,
+                                height: `${block.height}%`,
+                                pointerEvents: "auto",
+                                cursor: "pointer",
+                                border: isActive ? "none" : isHovered ? "1.5px dashed #38bdf8" : "1px solid transparent",
+                                backgroundColor: isActive ? "transparent" : isHovered ? "rgba(56,189,248,0.12)" : "transparent",
+                                borderRadius: "2px",
+                              }}
+                              className="transition-colors group"
+                              title={`Click to edit: "${block.text}" (${block.font.cleanName})`}
+                            >
+                              {/* Font Tag badge on hover */}
+                              {isHovered && !isActive && (
+                                <div
+                                  style={{
+                                    position: "absolute",
+                                    bottom: "100%",
+                                    left: "0",
+                                    fontSize: "9px",
+                                  }}
+                                  className="rounded bg-[#0e1628] border border-sky-400/80 px-1.5 py-0.5 font-mono text-sky-200 shadow-xl whitespace-nowrap z-50 pointer-events-none mb-0.5 flex items-center gap-1"
+                                >
+                                  <span className="h-1 w-1 rounded-full bg-[#c7f36b]" />
+                                  <span>{block.font.cleanName}</span>
+                                  <span className="text-white/50">{block.font.fontSize}pt</span>
+                                </div>
+                              )}
+
+                              {/* In-Place Content Editable Input when active */}
+                              {isActive && (
+                                <div
+                                  onClick={(e) => e.stopPropagation()}
+                                  style={{
+                                    position: "absolute",
+                                    left: "-2px",
+                                    top: "-2px",
+                                    minWidth: "max(100%, 280px)",
+                                    zIndex: 60,
+                                  }}
+                                  className="relative"
+                                >
+                                  {/* Floating Top/Bottom Formatting Toolbar (iLovePDF Style) */}
+                                  <div
+                                    style={{
+                                      position: "absolute",
+                                      ...(block.y < 9
+                                        ? { top: "100%", marginTop: "8px" }
+                                        : { bottom: "100%", marginBottom: "8px" }),
+                                      left: "0",
+                                    }}
+                                    className="flex items-center flex-wrap gap-1.5 rounded-xl bg-[#0e1628]/98 border border-sky-400/80 px-3 py-1.5 shadow-2xl z-50 text-xs backdrop-blur-md whitespace-nowrap"
+                                  >
+                                    {/* Detected Font Family & Standard Select */}
+                                    <div className="flex items-center gap-1 pr-1.5 border-r border-white/15">
+                                      <span className="font-mono text-[11px] font-semibold text-sky-300 max-w-[110px] truncate" title={block.font.cleanName}>
+                                        {block.font.cleanName}
+                                      </span>
+                                      <select
+                                        value={fontFamily}
+                                        onChange={(e) => setFontFamily(e.target.value as any)}
+                                        className="bg-black/80 border border-white/20 rounded text-[10px] text-white/90 px-1 py-0.5 outline-none cursor-pointer"
+                                        title="Font Family"
+                                      >
+                                        <option value="Helvetica">Sans</option>
+                                        <option value="Times-Roman">Serif</option>
+                                        <option value="Courier">Mono</option>
+                                      </select>
+                                    </div>
+
+                                    {/* Bold Toggle [B] */}
+                                    <button
+                                      type="button"
+                                      onClick={() => setIsBold((b) => !b)}
+                                      className={`h-6 w-6 rounded font-bold text-xs flex items-center justify-center transition-all cursor-pointer ${
+                                        isBold
+                                          ? "bg-[#c7f36b] text-[#0b1020] font-black ring-1 ring-[#c7f36b]"
+                                          : "text-white/80 hover:bg-white/15 border border-white/20"
+                                      }`}
+                                      title={isBold ? "Bold is ON (Click to make Normal)" : "Bold is OFF (Click to make Bold)"}
+                                    >
+                                      B
+                                    </button>
+
+                                    {/* Italic Toggle [I] */}
+                                    <button
+                                      type="button"
+                                      onClick={() => setIsItalic((it) => !it)}
+                                      className={`h-6 w-6 rounded italic font-serif text-xs flex items-center justify-center transition-all cursor-pointer ${
+                                        isItalic
+                                          ? "bg-[#c7f36b] text-[#0b1020] font-black ring-1 ring-[#c7f36b]"
+                                          : "text-white/80 hover:bg-white/15 border border-white/20"
+                                      }`}
+                                      title="Toggle Italic"
+                                    >
+                                      I
+                                    </button>
+
+                                    {/* Font Size Stepper */}
+                                    <div className="flex items-center rounded border border-white/20 bg-black/40 px-1 py-0.5 gap-1">
+                                      <button
+                                        type="button"
+                                        onClick={() => setFontSize((s) => Math.max(6, (s || block.font.fontSize) - 1))}
+                                        className="h-5 w-4 rounded hover:bg-white/20 text-white text-xs font-bold flex items-center justify-center cursor-pointer"
+                                        title="Decrease font size (-1pt)"
+                                      >
+                                        -
+                                      </button>
+                                      <span className="font-mono text-[11px] text-[#c7f36b] px-0.5 font-bold min-w-[28px] text-center">
+                                        {fontSize || block.font.fontSize}pt
+                                      </span>
+                                      <button
+                                        type="button"
+                                        onClick={() => setFontSize((s) => Math.min(72, (s || block.font.fontSize) + 1))}
+                                        className="h-5 w-4 rounded hover:bg-white/20 text-white text-xs font-bold flex items-center justify-center cursor-pointer"
+                                        title="Increase font size (+1pt)"
+                                      >
+                                        +
+                                      </button>
+                                    </div>
+
+                                    {/* Quick Color Swatches */}
+                                    <div className="flex items-center gap-1 px-1 border-x border-white/15">
+                                      {[
+                                        { color: "#0f172a", label: "Black" },
+                                        { color: "#1e3a8a", label: "Navy" },
+                                        { color: "#dc2626", label: "Red" },
+                                        { color: "#059669", label: "Green" },
+                                      ].map((c) => (
+                                        <button
+                                          key={c.color}
+                                          type="button"
+                                          onClick={() => setTextColor(c.color)}
+                                          style={{ backgroundColor: c.color }}
+                                          className={`h-4 w-4 rounded-full border transition-transform cursor-pointer ${
+                                            textColor === c.color ? "ring-2 ring-[#c7f36b] scale-110 border-white" : "border-white/30 hover:scale-105"
+                                          }`}
+                                          title={`Set color: ${c.label}`}
+                                        />
+                                      ))}
+                                      <input
+                                        type="color"
+                                        value={textColor || "#0f172a"}
+                                        onChange={(e) => setTextColor(e.target.value)}
+                                        className="h-5 w-5 rounded cursor-pointer border border-white/20 bg-transparent p-0"
+                                        title="Choose custom text color"
+                                      />
+                                    </div>
+
+                                    {/* Save & Cancel */}
+                                    <button
+                                      type="button"
+                                      onClick={handleCommitInlineEdit}
+                                      className="rounded bg-[#c7f36b] text-[#0b1020] px-3 py-1 text-xs font-bold hover:bg-[#b8eb55] transition-colors shadow-sm cursor-pointer ml-1 flex items-center gap-1"
+                                      title="Apply text changes (Enter)"
+                                    >
+                                      ✓ Save
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => setActiveInlineBlock(null)}
+                                      className="rounded border border-white/20 text-white/80 hover:bg-white/10 px-2 py-1 text-xs transition-colors cursor-pointer"
+                                      title="Cancel editing (Escape)"
+                                    >
+                                      ✕
+                                    </button>
+                                  </div>
+
+                                  {/* In-Place Text Input Field directly on document (iLovePDF Style) */}
+                                  <div
+                                    style={{
+                                      borderRadius: "3px",
+                                      border: "1.5px solid #0284c7",
+                                      backgroundColor: "#ffffff",
+                                      boxShadow: "0 2px 8px rgba(0, 0, 0, 0.12)",
+                                      display: "flex",
+                                      alignItems: "center",
+                                      overflow: "hidden",
+                                    }}
+                                  >
+                                    <input
+                                      type="text"
+                                      value={inlineDraftText}
+                                      autoFocus
+                                      onChange={(e) => setInlineDraftText(e.target.value)}
+                                      onKeyDown={(e) => {
+                                        if (e.key === "Enter") {
+                                          e.preventDefault();
+                                          handleCommitInlineEdit();
+                                        } else if (e.key === "Escape") {
+                                          setActiveInlineBlock(null);
+                                        }
+                                      }}
+                                      style={{
+                                        fontSize: `${(fontSize || block.font.fontSize) * 1.5 * zoomScale}px`,
+                                        fontFamily: fontFamily === "Times-Roman"
+                                          ? (block.font.cleanName ? `"${block.font.cleanName}", 'Times New Roman', Times, serif` : "'Times New Roman', Times, serif")
+                                          : fontFamily === "Courier"
+                                          ? (block.font.cleanName ? `"${block.font.cleanName}", 'Courier New', monospace` : "'Courier New', monospace")
+                                          : (block.font.cleanName ? `"${block.font.cleanName}", Arial, Helvetica, sans-serif` : "Arial, Helvetica, sans-serif"),
+                                        fontWeight: isBold ? "bold" : "normal",
+                                        fontStyle: isItalic ? "italic" : "normal",
+                                        color: textColor || block.suggestedColor || "#0f172a",
+                                        backgroundColor: "#ffffff",
+                                        lineHeight: "1.25",
+                                        width: "100%",
+                                        padding: "2px 6px",
+                                        outline: "none",
+                                        border: "none",
+                                      }}
+                                      className="focus:outline-none min-w-[220px]"
+                                      placeholder="Type edited text..."
+                                    />
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
 
                     {/* Temporary drawing stroke */}
                     {activeTool === "draw" && isDrawing && currentPath.length > 1 && (
@@ -3674,11 +4699,73 @@ export default function PdfEditorTool() {
                       </div>
                     )}
                   </div>
+                {/* Mobile / Narrow Screen Floating Action Dock so tools are never lost */}
+                <div className="lg:hidden sticky bottom-4 z-40 mt-4 flex items-center justify-center gap-1.5 rounded-full border border-white/20 bg-[#0e1628]/95 px-3 py-2 shadow-2xl backdrop-blur-md text-xs">
+                  <button
+                    type="button"
+                    onClick={() => { setActiveTool("smart-edit"); setSelectedId(null); }}
+                    className={`p-1.5 rounded-full transition-colors ${activeTool === "smart-edit" ? "bg-[#c7f36b] text-[#0b1020]" : "text-white/70 hover:text-white"}`}
+                    title="Smart Edit"
+                  >
+                    <Sparkles size={14} />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setActiveTool("text"); setSelectedId(null); }}
+                    className={`p-1.5 rounded-full transition-colors ${activeTool === "text" ? "bg-[#c7f36b] text-[#0b1020]" : "text-white/70 hover:text-white"}`}
+                    title="Add Text"
+                  >
+                    <Type size={14} />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setActiveTool("highlight"); setSelectedId(null); }}
+                    className={`p-1.5 rounded-full transition-colors ${activeTool === "highlight" ? "bg-[#c7f36b] text-[#0b1020]" : "text-white/70 hover:text-white"}`}
+                    title="Highlight"
+                  >
+                    <Highlighter size={14} />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setActiveTool("whiteout"); setSelectedId(null); }}
+                    className={`p-1.5 rounded-full transition-colors ${activeTool === "whiteout" ? "bg-[#c7f36b] text-[#0b1020]" : "text-white/70 hover:text-white"}`}
+                    title="Cover / Redact"
+                  >
+                    <Square size={14} />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setActiveTool("draw"); setSelectedId(null); }}
+                    className={`p-1.5 rounded-full transition-colors ${activeTool === "draw" ? "bg-[#c7f36b] text-[#0b1020]" : "text-white/70 hover:text-white"}`}
+                    title="Draw / Sign"
+                  >
+                    <PenTool size={14} />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setActiveTool("stamp"); setSelectedId(null); }}
+                    className={`p-1.5 rounded-full transition-colors ${activeTool === "stamp" ? "bg-[#c7f36b] text-[#0b1020]" : "text-white/70 hover:text-white"}`}
+                    title="Stamp"
+                  >
+                    <Stamp size={14} />
+                  </button>
+                  <div className="h-4 w-px bg-white/20 mx-0.5" />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      document.getElementById("pdf-visual-editor-container")?.scrollIntoView({ behavior: "smooth" });
+                    }}
+                    className="flex items-center gap-1 text-[11px] font-mono text-[#c7f36b] px-1.5 py-0.5 rounded hover:bg-[#c7f36b]/10"
+                    title="Jump to Tool Settings"
+                  >
+                    Options ↑
+                  </button>
                 </div>
               </div>
             </div>
           </div>
-        )}
+        </div>
+      )}
 
         {/* Redaction Security Info Modal */}
         {showRedactionInfo && (

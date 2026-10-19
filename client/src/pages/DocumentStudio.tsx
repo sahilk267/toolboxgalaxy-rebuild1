@@ -1,12 +1,14 @@
 import { useState } from "react";
 import AppShell from "@/components/AppShell";
 import PdfEditorTool from "@/components/PdfEditorTool";
+import PdfCompressTool from "@/components/PdfCompressTool";
 import EnterprisePdfTool from "@/components/EnterprisePdfTool";
 import { ImagesToPdfTool, PdfMergeSplitTool } from "@/components/PdfToolsRunner";
 import ExcelStudioTool from "@/components/ExcelStudioTool";
 import WordDocxTool from "@/components/WordDocxTool";
 import {
   FileText,
+  Minimize2,
   Layers,
   Image,
   FileSpreadsheet,
@@ -18,7 +20,7 @@ import {
   Tag
 } from "lucide-react";
 
-type StudioModule = "editor" | "enterprise" | "merge-split" | "images-to-pdf" | "excel" | "docx";
+type StudioModule = "editor" | "compress" | "enterprise" | "merge-split" | "images-to-pdf" | "excel" | "docx";
 
 interface ModuleConfig {
   id: StudioModule;
@@ -37,6 +39,14 @@ const modules: ModuleConfig[] = [
     badge: "Interactive Canvas & Bates",
     description: "Live Bates numbering preview, permanent pixel redactions, deep metadata purge, visual signatures & SHA-256 audit certs.",
     icon: FileText,
+  },
+  {
+    id: "compress",
+    title: "PDF Compressor & Optimizer",
+    shortTitle: "Compress PDF",
+    badge: "Up to -80%",
+    description: "Compress and reduce PDF file size with 3 iLovePDF quality presets or lossless stream purge in browser memory.",
+    icon: Minimize2,
   },
   {
     id: "enterprise",
@@ -82,6 +92,8 @@ const modules: ModuleConfig[] = [
 
 export default function DocumentStudio() {
   const [activeModule, setActiveModule] = useState<StudioModule>("editor");
+  const [sharedPdfBytes, setSharedPdfBytes] = useState<Uint8Array | null>(null);
+  const [sharedFileName, setSharedFileName] = useState<string>("document.pdf");
 
   const currentModuleConfig = modules.find((m) => m.id === activeModule)!;
 
@@ -187,7 +199,27 @@ export default function DocumentStudio() {
 
           {/* Render Active Tool */}
           <div className="mt-2">
-            {activeModule === "editor" && <PdfEditorTool />}
+            {activeModule === "editor" && (
+              <PdfEditorTool
+                initialPdfBytes={sharedPdfBytes}
+                initialFileName={sharedFileName}
+                onPdfLoaded={(bytes, name) => {
+                  setSharedPdfBytes(bytes);
+                  setSharedFileName(name);
+                }}
+              />
+            )}
+            {activeModule === "compress" && (
+              <PdfCompressTool
+                initialPdfBytes={sharedPdfBytes}
+                initialFileName={sharedFileName}
+                onOpenInEditor={(bytes, name) => {
+                  setSharedPdfBytes(bytes);
+                  setSharedFileName(name);
+                  setActiveModule("editor");
+                }}
+              />
+            )}
             {activeModule === "enterprise" && <EnterprisePdfTool />}
             {activeModule === "merge-split" && <PdfMergeSplitTool />}
             {activeModule === "images-to-pdf" && <ImagesToPdfTool />}

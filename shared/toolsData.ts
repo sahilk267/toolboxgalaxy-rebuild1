@@ -38,6 +38,7 @@ export type ToolKind =
   | "lineSorter"
   | "imageMetadata"
   | "pdfEditor"
+  | "pdfCompress"
   | "enterprisePdf"
   | "pdfMergeSplit"
   | "imagesToPdf"
@@ -427,6 +428,17 @@ export const tools: ToolDefinition[] = [
     tags: ["Local", "Private", "PDF", "Popular"],
     hindiName: "एंटरप्राइज़ पीडीएफ सूट (लीगल और ऑडिट)",
     hindiDescription: "लीगल बेट्स नंबरिंग, डीप मेटाडेटा क्लिनर, एक्रोफॉर्म्स एडिटर और SHA-256 ऑडिट सर्टिफिकेट।",
+  },
+  {
+    slug: "pdf-compressor",
+    name: "PDF Compressor & Optimizer",
+    category: "Convert",
+    description: "Compress and reduce PDF file size up to 80% with adjustable quality profiles directly in browser memory.",
+    kind: "pdfCompress",
+    accent: "lime",
+    tags: ["Local", "Private", "PDF", "Popular"],
+    hindiName: "पीडीएफ कंप्रेसर और ऑप्टिमाइज़र",
+    hindiDescription: "ब्राउज़र मेमोरी में 3 प्रोफाइल के साथ पीडीएफ फाइल का साइज़ 80% तक कम करें।",
   },
   {
     slug: "pdf-merge-split",
