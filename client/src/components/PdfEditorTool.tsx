@@ -412,7 +412,7 @@ export default function PdfEditorTool({
   const [annotations, setAnnotations] = useState<Annotation[]>([]);
   const [activeTool, setActiveTool] = useState<
     "select" | "smart-edit" | "text" | "whiteout" | "draw" | "stamp" | "image" | "link" | "highlight" | "shape"
-  >("text");
+  >("smart-edit");
   
   // History Undo / Redo Stack Engine (GAP-01)
   const undoStackRef = useRef<{ annotations: Annotation[]; pageRotations: number[] }[]>([]);
@@ -505,7 +505,7 @@ export default function PdfEditorTool({
   const [documentStructure, setDocumentStructure] = useState<DocumentStructure | null>(null);
   const [ocrActiveTab, setOcrActiveTab] = useState<"formatted" | "raw">("formatted");
 
-  // Intelligent Auto-Font & In-Place Text Editing State (ILovePDF Model)
+  // Intelligent Auto-Font & In-Place Text Editing State (Editing Mode)
   const [detectedBlocks, setDetectedBlocks] = useState<DetectedTextBlock[]>([]);
   const [isExtractingBlocks, setIsExtractingBlocks] = useState<boolean>(false);
   const [hoveredBlockId, setHoveredBlockId] = useState<string | null>(null);
@@ -813,6 +813,7 @@ export default function PdfEditorTool({
       setPageRotations([0, 0]);
       setAnnotations([]);
       setSelectedId(null);
+      setActiveTool("smart-edit");
       showToast("Interactive sample PDF loaded!");
     } catch (err) {
       console.error(err);
@@ -843,6 +844,7 @@ export default function PdfEditorTool({
       setPageRotations(new Array(count).fill(0));
       setAnnotations([]);
       setSelectedId(null);
+      setActiveTool("smart-edit");
       showToast(`Loaded ${file.name} (${count} pages)`);
     } catch (err) {
       showToast("Could not load PDF. Please ensure it is unencrypted.");
@@ -1154,7 +1156,7 @@ export default function PdfEditorTool({
     rotatePageAtIndex(currentPage, 90);
   };
 
-  // Select a detected PDF text block for inline in-place editing (ILovePDF model)
+  // Select a detected PDF text block for inline in-place editing (Editing Mode)
   const handleSelectBlockForEdit = (block: DetectedTextBlock, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
     setActiveInlineBlock(block);
@@ -2507,10 +2509,10 @@ export default function PdfEditorTool({
                   >
                     <div className="flex items-center gap-2">
                       <Sparkles size={15} className="text-[#c7f36b]" />
-                      <span>Auto Font & Inline Edit</span>
+                      <span>Editing Mode</span>
                     </div>
                     <span className="text-[10px] font-mono bg-[#c7f36b]/20 text-[#c7f36b] px-2 py-0.5 rounded-full border border-[#c7f36b]/30">
-                      ILovePDF Mode
+                      Default
                     </span>
                   </button>
                   <button
@@ -2619,15 +2621,15 @@ export default function PdfEditorTool({
                 </div>
               </div>
 
-              {/* Intelligent Auto-Font & In-Place Text Editing (ILovePDF Model) */}
+              {/* Intelligent Auto-Font & In-Place Text Editing (Editing Mode) */}
               {activeTool === "smart-edit" && (
                 <div className="space-y-3 rounded-lg border border-sky-500/30 bg-sky-500/[0.05] p-3.5 shadow-inner">
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-semibold text-white/90 flex items-center gap-1.5">
-                      <Sparkles size={14} className="text-[#c7f36b]" /> Auto Font & Inline Edit
+                      <Sparkles size={14} className="text-[#c7f36b]" /> Editing Mode
                     </span>
                     <span className="text-[10px] font-mono text-[#c7f36b] bg-[#c7f36b]/15 px-1.5 py-0.5 rounded border border-[#c7f36b]/30">
-                      ACTIVE
+                      DEFAULT · ACTIVE
                     </span>
                   </div>
 
@@ -4294,7 +4296,7 @@ export default function PdfEditorTool({
                       return null;
                     })}
 
-                    {/* Interactive Detected Text Blocks Layer (ILovePDF Auto-Font Mode) */}
+                    {/* Interactive Detected Text Blocks Layer (Editing Mode) */}
                     {activeTool === "smart-edit" && (
                       <div className="absolute inset-0 pointer-events-none">
                         {detectedBlocks.map((block) => {
@@ -4352,7 +4354,7 @@ export default function PdfEditorTool({
                                   }}
                                   className="relative"
                                 >
-                                  {/* Floating Top/Bottom Formatting Toolbar (iLovePDF Style) */}
+                                  {/* Floating Top/Bottom Formatting Toolbar (Editing Mode) */}
                                   <div
                                     style={{
                                       position: "absolute",
@@ -4478,7 +4480,7 @@ export default function PdfEditorTool({
                                     </button>
                                   </div>
 
-                                  {/* In-Place Text Input Field directly on document (iLovePDF Style) */}
+                                  {/* In-Place Text Input Field directly on document (Editing Mode) */}
                                   <div
                                     style={{
                                       borderRadius: "3px",
