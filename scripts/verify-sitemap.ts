@@ -41,6 +41,7 @@ const requiredCoreRoutes = [
   `${BASE_URL}/tools`,
   `${BASE_URL}/guides`,
   `${BASE_URL}/games`,
+  `${BASE_URL}/about`,
   `${BASE_URL}/privacy`,
   `${BASE_URL}/terms`,
   `${BASE_URL}/contact`,

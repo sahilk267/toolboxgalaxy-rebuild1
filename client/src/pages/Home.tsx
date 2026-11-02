@@ -158,7 +158,7 @@ export default function Home() {
           </p>
           <div className="text-xs text-white/60 space-y-1">
             <p>Developed &amp; Maintained by <strong className="text-white">Aaditech Solution</strong></p>
-            <p>Registration &amp; Operation: Mumbai, Maharashtra, India</p>
+            <p>Operating Address: Bandra Kurla Complex, Bandra East, Mumbai, Maharashtra 400051, India</p>
           </div>
         </div>
 
@@ -189,8 +189,13 @@ export default function Home() {
           <h3 className="font-mono text-xs uppercase tracking-wider text-[#c7f36b] font-semibold mb-3">Company &amp; Legal</h3>
           <ul className="text-sm space-y-2">
             <li>
+              <Link href="/about" className="hover:text-white transition-colors font-medium text-white/90">
+                About Us
+              </Link>
+            </li>
+            <li>
               <Link href="/contact" className="hover:text-white transition-colors">
-                About Aaditech Solution
+                Contact &amp; Support
               </Link>
             </li>
             <li>

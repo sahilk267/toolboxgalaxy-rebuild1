@@ -6,6 +6,7 @@ import PwaUpdateNotice from "@/components/PwaUpdateNotice";
 import { ThemeProvider } from "@/contexts/ThemeContext";
 import { LanguageProvider } from "@/contexts/LanguageContext";
 import Contact from "@/pages/Contact";
+import About from "@/pages/About";
 import Games from "@/pages/Games";
 import Home from "@/pages/Home";
 import NotFound from "@/pages/NotFound";
@@ -145,6 +146,7 @@ export default function App() {
               <Route path="/games/logic-lab" component={LogicLabRoute} />
               <Route path="/games/:slug" component={LogicPuzzleRoute} />
               <Route path="/games/logic/:slug" component={LogicPuzzleRoute} />
+              <Route path="/about" component={About} />
               <Route path="/contact" component={Contact} />
               <Route path="/privacy" component={Privacy} />
               <Route path="/terms" component={Terms} />

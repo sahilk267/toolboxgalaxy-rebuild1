@@ -35,6 +35,7 @@
 - [WebMCP In-Browser Tools](https://toolboxgalaxy.com/): Navigator Model Context tools registered on page load for browser agents.
 
 ## Organization & Legal
-- [About & Contact](https://toolboxgalaxy.com/contact): Direct feedback and support channels maintained by Aaditech Solution. Contact: support@toolboxgalaxy.com, +91-9876543210.
+- [About Us](https://toolboxgalaxy.com/about): Mission, client-side RAM sandbox architecture, and maintainer information (Aaditech Solution).
+- [Contact & Support](https://toolboxgalaxy.com/contact): Direct feedback and support channels. Contact: support@toolboxgalaxy.com, +91-9876543210.
 - [Privacy Policy](https://toolboxgalaxy.com/privacy): Details our zero-server-upload, zero-tracking, client-side RAM sandbox architecture.
 - [Terms of Service](https://toolboxgalaxy.com/terms): Free-of-charge usage terms and open developer utility conditions.

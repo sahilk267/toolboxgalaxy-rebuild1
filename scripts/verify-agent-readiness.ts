@@ -4,6 +4,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { isValidRoute } from "../shared/routeValidator";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 let failures = 0;
@@ -29,7 +30,17 @@ const urlCount = (sitemapContent.match(/<url>/g) || []).length;
 const lastmodCount = (sitemapContent.match(/<lastmod>\d{4}-\d{2}-\d{2}<\/lastmod>/g) || []).length;
 test("2. Sitemap carries lastmod on all URLs", urlCount > 0 && urlCount === lastmodCount, `${lastmodCount}/${urlCount} urls have lastmod`);
 
-// 3. Clear heading hierarchy on Home.tsx and index.html
+// 3. Missing pages return a real 404
+test("3. Missing pages return a real 404",
+  !isValidRoute("/non-existent-page-test") &&
+  !isValidRoute("/tools/fake-tool") &&
+  !isValidRoute("/games/fake-game") &&
+  isValidRoute("/") &&
+  isValidRoute("/about") &&
+  isValidRoute("/tools/jwt-debugger")
+);
+
+// 4. Clear heading hierarchy on Home.tsx and index.html
 const homePath = path.resolve(__dirname, "../client/src/pages/Home.tsx");
 const homeContent = fs.readFileSync(homePath, "utf-8");
 const h1MatchHome = homeContent.match(/<h1[^>]*>([\s\S]*?)<\/h1>/g);
@@ -38,7 +49,12 @@ test("4. Exactly one <h1> on Home page naming the site", h1MatchHome !== null &&
 // 5 & 6 & 7: Structured data schemas, Organization, sameAs
 const indexPath = path.resolve(__dirname, "../client/index.html");
 const indexContent = fs.readFileSync(indexPath, "utf-8");
-test("5. Organization schema complete", indexContent.includes('"@type": "Organization"') && indexContent.includes('"legalName": "Aaditech Solution"'));
+test("5. Organization schema complete",
+  indexContent.includes('"@type": "Organization"') &&
+  indexContent.includes('"legalName": "Aaditech Solution"') &&
+  indexContent.includes('"@type": "PostalAddress"') &&
+  indexContent.includes('"addressLocality": "Mumbai"')
+);
 test("6. Entity has sameAs links", indexContent.includes('"sameAs":') && indexContent.includes("linkedin.com"));
 test("7. Multiple schema types present",
   indexContent.includes('"@type": "Organization"') &&
@@ -50,6 +66,7 @@ test("7. Multiple schema types present",
 
 // 8. About, contact and legal pages linked from homepage
 test("8. About, contact and legal linked on Home",
+  homeContent.includes('href="/about"') &&
   homeContent.includes('href="/contact"') &&
   homeContent.includes('href="/privacy"') &&
   homeContent.includes('href="/terms"')

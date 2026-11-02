@@ -265,6 +265,8 @@ export default function AppShell({ children }: { children: ReactNode }) {
           </Link>
 
           <div className="rail-legal">
+            <Link href="/about">About</Link>
+            <Link href="/contact">Contact</Link>
             <Link href="/privacy">Privacy</Link>
             <Link href="/terms">Terms</Link>
           </div>

@@ -12,6 +12,7 @@ import {
   renderToolJsonLdScript,
   renderGuideJsonLdScript,
 } from "../shared/seoCatalog";
+import { isValidRoute } from "../shared/routeValidator";
 import { sanitizeUserParam, escapeHtml } from "../shared/userParam";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -258,65 +259,6 @@ async function startServer() {
       capabilities: { tools: { listChanged: false } }
     });
   });
-
-  // Route validator to distinguish existing pages from non-existent 404 paths
-  function isValidRoute(pathname: string): boolean {
-    const cleanPath = pathname === "/" ? "/" : pathname.replace(/\/+$/, "");
-
-    const exactValidRoutes = new Set([
-      "/",
-      "/studio",
-      "/pdf-studio",
-      "/document-studio",
-      "/tools",
-      "/guides",
-      "/games",
-      "/games/logic-lab",
-      "/games/tank-evolution",
-      "/games/diep",
-      "/games/surviv-io",
-      "/games/battle-royale",
-      "/games/krunker",
-      "/games/krunker-fps",
-      "/games/orbit-dash",
-      "/games/the-hive",
-      "/games/hive",
-      "/games/spelling-bee",
-      "/games/wordle",
-      "/games/orbit-lexicon",
-      "/games/connections",
-      "/games/mini-crossword",
-      "/games/crossword",
-      "/games/strands",
-      "/games/theme-threads",
-      "/contact",
-      "/privacy",
-      "/terms",
-      "/index.html",
-      "/index.md",
-    ]);
-
-    if (exactValidRoutes.has(cleanPath)) return true;
-
-    if (cleanPath.startsWith("/tools/")) {
-      const slug = cleanPath.slice("/tools/".length).split("/")[0];
-      return Boolean(findToolBySlug(slug));
-    }
-    if (cleanPath.startsWith("/guides/")) {
-      const slug = cleanPath.slice("/guides/".length).split("/")[0];
-      return Boolean(findGuideBySlug(slug));
-    }
-    if (cleanPath.startsWith("/games/logic/")) {
-      const slug = cleanPath.slice("/games/logic/".length).split("/")[0];
-      return Boolean(findGameBySlug(slug));
-    }
-    if (cleanPath.startsWith("/games/")) {
-      const slug = cleanPath.slice("/games/".length).split("/")[0];
-      return Boolean(findGameBySlug(slug));
-    }
-
-    return false;
-  }
 
   // Goal 12: Markdown representation generator for AI agents
   function getMarkdownRepresentation(pathname: string): string {

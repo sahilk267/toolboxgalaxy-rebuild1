@@ -28,6 +28,7 @@ const coreRoutes: SitemapEntry[] = [
 ];
 
 const legalRoutes: SitemapEntry[] = [
+  { loc: `${BASE_URL}/about`, priority: "0.6" },
   { loc: `${BASE_URL}/contact`, priority: "0.5" },
   { loc: `${BASE_URL}/privacy`, priority: "0.4" },
   { loc: `${BASE_URL}/terms`, priority: "0.4" },
