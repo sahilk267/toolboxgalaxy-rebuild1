@@ -371,11 +371,11 @@ async function startServer() {
 - [Technical Guides](https://toolboxgalaxy.com/guides): Authoritative tutorials on zero-upload in-browser workflows.
 
 ## Popular Developer Utilities
-- [JSON to Zod Converter](https://toolboxgalaxy.com/tools/json-to-zod): Generate typed TypeScript Zod validation schemas from JSON payloads.
+- [JSON to Zod Converter](https://toolboxgalaxy.com/tools/json-to-zod-schema): Generate typed TypeScript Zod validation schemas from JSON payloads.
 - [JWT Debugger](https://toolboxgalaxy.com/tools/jwt-debugger): Inspect, decode, and verify JWT headers and claims client-side.
 - [cURL to Code Converter](https://toolboxgalaxy.com/tools/curl-to-code): Transform cURL syntax into fetch, axios, Python, and Go.
 - [Regex Tester](https://toolboxgalaxy.com/tools/regex-tester): Test regular expressions with live syntax highlighting and group captures.
-- [Cron Expression Generator](https://toolboxgalaxy.com/tools/cron-schedule-tool): 5-field cron schedule builder.
+- [Cron Expression Generator](https://toolboxgalaxy.com/tools/cron-schedule-expression): 5-field cron schedule builder.
 - [Tracking URL Cleaner](https://toolboxgalaxy.com/tools/tracking-url-cleaner): Strip UTM tags, Facebook fbclid, and click tracking IDs.
 
 ## Daily Logic Puzzles

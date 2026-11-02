@@ -1,0 +1,143 @@
+# Toolbox Galaxy — Full Knowledge Base & Machine Discovery Specification (llms-full.txt)
+
+> Toolbox Galaxy is a 100% in-browser, privacy-first technical workbench and daily NYT-style logic puzzles platform. All tools execute locally inside device WebAssembly, Web Workers, or JavaScript memory. Files and user inputs never touch external cloud servers. Zero tracking, zero telemetry, zero advertisements.
+
+- **Canonical URL**: https://toolboxgalaxy.com
+- **Maintainer**: Aaditech Solution (Mohd Aziz Shaikh)
+- **Support**: support@toolboxgalaxy.com | +91-9876543210
+- **Profiles**: https://www.linkedin.com/in/mohdazizshaikh
+- **Agent Protocols**:
+  - LLMs Discovery: https://toolboxgalaxy.com/llms.txt
+  - Full LLMs Spec: https://toolboxgalaxy.com/llms-full.txt
+  - MCP Server Card (SEP-1649): https://toolboxgalaxy.com/.well-known/mcp/server-card.json
+  - WebMCP In-Browser Tools: navigator.modelContext.registerTool()
+  - Markdown Representation: https://toolboxgalaxy.com/index.md (Accept: text/markdown)
+  - Sitemap: https://toolboxgalaxy.com/sitemap.xml
+
+---
+
+## 1. Core Platform Workbenches
+
+- [PDF & Document Studio](https://toolboxgalaxy.com/studio): Local in-browser PDF manipulation studio powered by pdf-lib and PDF.js. Supports page merging, splitting, rotation, visual signing, document redaction, page reordering, and OCR conversion with 100% client RAM sandboxing.
+- [Tools Foundry](https://toolboxgalaxy.com/tools): Complete foundry of 61+ verified developer utilities, formatters, cryptography tools, unit converters, and calculators.
+- [Daily Logic Puzzles Hub](https://toolboxgalaxy.com/games): Daily puzzle games inspired by classic NYT Games, LinkedIn logic challenges, and arcade classics.
+- [Technical Knowledge Guides](https://toolboxgalaxy.com/guides): Comprehensive technical guides on client-side security, zero-upload PDF workflows, and browser-first utility execution.
+
+---
+
+## 2. Complete Tools Catalog (61 Verified In-Browser Utilities)
+
+### Calculate (12 Utilities)
+
+- [Basic Calculator](https://toolboxgalaxy.com/tools/basic-calculator): Clear, local arithmetic for everyday decisions.
+- [Percentage Calculator](https://toolboxgalaxy.com/tools/percentage-calculator): Find a percentage, a part of a total, or a percentage change.
+- [BMI Calculator](https://toolboxgalaxy.com/tools/bmi-calculator): Calculate body mass index using height and weight inputs.
+- [Discount Calculator](https://toolboxgalaxy.com/tools/discount-calculator): See the final price and savings before you buy.
+- [Age Calculator](https://toolboxgalaxy.com/tools/age-calculator): Find an age in years, months, and days from a date of birth.
+- [Date Difference](https://toolboxgalaxy.com/tools/date-difference): Measure the calendar distance between two dates.
+- [Business Days Calculator](https://toolboxgalaxy.com/tools/business-days-calculator): Count Monday–Friday dates in a selected range without a holiday feed.
+- [Split Bill & Tip](https://toolboxgalaxy.com/tools/split-bill-tip-calculator): Divide a bill and a chosen tip across a group in one local readout.
+- [Loan / EMI Estimate](https://toolboxgalaxy.com/tools/loan-emi-estimate): Estimate a fixed-rate monthly payment from the amount, annual rate, and term.
+- [Work Shift Duration](https://toolboxgalaxy.com/tools/work-shift-duration): Calculate paid time after an unpaid break, including an overnight shift.
+- [GST & Business Tax Calculator](https://toolboxgalaxy.com/tools/gst-tax-calculator): Calculate GST (3%, 5%, 12%, 18%, 28%), CGST/SGST/IGST breakdown, Inclusive vs Exclusive, and print ready invoice receipt.
+- [Random Number Generator](https://toolboxgalaxy.com/tools/random-number-generator): Cryptographically secure random numbers, ranges, dice rolls, and coin flips with duplicate controls and instant stats.
+
+### Convert (12 Utilities)
+
+- [Unit Converter](https://toolboxgalaxy.com/tools/unit-converter): Convert common length units without a server round-trip.
+- [Base64 Workbench](https://toolboxgalaxy.com/tools/base64-workbench): Encode or decode UTF-8 text in your browser.
+- [Time Zone Meeting Planner](https://toolboxgalaxy.com/tools/time-zone-meeting-planner): Translate one local meeting time between common browser-supported zones.
+- [Timestamp Converter](https://toolboxgalaxy.com/tools/timestamp-converter): Read a Unix timestamp as ISO, UTC, and your browser’s local time.
+- [JSON ↔ CSV Converter](https://toolboxgalaxy.com/tools/json-csv-converter): Convert a pasted flat JSON table or CSV table without uploading the data.
+- [PDF Compressor & Optimizer](https://toolboxgalaxy.com/tools/pdf-compressor): Compress and reduce PDF file size up to 80% with adjustable quality profiles directly in browser memory.
+- [PDF Merge & Splitter](https://toolboxgalaxy.com/tools/pdf-merge-split): Combine multiple PDF documents into one or extract specific page ranges without server uploads.
+- [Images to PDF Converter](https://toolboxgalaxy.com/tools/images-to-pdf): Combine multiple JPG, PNG, and WebP images into a standardized A4 or Letter PDF document.
+- [Excel & Spreadsheet Studio](https://toolboxgalaxy.com/tools/excel-spreadsheet-studio): Inspect multi-sheet Excel (.xlsx, .xls) and CSV workbooks, remove duplicates, trim spaces, and convert to JSON/CSV/Table.
+- [Land & Plot Area Converter](https://toolboxgalaxy.com/tools/land-area-converter): Convert plot and land measurements across Bigha, Marla, Kanal, Guntha, Square Gaj, Cent, Acre, and Sq Ft.
+- [Rupees to Words & Cheque Slip](https://toolboxgalaxy.com/tools/number-to-words-rupees): Convert numbers to Indian numbering format (Lakhs & Crores) in words for bank cheques, slips, and invoices.
+- [Tracking URL & UTM Cleaner](https://toolboxgalaxy.com/tools/tracking-url-cleaner): Strip surveillance trackers, UTM campaign tags, fbclid, and referral tokens to generate clean, private direct URLs.
+
+### Code & Text (21 Utilities)
+
+- [JSON Station](https://toolboxgalaxy.com/tools/json-station): Format and validate JSON with readable errors.
+- [Text Statistics](https://toolboxgalaxy.com/tools/text-statistics): Count words, characters, lines, and reading time at a glance.
+- [URL Encoder / Decoder](https://toolboxgalaxy.com/tools/url-workbench): Encode or decode URL-safe text directly in your browser.
+- [HTML Entity Encoder / Decoder](https://toolboxgalaxy.com/tools/html-entity-tool): Encode or decode HTML entities without a remote service.
+- [Text Case Tool](https://toolboxgalaxy.com/tools/text-case-tool): Shift text between readable and developer-friendly cases.
+- [Hash Generator](https://toolboxgalaxy.com/tools/hash-generator): Create SHA-256, SHA-384, or SHA-512 digests locally.
+- [Password Strength Auditor](https://toolboxgalaxy.com/tools/password-strength-auditor): Check a password against clear local strength signals.
+- [Markdown Workspace](https://toolboxgalaxy.com/tools/markdown-workspace): Write Markdown, inspect a safe local preview, and export sanitized HTML.
+- [Text Diff Checker](https://toolboxgalaxy.com/tools/text-diff-checker): Compare two text blocks line by line, directly in your browser.
+- [Find / Replace Workspace](https://toolboxgalaxy.com/tools/find-replace-workspace): Replace literal text or simple regex matches without uploading a draft.
+- [CSV Viewer & Cleaner](https://toolboxgalaxy.com/tools/csv-viewer-cleaner): Inspect a pasted CSV table, trim cells, remove blank rows, and export a clean copy.
+- [Line Sorter & De-duplicator](https://toolboxgalaxy.com/tools/line-sorter-deduplicator): Sort pasted lines, remove repeats, and retain only the cleanup choices you make in this tab.
+- [Word (.docx) Converter & Inspector](https://toolboxgalaxy.com/tools/word-docx-converter): Parse DOCX files into clean Markdown or HTML, analyze reading telemetry, and generate formatted Word documents locally.
+- [JSON to Zod & TypeScript Studio](https://toolboxgalaxy.com/tools/json-to-zod-schema): Convert JSON into strongly-typed TypeScript interfaces and runtime Zod validation schemas with type inference.
+- [JWT Debugger & Token Inspector](https://toolboxgalaxy.com/tools/jwt-debugger): Decode and inspect JSON Web Tokens client-side. Audit headers, claims, expiration countdowns, and signatures with zero server exposure.
+- [Cron Schedule Visualizer & Humanizer](https://toolboxgalaxy.com/tools/cron-schedule-expression): Translate 5-part cron expressions into natural English, calculate the next 8 execution timestamps, and configure schedules interactively.
+- [Regex Live Tester & Cheat Sheet](https://toolboxgalaxy.com/tools/regex-tester): Real-time regular expression tester with live match highlights, capture groups breakdown, flag toggles, and substitution preview.
+- [cURL to Code Converter](https://toolboxgalaxy.com/tools/curl-to-code): Convert terminal cURL commands into clean JavaScript Fetch, Axios, Python Requests, Go net/http, Node.js, and PHP cURL code client-side.
+- [Lorem Ipsum Generator](https://toolboxgalaxy.com/tools/lorem-ipsum-generator): Generate clean dummy placeholder text for mockups and designs with paragraph, sentence, and word count controls.
+- [SEO Meta Tag Generator](https://toolboxgalaxy.com/tools/seo-meta-generator): Generate SEO-optimized HTML meta tags, OpenGraph cards, Twitter preview cards, and Next.js metadata with live Google preview.
+- [Mock & Fake Data Generator](https://toolboxgalaxy.com/tools/fake-data-generator): Generate realistic mock user profiles, customer records, addresses, financial transactions, and datasets in JSON, CSV, SQL, or Markdown format.
+
+### Create (16 Utilities)
+
+- [Password Generator](https://toolboxgalaxy.com/tools/password-generator): Create a strong password with browser-grade randomness.
+- [Color Signal](https://toolboxgalaxy.com/tools/color-signal): Inspect a HEX color and pull out a practical RGB reference.
+- [UUID Generator](https://toolboxgalaxy.com/tools/uuid-generator): Generate UUID v4 values using browser cryptography.
+- [Gradient Forge](https://toolboxgalaxy.com/tools/gradient-forge): Build a two-stop CSS linear gradient and copy the code.
+- [QR Code Generator](https://toolboxgalaxy.com/tools/qr-code-generator): Generate a shareable QR image locally from text or a link.
+- [Image Resizer](https://toolboxgalaxy.com/tools/image-resizer): Resize and compress images locally with controlled export settings.
+- [Favicon Generator](https://toolboxgalaxy.com/tools/favicon-generator): Turn an image into a locally generated square PNG icon.
+- [Color Contrast Checker](https://toolboxgalaxy.com/tools/color-contrast-checker): Check text and background colors against accessible contrast thresholds.
+- [Image Crop / Rotate / Convert](https://toolboxgalaxy.com/tools/image-crop-rotate-convert): Crop an explicitly chosen image, turn it by 90°, and export a local PNG, JPG, or WebP copy.
+- [EXIF & GPS Metadata Remover](https://toolboxgalaxy.com/tools/image-metadata-remover): Audit camera settings, capture timestamps, and GPS coordinates, and create a 100% stripped, clean local image.
+- [PDF Studio & Visual Editor](https://toolboxgalaxy.com/tools/pdf-visual-editor): Fill forms, add text, apply visual whiteout or true permanent raster redaction, annotate, rotate pages, and add watermarks in pure browser memory.
+- [Enterprise PDF Suite (Legal & Audit)](https://toolboxgalaxy.com/tools/enterprise-pdf-suite): Legal Bates numbering, deep metadata purge & XMP sanitization, AcroForm editor/flattening, and SHA-256 audit certificates.
+- [WhatsApp Direct (No Save)](https://toolboxgalaxy.com/tools/whatsapp-direct-chat): Send WhatsApp messages without saving numbers to contacts. Pick country code, quick templates, and instant QR link.
+- [Govt Job & Passport Photo Resizer](https://toolboxgalaxy.com/tools/passport-photo-resizer): Resize & compress photos to exact KB limits (20KB–50KB photo, 10KB–20KB signature) for UPSC, SSC, Railways, and Govt forms.
+- [Username Generator](https://toolboxgalaxy.com/tools/username-generator): Generate unique, aesthetic, gaming, and developer handles with custom prefixes, suffixes, styles, and separators.
+- [OpenGraph Image Builder & Canvas](https://toolboxgalaxy.com/tools/og-image-builder): Design custom 1200x630 social share cards and OpenGraph preview images with themes, custom gradients, typography, badges, and instant PNG download.
+
+---
+
+## 3. Daily Logic Puzzles & Arcade Games (18 Games)
+
+- [undefined](https://toolboxgalaxy.com/games/strands): undefined (undefined, daily reset at local midnight).
+- [undefined](https://toolboxgalaxy.com/games/the-hive): undefined (undefined, daily reset at local midnight).
+- [undefined](https://toolboxgalaxy.com/games/connections): undefined (undefined, daily reset at local midnight).
+- [undefined](https://toolboxgalaxy.com/games/orbit-lexicon): undefined (undefined, daily reset at local midnight).
+- [undefined](https://toolboxgalaxy.com/games/queens): undefined (undefined, daily reset at local midnight).
+- [undefined](https://toolboxgalaxy.com/games/mini-sudoku): undefined (undefined, daily reset at local midnight).
+- [undefined](https://toolboxgalaxy.com/games/tango): undefined (undefined, daily reset at local midnight).
+- [undefined](https://toolboxgalaxy.com/games/patches): undefined (undefined, daily reset at local midnight).
+- [undefined](https://toolboxgalaxy.com/games/zip): undefined (undefined, daily reset at local midnight).
+- [undefined](https://toolboxgalaxy.com/games/wend): undefined (undefined, daily reset at local midnight).
+- [undefined](https://toolboxgalaxy.com/games/chess-puzzles): undefined (undefined, daily reset at local midnight).
+- [undefined](https://toolboxgalaxy.com/games/nonogram): undefined (undefined, daily reset at local midnight).
+- [undefined](https://toolboxgalaxy.com/games/orbit-dash): undefined (undefined, daily reset at local midnight).
+- [undefined](https://toolboxgalaxy.com/games/tank-evolution): undefined (undefined, daily reset at local midnight).
+- [undefined](https://toolboxgalaxy.com/games/surviv-io): undefined (undefined, daily reset at local midnight).
+- [undefined](https://toolboxgalaxy.com/games/krunker): undefined (undefined, daily reset at local midnight).
+- [undefined](https://toolboxgalaxy.com/games/mini-crossword): undefined (undefined, daily reset at local midnight).
+- [undefined](https://toolboxgalaxy.com/games/logic-lab): undefined (undefined, daily reset at local midnight).
+
+---
+
+## 4. Technical Reference Guides (5 Authoritative Articles)
+
+- [How to Fill and Sign a PDF Form Free Online Without Uploading to Cloud](https://toolboxgalaxy.com/guides/how-to-fill-and-sign-pdf-form-free-online): Filling contracts, tax documents, employment verifications, and rental agreements often forces users to upload sensitive personal data to untrusted third-party cloud servers. Here is how modern WebAssembly and in-browser Canvas technology let you fill text fields, apply signatures, redact sensitive numbers, and export finalized PDFs with zero network exposure. (6 min read, Category: PDF & Documents).
+- [GST Calculation Formula Explained with Real-World Examples & Invoice Rules](https://toolboxgalaxy.com/guides/gst-calculation-formula-explained-with-examples): Whether you are a freelance consultant, online merchant, e-commerce vendor, or business accountant, calculating Goods and Services Tax (GST) correctly is critical to avoid compliance fines and invoicing disputes. Here is the definitive mathematical breakdown of GST-exclusive, GST-inclusive, and interstate IGST versus intrastate CGST + SGST tax splits. (7 min read, Category: Taxes & Finance).
+- [Passport & Signature Photo Size Requirements for UPSC, SSC, Railways & State PSC](https://toolboxgalaxy.com/guides/passport-signature-photo-size-requirements-govt-exams): Tens of thousands of competitive government exam candidates face form rejection every year simply because their uploaded photograph or signature does not match strict portal specifications. Learn the exact requirements for UPSC, SSC, RRB, NTA NEET/JEE, and State PSC portals, and how to format your files safely in seconds. (6 min read, Category: Careers & Government).
+- [How to Merge and Split PDF Pages Privately Without Uploading Anywhere](https://toolboxgalaxy.com/guides/how-to-merge-and-split-pdf-pages-without-cloud-upload): Combining project presentations, merging quarterly invoices, or extracting a single signed agreement page often seems simple until you realize standard web converters send your confidential files to remote servers. Discover how client-side WebAssembly lets you merge and split documents entirely within browser memory. (5 min read, Category: PDF & Documents).
+- [JSON to CSV Conversion: Common Pitfalls and How to Handle Nested Objects](https://toolboxgalaxy.com/guides/json-to-csv-conversion-common-pitfalls): Transforming JSON data into CSV files is a fundamental daily task for developers, data analysts, and marketers. However, unescaped commas, nested object hierarchies, array arrays, line breaks, and Excel UTF-8 character encoding errors constantly break imports. Here is how to navigate and eliminate every common JSON-to-CSV pitfall. (7 min read, Category: Data & Development).
+
+---
+
+## 5. Privacy & Architecture Guarantees
+
+1. **Zero-Upload Execution**: All file handling, PDF rasterization, image resizing, and cryptographic operations run exclusively inside local browser memory.
+2. **Offline Capable**: Progressive Web App (PWA) with complete offline asset caching via Service Worker.
+3. **No Advertising or Surveillance**: No third-party ad networks, no cross-site user trackers, no telemetry SDKs.
+4. **Machine Readability**: Full Schema.org JSON-LD structured data (@graph covering Organization, WebSite, WebApplication, FAQPage, ItemList), RFC 8288 Link headers, and Markdown content negotiation.

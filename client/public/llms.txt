@@ -9,11 +9,11 @@
 - [Technical Guides](https://toolboxgalaxy.com/guides): Authoritative guides and tutorials on zero-upload PDF handling, electronic signatures, and developer workflows.
 
 ## Key Developer Tools
-- [JSON to Zod Schema](https://toolboxgalaxy.com/tools/json-to-zod): Generate typed TypeScript Zod validation schemas from JSON payloads.
+- [JSON to Zod Schema](https://toolboxgalaxy.com/tools/json-to-zod-schema): Generate typed TypeScript Zod validation schemas from JSON payloads.
 - [JWT Debugger](https://toolboxgalaxy.com/tools/jwt-debugger): Decode, inspect, and verify JWT headers and claims locally without sending tokens over the wire.
 - [cURL to Code Converter](https://toolboxgalaxy.com/tools/curl-to-code): Transform cURL commands into JavaScript fetch, Python requests, or Go HTTP clients.
 - [Regex Tester](https://toolboxgalaxy.com/tools/regex-tester): Test JavaScript regular expressions with real-time match highlighting and group capture.
-- [Cron Expression Generator](https://toolboxgalaxy.com/tools/cron-schedule-tool): Visualize and generate 5-field cron syntax with human-readable schedules.
+- [Cron Expression Generator](https://toolboxgalaxy.com/tools/cron-schedule-expression): Visualize and generate 5-field cron syntax with human-readable schedules.
 - [Tracking URL Cleaner](https://toolboxgalaxy.com/tools/tracking-url-cleaner): Strip UTM tags, Facebook fbclid, and marketing tracking parameters from URLs.
 - [Excel & CSV Spreadsheet Studio](https://toolboxgalaxy.com/tools/excel-spreadsheet-studio): View, filter, clean, and convert CSV and XLSX files in local memory.
 - [Image Metadata Remover](https://toolboxgalaxy.com/tools/image-metadata-remover): Strip EXIF, GPS location coordinates, and camera serial data from JPEG and PNG files.
