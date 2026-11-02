@@ -1,0 +1,82 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "name": "Toolbox Galaxy Agent Services",
+  "description": "Zero-upload, in-browser privacy-first developer tools and daily logic puzzles catalog.",
+  "version": "1.0.0",
+  "homepage": "https://toolboxgalaxy.com",
+  "endpoint": "https://toolboxgalaxy.com/api/mcp",
+  "capabilities": {
+    "tools": {
+      "listChanged": false
+    },
+    "resources": {
+      "subscribe": false,
+      "listChanged": false
+    },
+    "prompts": {
+      "listChanged": false
+    }
+  },
+  "tools": [
+    {
+      "name": "search_tools",
+      "description": "Search 120+ local in-browser utilities and daily logic puzzles by keyword or category.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "string",
+            "description": "Keywords or category name (e.g. pdf, json, regex, sudoku, jwt)"
+          }
+        },
+        "required": ["query"]
+      }
+    },
+    {
+      "name": "clean_tracking_url",
+      "description": "Remove UTM, fbclid, gclid, and analytics tracking parameters from a URL.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "url": {
+            "type": "string",
+            "description": "The URL containing tracking query parameters"
+          }
+        },
+        "required": ["url"]
+      }
+    },
+    {
+      "name": "format_json",
+      "description": "Format, validate, or minify JSON data locally.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "input": {
+            "type": "string",
+            "description": "The raw JSON string to format or validate"
+          },
+          "indent": {
+            "type": "number",
+            "description": "Number of indentation spaces (default: 2)"
+          }
+        },
+        "required": ["input"]
+      }
+    },
+    {
+      "name": "get_tool_info",
+      "description": "Retrieve metadata, tags, and category details for a specific tool slug.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "slug": {
+            "type": "string",
+            "description": "The unique tool identifier (e.g. 'json-to-zod', 'jwt-debugger', 'pdf-visual-editor')"
+          }
+        },
+        "required": ["slug"]
+      }
+    }
+  ]
+}

@@ -4,9 +4,10 @@
   "type": "module",
   "license": "MIT",
   "scripts": {
+    "predev": "node scripts/ensure-pdf-worker.js",
     "dev": "vite",
     "prebuild": "node scripts/ensure-pdf-worker.js",
-    "build": "tsx scripts/generate-og-images.ts && tsx scripts/generate-sitemap.ts && vite build",
+    "build": "NODE_OPTIONS='--max-old-space-size=2048' tsx scripts/build.ts",
     "start": "tsx server/index.ts",
     "lint": "tsc --noEmit",
     "preview": "vite preview --host 0.0.0.0 --port 3000",

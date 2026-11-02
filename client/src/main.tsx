@@ -3,6 +3,10 @@ import App from "./App";
 import "./index.css";
 import { initAnalytics } from "./lib/analytics";
 import { ensurePdfWorkerConfigured } from "./lib/pdfWorkerSetup";
+import { registerBrowserTools } from "./lib/webMcp";
+
+// Register WebMCP browser agent tools
+registerBrowserTools();
 
 // Configure PDF worker globally before any PDF components mount
 ensurePdfWorkerConfigured();

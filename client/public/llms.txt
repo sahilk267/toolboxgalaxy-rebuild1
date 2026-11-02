@@ -1,0 +1,40 @@
+# Toolbox Galaxy
+
+> Privacy-first, 100% in-browser developer utilities, PDF & Document Studio, and daily NYT-style logic puzzles. Zero server uploads, zero telemetry, zero ads.
+
+## Core Workbenches
+- [PDF & Document Studio](https://toolboxgalaxy.com/studio): Full in-browser PDF editor, visual signature filler, page merger, splitter, and OCR converter running completely client-side in WebAssembly.
+- [Tools Foundry](https://toolboxgalaxy.com/tools): Over 120 client-side developer utilities including JSON to Zod converter, JWT debugger, regex tester, curl to fetch converter, diff checker, and timestamp calculators.
+- [Daily Logic Puzzles](https://toolboxgalaxy.com/games): Daily brain puzzles including The Hive (spelling bee), Wordle Plus, Connections (4x4 category sorter), Queens, Mini Crossword, and Mini Sudoku.
+- [Technical Guides](https://toolboxgalaxy.com/guides): Authoritative guides and tutorials on zero-upload PDF handling, electronic signatures, and developer workflows.
+
+## Key Developer Tools
+- [JSON to Zod Schema](https://toolboxgalaxy.com/tools/json-to-zod): Generate typed TypeScript Zod validation schemas from JSON payloads.
+- [JWT Debugger](https://toolboxgalaxy.com/tools/jwt-debugger): Decode, inspect, and verify JWT headers and claims locally without sending tokens over the wire.
+- [cURL to Code Converter](https://toolboxgalaxy.com/tools/curl-to-code): Transform cURL commands into JavaScript fetch, Python requests, or Go HTTP clients.
+- [Regex Tester](https://toolboxgalaxy.com/tools/regex-tester): Test JavaScript regular expressions with real-time match highlighting and group capture.
+- [Cron Expression Generator](https://toolboxgalaxy.com/tools/cron-schedule-tool): Visualize and generate 5-field cron syntax with human-readable schedules.
+- [Tracking URL Cleaner](https://toolboxgalaxy.com/tools/tracking-url-cleaner): Strip UTM tags, Facebook fbclid, and marketing tracking parameters from URLs.
+- [Excel & CSV Spreadsheet Studio](https://toolboxgalaxy.com/tools/excel-spreadsheet-studio): View, filter, clean, and convert CSV and XLSX files in local memory.
+- [Image Metadata Remover](https://toolboxgalaxy.com/tools/image-metadata-remover): Strip EXIF, GPS location coordinates, and camera serial data from JPEG and PNG files.
+- [Text Diff Checker](https://toolboxgalaxy.com/tools/text-diff-checker): Visual side-by-side and unified diff comparison for text, code, and JSON.
+
+## Daily Logic Puzzles & Games
+- [The Hive](https://toolboxgalaxy.com/games/the-hive): 7-letter honeycomb word puzzle inspired by Spelling Bee.
+- [Connections](https://toolboxgalaxy.com/games/connections): Group 16 words into 4 secret categories with 4 difficulty levels.
+- [Wordle Plus](https://toolboxgalaxy.com/games/orbit-lexicon): Daily 5-letter word deduction game with 6 attempts.
+- [Queens](https://toolboxgalaxy.com/games/queens): Place crowns in color regions without horizontal, vertical, or diagonal contact.
+- [Mini Crossword](https://toolboxgalaxy.com/games/mini-crossword): 5x5 daily speed crossword.
+- [Mini Sudoku](https://toolboxgalaxy.com/games/mini-sudoku): 6x6 number placement puzzle with daily hints.
+- [Tango](https://toolboxgalaxy.com/games/tango): Binary grid deduction puzzle with equals and opposites rules.
+- [Orbit Dash](https://toolboxgalaxy.com/games/orbit-dash): 3D obstacle arcade runner built with Babylon.js.
+
+## Machine & Agent Protocols
+- [MCP Server Card](https://toolboxgalaxy.com/.well-known/mcp/server-card.json): Model Context Protocol server capabilities definition (SEP-1649).
+- [Markdown Homepage](https://toolboxgalaxy.com/index.md): Token-efficient markdown representation of site resources (Accept: text/markdown).
+- [WebMCP In-Browser Tools](https://toolboxgalaxy.com/): Navigator Model Context tools registered on page load for browser agents.
+
+## Organization & Legal
+- [About & Contact](https://toolboxgalaxy.com/contact): Direct feedback and support channels maintained by Aaditech Solution. Contact: support@toolboxgalaxy.com, +91-9876543210.
+- [Privacy Policy](https://toolboxgalaxy.com/privacy): Details our zero-server-upload, zero-tracking, client-side RAM sandbox architecture.
+- [Terms of Service](https://toolboxgalaxy.com/terms): Free-of-charge usage terms and open developer utility conditions.

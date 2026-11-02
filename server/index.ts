@@ -219,6 +219,189 @@ async function startServer() {
     });
   });
 
+  // Goal 10 & 11: Serve llms.txt as plain text (never falling into catch-all HTML)
+  app.get(["/llms.txt", "/llms-full.txt"], (_req, res) => {
+    res.setHeader("Content-Type", "text/plain; charset=utf-8");
+    res.setHeader("Cache-Control", "public, max-age=3600");
+    const candidates = [
+      path.resolve(process.cwd(), "client", "public", "llms.txt"),
+      path.resolve(__dirname, "..", "client", "public", "llms.txt"),
+      path.resolve(__dirname, "public", "llms.txt"),
+    ];
+    for (const candidate of candidates) {
+      if (fs.existsSync(candidate)) {
+        return res.sendFile(candidate);
+      }
+    }
+    return res.send(getMarkdownRepresentation("/"));
+  });
+
+  // Goal 15: Publish MCP Server Card (SEP-1649) as application/json
+  app.get("/.well-known/mcp/server-card.json", (_req, res) => {
+    res.setHeader("Content-Type", "application/json; charset=utf-8");
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    res.setHeader("Cache-Control", "public, max-age=3600");
+    const cardCandidates = [
+      path.resolve(process.cwd(), "client", "public", ".well-known", "mcp", "server-card.json"),
+      path.resolve(__dirname, "..", "client", "public", ".well-known", "mcp", "server-card.json"),
+    ];
+    for (const candidate of cardCandidates) {
+      if (fs.existsSync(candidate)) {
+        return res.sendFile(candidate);
+      }
+    }
+    return res.json({
+      name: "Toolbox Galaxy Agent Services",
+      version: "1.0.0",
+      homepage: "https://toolboxgalaxy.com",
+      endpoint: "https://toolboxgalaxy.com/api/mcp",
+      capabilities: { tools: { listChanged: false } }
+    });
+  });
+
+  // Route validator to distinguish existing pages from non-existent 404 paths
+  function isValidRoute(pathname: string): boolean {
+    const cleanPath = pathname === "/" ? "/" : pathname.replace(/\/+$/, "");
+
+    const exactValidRoutes = new Set([
+      "/",
+      "/studio",
+      "/pdf-studio",
+      "/document-studio",
+      "/tools",
+      "/guides",
+      "/games",
+      "/games/logic-lab",
+      "/games/tank-evolution",
+      "/games/diep",
+      "/games/surviv-io",
+      "/games/battle-royale",
+      "/games/krunker",
+      "/games/krunker-fps",
+      "/games/orbit-dash",
+      "/games/the-hive",
+      "/games/hive",
+      "/games/spelling-bee",
+      "/games/wordle",
+      "/games/orbit-lexicon",
+      "/games/connections",
+      "/games/mini-crossword",
+      "/games/crossword",
+      "/games/strands",
+      "/games/theme-threads",
+      "/contact",
+      "/privacy",
+      "/terms",
+      "/index.html",
+      "/index.md",
+    ]);
+
+    if (exactValidRoutes.has(cleanPath)) return true;
+
+    if (cleanPath.startsWith("/tools/")) {
+      const slug = cleanPath.slice("/tools/".length).split("/")[0];
+      return Boolean(findToolBySlug(slug));
+    }
+    if (cleanPath.startsWith("/guides/")) {
+      const slug = cleanPath.slice("/guides/".length).split("/")[0];
+      return Boolean(findGuideBySlug(slug));
+    }
+    if (cleanPath.startsWith("/games/logic/")) {
+      const slug = cleanPath.slice("/games/logic/".length).split("/")[0];
+      return Boolean(findGameBySlug(slug));
+    }
+    if (cleanPath.startsWith("/games/")) {
+      const slug = cleanPath.slice("/games/".length).split("/")[0];
+      return Boolean(findGameBySlug(slug));
+    }
+
+    return false;
+  }
+
+  // Goal 12: Markdown representation generator for AI agents
+  function getMarkdownRepresentation(pathname: string): string {
+    if (pathname.startsWith("/tools/")) {
+      const slug = pathname.slice("/tools/".length).split("/")[0];
+      const tool = findToolBySlug(slug);
+      if (tool) {
+        return `# ${tool.name}
+
+> ${tool.description}
+
+- **URL**: https://toolboxgalaxy.com/tools/${tool.slug}
+- **Category**: ${tool.category}
+- **Architecture**: 100% In-Browser RAM Sandbox (zero remote file uploads)
+- **Tags**: ${tool.tags.join(", ")}
+
+## Tool Features
+- Client-side execution in local memory
+- Completely private and air-gapped
+- Zero registration and no cloud retention
+
+[Open in Browser](https://toolboxgalaxy.com/tools/${tool.slug}) | [All Tools](https://toolboxgalaxy.com/tools) | [Home](https://toolboxgalaxy.com/)
+`;
+      }
+    }
+
+    if (pathname.startsWith("/guides/")) {
+      const slug = pathname.slice("/guides/".length).split("/")[0];
+      const guide = findGuideBySlug(slug);
+      if (guide) {
+        return `# ${guide.title}
+
+> ${guide.metaDescription}
+
+- **URL**: https://toolboxgalaxy.com/guides/${guide.slug}
+- **Reading Time**: ${guide.readingTimeMinutes} mins
+- **Summary**: ${guide.summary}
+
+[Read Guide](https://toolboxgalaxy.com/guides/${guide.slug}) | [All Guides](https://toolboxgalaxy.com/guides) | [Home](https://toolboxgalaxy.com/)
+`;
+      }
+    }
+
+    return `# Toolbox Galaxy – Private In-Browser Tools & Daily Logic Hub
+
+> 100% client-side privacy-first workbench: PDF & Doc Studio, 120+ developer utilities, and daily NYT-style logic puzzles. Everything executes inside local browser memory with zero cloud file storage.
+
+## Core Workbenches
+- [PDF & Document Studio](https://toolboxgalaxy.com/studio): Merge, split, rotate, convert, redact, and sign PDFs locally in your browser.
+- [Tools Foundry](https://toolboxgalaxy.com/tools): Over 120 client-side developer utilities, formatters, generators, and converters.
+- [Daily Logic Puzzles](https://toolboxgalaxy.com/games): Daily brain-clearing logic puzzles including The Hive, Wordle, and Connections.
+- [Technical Guides](https://toolboxgalaxy.com/guides): Authoritative tutorials on zero-upload in-browser workflows.
+
+## Popular Developer Utilities
+- [JSON to Zod Converter](https://toolboxgalaxy.com/tools/json-to-zod): Generate typed TypeScript Zod validation schemas from JSON payloads.
+- [JWT Debugger](https://toolboxgalaxy.com/tools/jwt-debugger): Inspect, decode, and verify JWT headers and claims client-side.
+- [cURL to Code Converter](https://toolboxgalaxy.com/tools/curl-to-code): Transform cURL syntax into fetch, axios, Python, and Go.
+- [Regex Tester](https://toolboxgalaxy.com/tools/regex-tester): Test regular expressions with live syntax highlighting and group captures.
+- [Cron Expression Generator](https://toolboxgalaxy.com/tools/cron-schedule-tool): 5-field cron schedule builder.
+- [Tracking URL Cleaner](https://toolboxgalaxy.com/tools/tracking-url-cleaner): Strip UTM tags, Facebook fbclid, and click tracking IDs.
+
+## Daily Logic Puzzles
+- [The Hive](https://toolboxgalaxy.com/games/the-hive): Daily 7-letter honeycomb word puzzle.
+- [Connections](https://toolboxgalaxy.com/games/connections): Group 16 words into 4 secret categories.
+- [Wordle Plus](https://toolboxgalaxy.com/games/orbit-lexicon): Daily 5-letter word deduction game.
+- [Queens](https://toolboxgalaxy.com/games/queens): Place crowns in color regions without contact.
+- [Mini Crossword](https://toolboxgalaxy.com/games/mini-crossword): 5x5 daily speed crossword puzzle.
+
+## Machine & Agent Protocols
+- **LLMs Discovery**: https://toolboxgalaxy.com/llms.txt
+- **MCP Server Card (SEP-1649)**: https://toolboxgalaxy.com/.well-known/mcp/server-card.json
+- **WebMCP In-Browser Tools**: navigator.modelContext.registerTool() initialized on page load.
+- **Sitemap**: https://toolboxgalaxy.com/sitemap.xml (with daily/weekly lastmod)
+
+## Business & Contact Details
+- **Maintainer**: Aaditech Solution
+- **Support Email**: support@toolboxgalaxy.com (mailto:support@toolboxgalaxy.com)
+- **Direct Phone**: +91-9876543210 (tel:+919876543210)
+- **Profiles**: https://www.linkedin.com/in/mohdazizshaikh
+- **About & Feedback**: https://toolboxgalaxy.com/contact
+- **Privacy Policy**: https://toolboxgalaxy.com/privacy
+- **Terms of Service**: https://toolboxgalaxy.com/terms
+`;
+  }
+
   // Handle client-side routing - serve index.html with automated dynamic SEO & OpenGraph meta tags
   app.get("*", (req, res) => {
     const pathname = req.path;
@@ -226,6 +409,37 @@ async function startServer() {
     // If it is a missing static file asset, return a clean 404 instead of HTML to prevent syntax errors
     if (/\.(?:js|mjs|css|png|jpg|jpeg|gif|svg|ico|json|woff2?|ttf|map)$/i.test(pathname) || pathname.startsWith("/assets/")) {
       return res.status(404).type("text/plain").send("Asset not found");
+    }
+
+    const isValid = isValidRoute(pathname);
+
+    // Goal 12: Content negotiation - serve Markdown when an agent requests it
+    const acceptHeader = (req.headers.accept || "").toLowerCase();
+    const wantsMarkdown = acceptHeader.includes("text/markdown") || acceptHeader.includes("text/x-markdown") || pathname === "/index.md";
+
+    if (wantsMarkdown) {
+      res.setHeader("Content-Type", "text/markdown; charset=utf-8");
+      res.setHeader(
+        "Link",
+        '</llms.txt>; rel="alternate"; type="text/plain", </.well-known/mcp/server-card.json>; rel="service-desc"; type="application/json"'
+      );
+      if (!isValid) {
+        return res.status(404).send(`# 404 - Not Found\n\nThe requested resource \`${pathname}\` was not found on Toolbox Galaxy.`);
+      }
+      return res.status(200).send(getMarkdownRepresentation(pathname));
+    }
+
+    // Goal 3: Missing pages return real 404 HTTP status
+    if (!isValid) {
+      res.status(404);
+    }
+
+    // Goal 13: Homepage advertises resources via RFC 8288 Link headers
+    if (pathname === "/" || pathname === "/index.html") {
+      res.setHeader(
+        "Link",
+        '</llms.txt>; rel="alternate"; type="text/plain", </index.md>; rel="alternate"; type="text/markdown", </.well-known/mcp/server-card.json>; rel="service-desc"; type="application/json"'
+      );
     }
 
     // Serve directly from in-memory cache without any synchronous disk I/O
@@ -249,7 +463,7 @@ async function startServer() {
 
     if (!html) {
       res.setHeader("Content-Type", "text/html; charset=utf-8");
-      return res.status(200).send(getFallbackHtml());
+      return res.status(isValid ? 200 : 404).send(getFallbackHtml());
     }
 
     const safeBy = sanitizeUserParam(req.query.by);
@@ -257,9 +471,9 @@ async function startServer() {
     const queryLang = typeof req.query.lang === "string" ? req.query.lang.toLowerCase() : typeof req.query.hl === "string" ? req.query.hl.toLowerCase() : "";
     const isHindiReq = queryLang === "hi" || /app_lang=hi\b/.test(cookieHeader);
 
-    let pageTitle = "Toolbox Galaxy – Private In-Browser Tools & Daily Logic Hub";
-    let ogTitle = "Toolbox Galaxy – Free In-Browser Tools & Daily Logic Puzzles";
-    let ogDesc = "100% client-side privacy-first workbench: PDF & Doc Studio, 120+ utilities, and daily logic puzzles (The Hive, Wordle, Connections).";
+    let pageTitle = isValid ? "Toolbox Galaxy – Private In-Browser Tools & Daily Logic Hub" : "Page Not Found (404) | Toolbox Galaxy";
+    let ogTitle = isValid ? "Toolbox Galaxy – Free In-Browser Tools & Daily Logic Puzzles" : "Page Not Found (404) | Toolbox Galaxy";
+    let ogDesc = isValid ? "100% client-side privacy-first workbench: PDF & Doc Studio, 120+ utilities, and daily logic puzzles (The Hive, Wordle, Connections)." : "The requested page was not found on Toolbox Galaxy.";
 
     const isHive = pathname.startsWith("/games/the-hive") || pathname.startsWith("/games/hive") || pathname.startsWith("/games/spelling-bee");
     const isWordle = pathname.startsWith("/games/wordle") || pathname.startsWith("/games/orbit-lexicon");

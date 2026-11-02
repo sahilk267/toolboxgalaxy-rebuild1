@@ -217,7 +217,11 @@ async function runVerification() {
       continue;
     }
 
-    if (siteWideData.name !== "Toolbox Galaxy" || siteWideData.url !== "https://toolboxgalaxy.com") {
+    const siteApp = siteWideData["@graph"]
+      ? siteWideData["@graph"].find((node: any) => node["@type"] === "WebApplication")
+      : siteWideData;
+
+    if (!siteApp || siteApp.name !== "Toolbox Galaxy" || siteApp.url !== "https://toolboxgalaxy.com") {
       console.error(`❌ Block 1 is not the site-wide WebApplication on ${route}`);
       totalFailures++;
       continue;
@@ -267,7 +271,10 @@ async function runVerification() {
 
     try {
       const parsed = JSON.parse(blocks[0]);
-      if (parsed.name !== "Toolbox Galaxy") {
+      const siteApp = parsed["@graph"]
+        ? parsed["@graph"].find((node: any) => node["@type"] === "WebApplication" || node.name === "Toolbox Galaxy")
+        : parsed;
+      if (!siteApp || siteApp.name !== "Toolbox Galaxy") {
         console.error(`❌ Unexpected schema on ${route}`);
         totalFailures++;
         continue;

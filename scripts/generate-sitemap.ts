@@ -8,9 +8,11 @@ import { GUIDES } from "../shared/guidesData";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const SITEMAP_PATH = path.resolve(__dirname, "../client/public/sitemap.xml");
 const BASE_URL = "https://toolboxgalaxy.com";
+const DEFAULT_LASTMOD = new Date().toISOString().split("T")[0];
 
 interface SitemapEntry {
   loc: string;
+  lastmod?: string;
   changefreq?: string;
   priority: string;
 }
@@ -93,6 +95,7 @@ function getToolMetadata(slug: string): { priority: string; changefreq?: string 
 
 function renderEntry(entry: SitemapEntry): string {
   const lines = [`  <url>`, `    <loc>${entry.loc}</loc>`];
+  lines.push(`    <lastmod>${entry.lastmod || DEFAULT_LASTMOD}</lastmod>`);
   if (entry.changefreq) {
     lines.push(`    <changefreq>${entry.changefreq}</changefreq>`);
   }

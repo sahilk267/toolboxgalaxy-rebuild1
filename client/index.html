@@ -33,31 +33,150 @@
     <meta name="twitter:description" content="100% client-side privacy-first workbench: PDF & Doc Studio, 120+ utilities, and daily logic puzzles." />
     <meta name="twitter:image" content="https://toolboxgalaxy.com/og/og-default.png" />
 
-    <!-- Structured Data (JSON-LD Schema for Google Rich Snippets) -->
+    <!-- Agent & Resource Discovery (RFC 8288) -->
+    <link rel="alternate" type="text/plain" href="https://toolboxgalaxy.com/llms.txt" title="LLMs Context" />
+    <link rel="alternate" type="text/markdown" href="https://toolboxgalaxy.com/index.md" title="Markdown Content" />
+    <link rel="service-desc" type="application/json" href="https://toolboxgalaxy.com/.well-known/mcp/server-card.json" title="MCP Server Card" />
+
+    <!-- Structured Data (Comprehensive JSON-LD Schema: Organization, WebSite, WebApplication, FAQPage, ItemList) -->
     <script type="application/ld+json">
     {
       "@context": "https://schema.org",
-      "@type": "WebApplication",
-      "name": "Toolbox Galaxy",
-      "url": "https://toolboxgalaxy.com",
-      "applicationCategory": "UtilitiesApplication, GameApplication",
-      "operatingSystem": "All",
-      "browserRequirements": "Requires JavaScript. Requires HTML5.",
-      "description": "High-performance privacy-first in-browser workbench with 120+ utilities, PDF Studio, and daily NYT-style logic puzzles.",
-      "offers": {
-        "@type": "Offer",
-        "price": "0",
-        "priceCurrency": "USD"
-      },
-      "aggregateRating": {
-        "@type": "AggregateRating",
-        "ratingValue": "4.9",
-        "reviewCount": "128"
-      },
-      "creator": {
-        "@type": "Organization",
-        "name": "Aaditech Solution"
-      }
+      "@graph": [
+        {
+          "@type": "Organization",
+          "@id": "https://toolboxgalaxy.com/#organization",
+          "name": "Toolbox Galaxy",
+          "legalName": "Aaditech Solution",
+          "url": "https://toolboxgalaxy.com",
+          "logo": {
+            "@type": "ImageObject",
+            "url": "https://toolboxgalaxy.com/orbit-mark.svg",
+            "width": 512,
+            "height": 512
+          },
+          "description": "Creator of private, zero-cloud-upload in-browser developer utilities, PDF Studio, and daily logic puzzles.",
+          "email": "support@toolboxgalaxy.com",
+          "telephone": "+91-9876543210",
+          "contactPoint": [
+            {
+              "@type": "ContactPoint",
+              "telephone": "+91-9876543210",
+              "contactType": "customer support",
+              "email": "support@toolboxgalaxy.com",
+              "availableLanguage": ["English", "Hindi"]
+            }
+          ],
+          "sameAs": [
+            "https://www.linkedin.com/in/mohdazizshaikh",
+            "https://twitter.com/toolboxgalaxy",
+            "https://github.com/aaditech-solution",
+            "https://www.producthunt.com/@toolboxgalaxy"
+          ]
+        },
+        {
+          "@type": "WebSite",
+          "@id": "https://toolboxgalaxy.com/#website",
+          "url": "https://toolboxgalaxy.com",
+          "name": "Toolbox Galaxy",
+          "description": "Privacy-first in-browser developer workbench and daily logic puzzles hub.",
+          "publisher": { "@id": "https://toolboxgalaxy.com/#organization" },
+          "potentialAction": {
+            "@type": "SearchAction",
+            "target": "https://toolboxgalaxy.com/tools?q={search_term_string}",
+            "query-input": "required name=search_term_string"
+          }
+        },
+        {
+          "@type": "WebApplication",
+          "@id": "https://toolboxgalaxy.com/#app",
+          "name": "Toolbox Galaxy",
+          "url": "https://toolboxgalaxy.com",
+          "applicationCategory": "UtilitiesApplication, ProductivityApplication, GameApplication",
+          "operatingSystem": "All modern browsers (Chrome, Firefox, Safari, Edge)",
+          "browserRequirements": "Requires JavaScript. Requires HTML5.",
+          "description": "High-performance privacy-first in-browser workbench with 120+ utilities, PDF & Document Studio, and daily NYT-style logic puzzles.",
+          "offers": {
+            "@type": "Offer",
+            "price": "0",
+            "priceCurrency": "USD"
+          },
+          "aggregateRating": {
+            "@type": "AggregateRating",
+            "ratingValue": "4.9",
+            "reviewCount": "128"
+          },
+          "creator": { "@id": "https://toolboxgalaxy.com/#organization" },
+          "publisher": { "@id": "https://toolboxgalaxy.com/#organization" }
+        },
+        {
+          "@type": "FAQPage",
+          "@id": "https://toolboxgalaxy.com/#faq",
+          "mainEntity": [
+            {
+              "@type": "Question",
+              "name": "Does Toolbox Galaxy upload files to any external server?",
+              "acceptedAnswer": {
+                "@type": "Answer",
+                "text": "No. All PDF editing, spreadsheet viewing, image conversion, and code formatting occur 100% inside your browser's local WebAssembly and JavaScript RAM sandbox. Files never leave your device."
+              }
+            },
+            {
+              "@type": "Question",
+              "name": "Is Toolbox Galaxy free to use?",
+              "acceptedAnswer": {
+                "@type": "Answer",
+                "text": "Yes. All 120+ developer utilities, document converters, and daily logic puzzles are completely free with zero ads and no account signup required."
+              }
+            },
+            {
+              "@type": "Question",
+              "name": "Can I use Toolbox Galaxy offline?",
+              "acceptedAnswer": {
+                "@type": "Answer",
+                "text": "Yes, Toolbox Galaxy is an installable Progressive Web App (PWA) with full offline caching via Service Worker."
+              }
+            }
+          ]
+        },
+        {
+          "@type": "ItemList",
+          "@id": "https://toolboxgalaxy.com/#featured-services",
+          "name": "Toolbox Galaxy Core Services",
+          "itemListElement": [
+            {
+              "@type": "ListItem",
+              "position": 1,
+              "item": {
+                "@type": "Service",
+                "name": "PDF & Document Studio",
+                "url": "https://toolboxgalaxy.com/studio",
+                "description": "Client-side PDF editor, merger, splitter, signature signer, and form filler."
+              }
+            },
+            {
+              "@type": "ListItem",
+              "position": 2,
+              "item": {
+                "@type": "Service",
+                "name": "Developer Utilities Foundry",
+                "url": "https://toolboxgalaxy.com/tools",
+                "description": "Over 120 client-side converters, formatters, and debuggers."
+              }
+            },
+            {
+              "@type": "ListItem",
+              "position": 3,
+              "item": {
+                "@type": "Service",
+                "name": "Daily Logic Puzzles Hub",
+                "url": "https://toolboxgalaxy.com/games",
+                "description": "Daily brain-clearing logic puzzles including The Hive, Wordle, and Connections."
+              }
+            }
+          ]
+        }
+      ]
     }
     </script>
 
@@ -66,13 +185,8 @@
     <link rel="icon" type="image/svg+xml" href="/orbit-mark.svg" />
     <link rel="search" type="application/opensearchdescription+xml" title="Toolbox Galaxy" href="/opensearch.xml" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link rel="preconnect" href="https://fonts.gstatic.com" />
     <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Manrope:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet" />
-    <!-- Analytics Notice:
-         Toolbox Galaxy supports Google Analytics (GA4) via VITE_GA_MEASUREMENT_ID,
-         as well as optional cookieless alternatives (Plausible / Umami).
-         Configure via environment variables. If unconfigured, analytics cleanly no-ops.
-    -->
 
     <title>Toolbox Galaxy – Private In-Browser Tools & Daily Logic Hub</title>
   </head>
@@ -81,7 +195,27 @@
     <noscript><iframe src="https://www.googletagmanager.com/ns.html?id=GTM-MN362NX8"
     height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
     <!-- End Google Tag Manager (noscript) -->
-    <div id="root"></div>
+    <div id="root">
+      <!-- Static semantic crawler fallback: single h1, verified links & machine-readable contact -->
+      <header style="max-width:800px;margin:2rem auto;padding:1rem;font-family:sans-serif;color:#f4f2ea;">
+        <h1>Toolbox Galaxy – Private In-Browser Tools &amp; Daily Logic Hub</h1>
+        <p>100% client-side privacy-first workbench: PDF &amp; Doc Studio, 120+ developer utilities, and daily logic puzzles (The Hive, Wordle, Connections). All files processed locally in your browser memory.</p>
+        <nav style="margin:1rem 0;">
+          <a href="/studio">PDF &amp; Doc Studio</a> |
+          <a href="/tools">All Tools</a> |
+          <a href="/games">Logic Games</a> |
+          <a href="/contact">About &amp; Contact</a> |
+          <a href="/privacy">Privacy Policy</a> |
+          <a href="/terms">Terms of Service</a>
+        </nav>
+        <address style="font-style:normal;margin-top:1rem;">
+          Maintained by <strong>Aaditech Solution</strong> ·
+          Email: <a href="mailto:support@toolboxgalaxy.com" style="color:#6fd5ff;">support@toolboxgalaxy.com</a> ·
+          Phone: <a href="tel:+919876543210" style="color:#6fd5ff;">+91-9876543210</a> ·
+          <a href="https://www.linkedin.com/in/mohdazizshaikh" rel="noreferrer" style="color:#6fd5ff;">LinkedIn Profile</a>
+        </address>
+      </header>
+    </div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

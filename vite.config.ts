@@ -16,6 +16,19 @@ export default defineConfig({
   build: {
     outDir: path.resolve(import.meta.dirname, "dist"),
     emptyOutDir: true,
+    chunkSizeWarningLimit: 3000,
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (id.includes("@babylonjs")) return "babylon";
+          if (id.includes("three")) return "three";
+          if (id.includes("pdfjs-dist")) return "pdfjs";
+          if (id.includes("docx")) return "docx";
+          if (id.includes("lucide-react")) return "icons";
+          if (id.includes("@radix-ui")) return "radix";
+        },
+      },
+    },
   },
   server: {
     port: 3000,

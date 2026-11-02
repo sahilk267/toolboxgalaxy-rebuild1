@@ -907,8 +907,13 @@ export async function generateOgImages(): Promise<void> {
   let generatedCount = 0;
 
   for (const def of ALL_OG_DEFINITIONS) {
-    const svgContent = generateSvgForDefinition(def);
     const outputPath = path.join(OUTPUT_DIR, def.filename);
+    if (!process.argv.includes("--force") && fs.existsSync(outputPath) && fs.statSync(outputPath).size > 1000) {
+      generatedCount++;
+      continue;
+    }
+
+    const svgContent = generateSvgForDefinition(def);
 
     // Convert SVG to PNG at exact 1200x630 resolution using sharp
     await sharp(Buffer.from(svgContent))
