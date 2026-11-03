@@ -129,14 +129,28 @@ function ageParts(start: Date, end: Date) {
   let years = end.getFullYear() - start.getFullYear();
   let months = end.getMonth() - start.getMonth();
   let days = end.getDate() - start.getDate();
+
   if (days < 0) {
     months -= 1;
-    days += new Date(end.getFullYear(), end.getMonth(), 0).getDate();
   }
   if (months < 0) {
     years -= 1;
     months += 12;
   }
+
+  // Anchor date after adding full elapsed years and elapsed months
+  const anchorYear = start.getFullYear() + years;
+  const anchorMonth = start.getMonth() + months;
+  const finalYear = anchorYear + Math.floor(anchorMonth / 12);
+  const finalMonth = anchorMonth % 12;
+
+  const maxDaysInAnchorMonth = new Date(finalYear, finalMonth + 1, 0).getDate();
+  const anchorDay = Math.min(start.getDate(), maxDaysInAnchorMonth);
+  const anchor = new Date(finalYear, finalMonth, anchorDay);
+
+  const diffMs = end.getTime() - anchor.getTime();
+  days = Math.max(0, Math.round(diffMs / 86400000));
+
   return { years, months, days };
 }
 
@@ -299,22 +313,36 @@ export function HtmlTool() {
   return <CombinedTransform mode="html" />;
 }
 
-const wordsFrom = (value: string) => value.trim().split(/[^A-Za-z0-9]+/).filter(Boolean);
+const wordSplitRegex = new RegExp("[^\\p{L}\\p{M}\\p{N}]+", "u");
+const firstLetterRegex = new RegExp("^\\p{L}", "u");
+const wordsFrom = (value: string) => value.trim().split(wordSplitRegex).filter(Boolean);
 
 export function TextCaseTool() {
   const [input, setInput] = useState("Toolbox Galaxy makes small things easy");
   const [mode, setMode] = useState("title");
 
   const output = useMemo(() => {
+    if (mode === "upper") return input.toUpperCase();
+    if (mode === "lower") return input.toLowerCase();
+
     const words = wordsFrom(input);
     if (!words.length) return "";
     const lower = words.map((word) => word.toLowerCase());
-    if (mode === "upper") return input.toUpperCase();
-    if (mode === "lower") return input.toLowerCase();
-    if (mode === "sentence") return `${lower.join(" ").replace(/^./, (letter) => letter.toUpperCase())}.`;
-    if (mode === "camel") return lower.map((word, index) => (index ? word[0].toUpperCase() + word.slice(1) : word)).join("");
+    
+    if (mode === "sentence") {
+      const sent = lower.join(" ").replace(firstLetterRegex, (letter) => letter.toUpperCase());
+      return sent.endsWith(".") ? sent : `${sent}.`;
+    }
+    if (mode === "camel") {
+      return lower
+        .map((word, index) =>
+          index ? word.replace(firstLetterRegex, (letter) => letter.toUpperCase()) : word
+        )
+        .join("");
+    }
     if (mode === "kebab") return lower.join("-");
-    return lower.map((word) => word[0].toUpperCase() + word.slice(1)).join(" ");
+    // Title Case
+    return lower.map((word) => word.replace(firstLetterRegex, (letter) => letter.toUpperCase())).join(" ");
   }, [input, mode]);
 
   return (

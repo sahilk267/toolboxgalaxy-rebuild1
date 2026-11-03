@@ -87,8 +87,13 @@ export default function ExcelStudioTool() {
 
   const handleSheetSwitch = (sheet: string) => {
     if (!workbook) return;
+    // Persist edits on the outgoing active worksheet
+    if (activeSheet && rawData.length > 0) {
+      workbook.Sheets[activeSheet] = XLSX.utils.aoa_to_sheet(rawData);
+    }
     setActiveSheet(sheet);
-    const sheetData = XLSX.utils.sheet_to_json<any[]>(workbook.Sheets[sheet], { header: 1 });
+    const targetWs = workbook.Sheets[sheet];
+    const sheetData = targetWs ? XLSX.utils.sheet_to_json<any[]>(targetWs, { header: 1 }) : [];
     setRawData(sheetData);
   };
 
@@ -144,10 +149,16 @@ export default function ExcelStudioTool() {
   // Export handlers
   const exportToExcel = () => {
     try {
-      const ws = XLSX.utils.aoa_to_sheet(rawData);
-      const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, ws, activeSheet || "Sheet1");
-      XLSX.writeFile(wb, fileName.replace(/\.[^/.]+$/, "") + "_cleaned.xlsx");
+      let wbToExport = workbook;
+      if (wbToExport && wbToExport.SheetNames.length > 0) {
+        // Save current sheet changes into the workbook
+        wbToExport.Sheets[activeSheet || wbToExport.SheetNames[0]] = XLSX.utils.aoa_to_sheet(rawData);
+      } else {
+        wbToExport = XLSX.utils.book_new();
+        const ws = XLSX.utils.aoa_to_sheet(rawData);
+        XLSX.utils.book_append_sheet(wbToExport, ws, activeSheet || "Sheet1");
+      }
+      XLSX.writeFile(wbToExport, fileName.replace(/\.[^/.]+$/, "") + "_cleaned.xlsx");
     } catch (err) {
       console.error("Failed to export Excel file:", err);
       alert("Unable to generate Excel export. The sheet may be too large or contain invalid cell formats.");

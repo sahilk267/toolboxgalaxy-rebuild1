@@ -98,6 +98,9 @@ export default function RegexTesterTool() {
         let count = 0;
         const maxMatches = 500;
         while ((match = regex.exec(testString)) !== null && count < maxMatches) {
+          if (performance.now() - startTime > 1000) {
+            throw new Error("Execution timed out (>1000ms): possible catastrophic backtracking (ReDoS).");
+          }
           count++;
           matches.push({
             index: match.index,

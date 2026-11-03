@@ -9,6 +9,10 @@ import { countZipSolutions, solvedZip, zipEditionBank, zipEditionForDate } from 
 import { countWendSolutions, matchesWendWord, solvedWend, validWendPath, wendWords } from "../client/src/game/logicPuzzles/wend";
 import { wendEditionBank, wendEditionForDate } from "../client/src/game/logicPuzzles/wendBank";
 import { baseToDisplay, displayToBase, getLogicDaily } from "../client/src/game/logicPuzzles/daily";
+import { DAILY_WORDLE_BANK, VALID_5_LETTER_WORDS, wordleEditionForDate } from "../client/src/game/logicPuzzles/wordleBank";
+import { CHESS_PUZZLE_EDITIONS, coordToSquare, getChessEditionForDate } from "../client/src/game/logicPuzzles/chessBank";
+import { Chess } from "chess.js";
+import { MINI_CROSSWORD_BANK, miniCrosswordEditionForDate } from "../client/src/game/logicPuzzles/miniCrosswordBank";
 
 const assert = (condition: unknown, message: string) => { if (!condition) throw new Error(message); };
 const week = (select: (date: string) => { id: string }) => new Set(Array.from({ length: 7 }, (_, index) => select(`2026-08-${String(24 + index).padStart(2, "0")}`).id));
@@ -47,4 +51,72 @@ assert(wendEditionBank.length === 7, "Wend must ship seven authored editions");
 wendEditionBank.forEach((edition) => { assert(!wendWordsSets.has(edition.wordSignature) && !wendPaths.has(edition.pathSignature), `${edition.id} must retain distinct target-word and word-path topology`); wendWordsSets.add(edition.wordSignature); wendPaths.add(edition.pathSignature); wendCandidates.add(edition.candidatePaths); assert(edition.grid.length === 5 && edition.grid.every((line) => line.length === 5), `${edition.id} must retain a 5×5 letter field`); assert(edition.words.every((word) => validWendPath(word.path, edition.grid) && matchesWendWord(word.path, word, edition.grid)), `${edition.id} target paths must spell orthogonally`); assert(solvedWend(edition.words, edition.words) && countWendSolutions(edition.words, edition.grid) === 1, `${edition.id} must remain a unique exact cover`); const start = edition.words[0].path[0]; const nonAdjacent = Array.from({ length: 25 }, (_, index) => ({ row: Math.floor(index / 5), col: index % 5 })).find((cell) => Math.abs(cell.row - start.row) + Math.abs(cell.col - start.col) > 1)!; assert(!validWendPath([start, nonAdjacent], edition.grid), `${edition.id} non-adjacent mutation must fail`); const mutation = edition.grid.map((line) => [...line]); const changed = edition.words[0].path[1]; mutation[changed.row][changed.col] = "?"; assert(!matchesWendWord(edition.words[0].path, edition.words[0], mutation), `${edition.id} letter mutation must fail`); });
 assert(wendCandidates.size >= 4 && week(wendEditionForDate).size === 7, "Wend must retain authored branching variation and seven-date coverage");
 const daily = getLogicDaily(new Date(2026, 7, 26)); assert(daily.id === getLogicDaily(new Date(2026, 7, 26)).id, "Local daily field must be deterministic"); ([0, 1, 2, 3] as const).forEach((transform) => { const display = baseToDisplay(1, 2, 6, transform); const base = displayToBase(display.row, display.col, 6, transform); assert(base.row === 1 && base.col === 2, "Daily transform must round-trip coordinates"); });
-console.log("Logic puzzle validators passed: Mini Sudoku, Tango, Queens, Patches, Zip, Wend.");
+// Wordle Verification
+assert(DAILY_WORDLE_BANK.length >= 7, "Wordle must ship at least seven daily editions");
+DAILY_WORDLE_BANK.forEach((edition) => {
+  assert(/^[A-Z]{5}$/.test(edition.solution), `Wordle edition ${edition.id} solution "${edition.solution}" must be exactly 5 uppercase letters`);
+  assert(VALID_5_LETTER_WORDS.has(edition.solution), `Wordle edition ${edition.id} solution "${edition.solution}" must exist in VALID_5_LETTER_WORDS dictionary`);
+});
+VALID_5_LETTER_WORDS.forEach((word) => {
+  assert(/^[A-Z]{5}$/.test(word), `Word in vocabulary "${word}" must be exactly 5 uppercase letters`);
+});
+assert(wordleEditionForDate("2026-11-04").solution === "ALPHA", "Wordle edition for Nov 4, 2026 must be ALPHA");
+assert(wordleEditionForDate("2026-11-09").solution === "GAMMA", "Wordle edition for Nov 9, 2026 must be GAMMA");
+
+// Chess Puzzle Verification
+assert(CHESS_PUZZLE_EDITIONS.length === 7, "Chess puzzle bank must ship seven authored editions");
+CHESS_PUZZLE_EDITIONS.forEach((edition) => {
+  const chess = new Chess(edition.fen);
+  assert(!chess.isCheckmate(), `Chess puzzle ${edition.id} initial position must not already be in checkmate`);
+  assert(chess.turn() === (edition.turn === "white" ? "w" : "b"), `Chess puzzle ${edition.id} active turn must match edition.turn`);
+
+  edition.moves.forEach((step, stepIndex) => {
+    const fromSquare = coordToSquare(step.playerMove.from);
+    const toSquare = coordToSquare(step.playerMove.to);
+    const playerMoveResult = chess.move({ from: fromSquare, to: toSquare });
+    assert(Boolean(playerMoveResult), `Chess puzzle ${edition.id} move step ${stepIndex + 1} player move ${fromSquare}->${toSquare} must be strictly legal`);
+
+    if (step.opponentReply) {
+      const oppFrom = coordToSquare(step.opponentReply.from);
+      const oppTo = coordToSquare(step.opponentReply.to);
+      const oppResult = chess.move({ from: oppFrom, to: oppTo });
+      assert(Boolean(oppResult), `Chess puzzle ${edition.id} step ${stepIndex + 1} opponent reply ${oppFrom}->${oppTo} must be strictly legal`);
+    }
+  });
+
+  if (edition.moves[edition.moves.length - 1].playerMove.notation.includes("#")) {
+    assert(chess.isCheckmate(), `Chess puzzle ${edition.id} final position must deliver genuine checkmate`);
+  }
+});
+
+// Mini Crossword Verification
+assert(MINI_CROSSWORD_BANK.length >= 7, "Mini Crossword must ship at least seven daily editions");
+MINI_CROSSWORD_BANK.forEach((edition) => {
+  assert(edition.grid.length === 5 && edition.grid.every((row) => row.length === 5), `Mini Crossword ${edition.id} must be a 5x5 grid`);
+
+  const acrossClues = edition.clues.filter((c) => c.dir === "A");
+  const downClues = edition.clues.filter((c) => c.dir === "D");
+  assert(acrossClues.length === 5, `Mini Crossword ${edition.id} must have 5 across clues`);
+  assert(downClues.length === 5, `Mini Crossword ${edition.id} must have 5 down clues`);
+
+  // Verify Across answers match grid rows
+  for (let r = 0; r < 5; r++) {
+    const rowWord = edition.grid[r].join("");
+    assert(/^[A-Z]{5}$/.test(rowWord), `Mini Crossword ${edition.id} row ${r} must contain 5 uppercase letters`);
+    const clue = acrossClues.find((c) => c.row === r);
+    assert(Boolean(clue), `Mini Crossword ${edition.id} must have an across clue for row ${r}`);
+    assert(clue!.answer === rowWord, `Mini Crossword ${edition.id} across answer "${clue!.answer}" must match grid row "${rowWord}"`);
+  }
+
+  // Verify Down answers match grid columns
+  for (let c = 0; c < 5; c++) {
+    const colWord = edition.grid.map((row) => row[c]).join("");
+    assert(/^[A-Z]{5}$/.test(colWord), `Mini Crossword ${edition.id} col ${c} must contain 5 uppercase letters`);
+    const clue = downClues.find((clueItem) => clueItem.col === c);
+    assert(Boolean(clue), `Mini Crossword ${edition.id} must have a down clue for col ${c}`);
+    assert(clue!.answer === colWord, `Mini Crossword ${edition.id} down answer "${clue!.answer}" must match grid column "${colWord}"`);
+  }
+});
+
+console.log("Logic puzzle validators passed: Mini Sudoku, Tango, Queens, Patches, Zip, Wend, Wordle, Chess, Mini Crossword.");
+

@@ -39,7 +39,12 @@ export function tableFromCsv(input: string): StructuredResult<CsvTable> {
   return { value: { headers, rows } };
 }
 
-const csvCell = (rawValue: string) => { const value = /^\s*[=+\-@]/.test(rawValue) ? `'${rawValue}` : rawValue; return /[",\n\r]/.test(value) ? `"${value.replaceAll('"', '""')}"` : value; };
+const csvCell = (rawValue: string) => {
+  const isPureNumber = /^\s*[+\-]?(\d+(\.\d*)?|\.\d+)\s*$/.test(rawValue);
+  const isFormulaInjection = !isPureNumber && /^\s*[=+\-@]/.test(rawValue);
+  const value = isFormulaInjection ? `'${rawValue}` : rawValue;
+  return /[",\n\r]/.test(value) ? `"${value.replaceAll('"', '""')}"` : value;
+};
 export function tableToCsv(table: CsvTable) { return [table.headers, ...table.rows].map((row) => row.map(csvCell).join(",")).join("\r\n"); }
 
 export function previewCsvTable(table: CsvTable, rowLimit = 12, columnLimit = 12) { const headers = table.headers.slice(0, columnLimit); return { headers, rows: table.rows.slice(0, rowLimit).map((row) => row.slice(0, columnLimit)), truncated: table.rows.length > rowLimit || table.headers.length > columnLimit }; }

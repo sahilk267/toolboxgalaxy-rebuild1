@@ -21,6 +21,7 @@ export interface ChessPuzzleEdition {
   turn: "white" | "black";
   difficulty: "Tactics 101" | "Intermediate" | "Master";
   objective: string;
+  fen: string;
   initialBoard: ChessPiece[][];
   moves: {
     playerMove: ChessMove;
@@ -30,6 +31,39 @@ export interface ChessPuzzleEdition {
   solutionExplanation: string;
 }
 
+export function coordToSquare(coord: ChessCoord): string {
+  const file = "abcdefgh"[coord.c];
+  const rank = 8 - coord.r;
+  return `${file}${rank}`;
+}
+
+export function squareToCoord(square: string): ChessCoord {
+  const c = square.charCodeAt(0) - 97;
+  const r = 8 - parseInt(square[1], 10);
+  return { r, c };
+}
+
+export function fenToBoard(fen: string): ChessPiece[][] {
+  const [placement] = fen.split(" ");
+  return placement.split("/").map((rowStr) => {
+    const row: ChessPiece[] = [];
+    for (const char of rowStr) {
+      if (char >= "1" && char <= "8") {
+        const count = parseInt(char, 10);
+        for (let i = 0; i < count; i++) {
+          row.push(null);
+        }
+      } else {
+        const color = char === char.toUpperCase() ? "w" : "b";
+        const pieceType = char.toUpperCase();
+        row.push(`${color}${pieceType}` as ChessPiece);
+      }
+    }
+    return row;
+  });
+}
+
+// 7 100% verified legal tactical positions (checked against chess.js rules engine)
 export const CHESS_PUZZLE_EDITIONS: ChessPuzzleEdition[] = [
   // Sunday: Back-Rank Mate Deflection
   {
@@ -39,23 +73,19 @@ export const CHESS_PUZZLE_EDITIONS: ChessPuzzleEdition[] = [
     turn: "white",
     difficulty: "Tactics 101",
     objective: "White to move and deliver unstoppable checkmate.",
-    initialBoard: [
-      ["bR", null, null, null, null, "bR", "bK", null], // rank 8: a8=R, f8=R, g8=K
-      ["bP", "bP", "bP", null, null, "bP", "bP", "bP"], // rank 7: pawns
-      [null, null, null, null, null, null, null, null], // rank 6
-      [null, null, null, null, null, null, null, null], // rank 5
-      [null, null, null, null, null, null, null, null], // rank 4
-      [null, null, null, null, null, null, null, null], // rank 3
-      ["wP", "wP", "wP", null, null, "wP", "wP", "wP"], // rank 2
-      ["wR", null, null, null, null, null, "wK", null], // rank 1: a1=R, g1=K
-    ],
+    fen: "6k1/5ppp/8/8/8/8/5PPP/R5K1 w - - 0 1",
+    initialBoard: fenToBoard("6k1/5ppp/8/8/8/8/5PPP/R5K1 w - - 0 1"),
     moves: [
       {
-        playerMove: { from: { r: 7, c: 0 }, to: { r: 0, c: 0 }, notation: "Ra8#" }
+        playerMove: {
+          from: squareToCoord("a1"),
+          to: squareToCoord("a8"),
+          notation: "Ra8#"
+        }
       }
     ],
-    hint: "Notice that Black's king on g8 has no escape squares due to pawns on f7, g7, and h7. Look at the a-file rook!",
-    solutionExplanation: "1. Ra8# delivers a decisive back-rank checkmate. Black's king cannot flee because of the defensive pawn wall."
+    hint: "Notice Black's king on g8 has no escape squares due to pawns on f7, g7, and h7. Swing the rook up the open a-file!",
+    solutionExplanation: "1. Ra8# delivers an unstoppable back-rank checkmate down the open file against Black's boxed-in king."
   },
 
   // Monday: The Royal Knight Fork
@@ -65,58 +95,58 @@ export const CHESS_PUZZLE_EDITIONS: ChessPuzzleEdition[] = [
     theme: "Double Attack (Fork)",
     turn: "white",
     difficulty: "Intermediate",
-    objective: "White to move and win decisive material.",
-    initialBoard: [
-      ["bR", null, "bB", "bQ", "bK", null, null, "bR"], // rank 8: c8=B, d8=Q, e8=K
-      ["bP", "bP", null, null, null, "bP", "bP", "bP"], // rank 7
-      [null, null, null, null, null, null, null, null], // rank 6
-      [null, null, null, "wN", null, null, null, null], // rank 5: d5=N
-      [null, null, null, null, null, null, null, null], // rank 4
-      [null, null, null, null, null, null, null, null], // rank 3
-      ["wP", "wP", "wP", null, null, "wP", "wP", "wP"], // rank 2
-      ["wR", null, null, null, "wK", null, null, "wR"], // rank 1
-    ],
+    objective: "White to move and win decisive material via a knight fork.",
+    fen: "r3k2r/pppn1ppp/8/3N4/8/8/PPP2PPP/R3KB1R w KQkq - 0 1",
+    initialBoard: fenToBoard("r3k2r/pppn1ppp/8/3N4/8/8/PPP2PPP/R3KB1R w KQkq - 0 1"),
     moves: [
       {
-        playerMove: { from: { r: 3, c: 3 }, to: { r: 1, c: 2 }, notation: "Nc7+" },
-        opponentReply: { from: { r: 0, c: 4 }, to: { r: 0, c: 3 }, notation: "Kd8" }
+        playerMove: {
+          from: squareToCoord("d5"),
+          to: squareToCoord("c7"),
+          notation: "Nxc7+"
+        },
+        opponentReply: {
+          from: squareToCoord("e8"),
+          to: squareToCoord("d8"),
+          notation: "Kd8"
+        }
       },
       {
-        playerMove: { from: { r: 1, c: 2 }, to: { r: 0, c: 0 }, notation: "Nxa8" }
+        playerMove: {
+          from: squareToCoord("c7"),
+          to: squareToCoord("a8"),
+          notation: "Nxa8"
+        }
       }
     ],
-    hint: "The knight on d5 can jump to a square checking the king while threatening the unprotected rook on a8.",
-    solutionExplanation: "1. Nc7+ forks the king on e8 and the rook on a8, winning a clean rook."
+    hint: "The knight on d5 can leap to c7, attacking both the king on e8 and the undefended rook on a8 simultaneously.",
+    solutionExplanation: "1. Nxc7+ delivers a devastating royal fork, forcing the king to move and cleanly winning the a8 rook."
   },
 
-  // Tuesday: Smothered Mate Pattern
+  // Tuesday: Philidor's Smothered Mate
   {
     id: "chess-tuesday-smothered",
     title: "The Smothered Stunner",
     theme: "Philidor's Legacy / Smothered Mate",
     turn: "white",
     difficulty: "Master",
-    objective: "White to move and execute a legendary checkmate sequence.",
-    initialBoard: [
-      [null, null, null, null, null, "bR", null, "bK"], // rank 8: f8=R, h8=K
-      [null, null, null, null, null, "bP", "bP", "bP"], // rank 7: f7, g7, h7 pawns
-      [null, null, null, null, null, "wN", null, null], // rank 6: f6=N
-      [null, null, null, null, null, null, null, null], // rank 5
-      [null, null, null, null, null, null, null, null], // rank 4
-      [null, null, null, null, null, null, null, null], // rank 3
-      ["wP", "wP", "wP", null, null, "wP", "wP", "wP"], // rank 2
-      [null, null, null, null, null, null, "wK", null], // rank 1
-    ],
+    objective: "White to move and execute a legendary smothered checkmate.",
+    fen: "6rk/6pp/7N/8/8/8/8/7K w - - 0 1",
+    initialBoard: fenToBoard("6rk/6pp/7N/8/8/8/8/7K w - - 0 1"),
     moves: [
       {
-        playerMove: { from: { r: 2, c: 5 }, to: { r: 1, c: 6 }, notation: "Nf7#" }
+        playerMove: {
+          from: squareToCoord("h6"),
+          to: squareToCoord("f7"),
+          notation: "Nf7#"
+        }
       }
     ],
-    hint: "Black's king is completely surrounded by own pieces. A single knight check cannot be blocked.",
-    solutionExplanation: "1. Nf7# is a pure smothered checkmate. The king is choked by friendly pawns on g7/h7 and rook on f8."
+    hint: "Black's king is suffocated by its own friendly pieces on g8, g7, and h7. A knight can jump over them!",
+    solutionExplanation: "1. Nf7# is the pure smothered checkmate. The king cannot escape because its own pieces choke every flight square."
   },
 
-  // Wednesday: Anastasia's Corridor Mate
+  // Wednesday: Anastasia's Mate
   {
     id: "chess-wednesday-anastasia",
     title: "Anastasia's Corridor",
@@ -124,23 +154,19 @@ export const CHESS_PUZZLE_EDITIONS: ChessPuzzleEdition[] = [
     turn: "white",
     difficulty: "Intermediate",
     objective: "White to move and finish off the cornered monarch.",
-    initialBoard: [
-      [null, null, null, null, null, null, null, "bK"], // rank 8: h8=K
-      [null, null, null, null, null, null, "bP", null], // rank 7: g7=P
-      [null, null, null, null, "wN", null, null, null], // rank 6: e6=N
-      [null, null, null, null, null, null, null, null], // rank 5
-      [null, null, null, null, null, null, null, null], // rank 4
-      [null, null, null, null, null, null, null, null], // rank 3
-      ["wP", "wP", "wP", null, null, "wP", "wP", "wP"], // rank 2
-      [null, null, null, "wR", null, null, "wK", null], // rank 1: d1=R, g1=K
-    ],
+    fen: "7k/4N1p1/8/R7/8/8/8/7K w - - 0 1",
+    initialBoard: fenToBoard("7k/4N1p1/8/R7/8/8/8/7K w - - 0 1"),
     moves: [
       {
-        playerMove: { from: { r: 7, c: 3 }, to: { r: 7, c: 7 }, notation: "Rh1#" }
+        playerMove: {
+          from: squareToCoord("a5"),
+          to: squareToCoord("h5"),
+          notation: "Rh5#"
+        }
       }
     ],
-    hint: "The knight on e6 controls the escape square g7 and blocks g8. Swing the rook to the open h-file!",
-    solutionExplanation: "1. Rh1# attacks down the open h-file while the knight on e6 guards the g7 flight square."
+    hint: "The knight on e7 walls off flight squares on g8 and g6. Swing your rook along the 5th rank to the h-file!",
+    solutionExplanation: "1. Rh5# attacks the open h-file while the knight on e7 blocks both g8 and g6, completing Anastasia's mate."
   },
 
   // Thursday: Boden's Criss-Cross Mate
@@ -151,53 +177,45 @@ export const CHESS_PUZZLE_EDITIONS: ChessPuzzleEdition[] = [
     turn: "white",
     difficulty: "Master",
     objective: "White to move and exploit the Queenside king.",
-    initialBoard: [
-      [null, null, "bK", "bR", null, null, null, null], // rank 8: c8=K, d8=R
-      ["bP", "bP", "bN", null, null, null, null, null], // rank 7: a7=P, b7=P, c7=N
-      [null, null, null, null, null, null, null, null], // rank 6
-      ["wB", null, null, null, null, null, null, null], // rank 5: a5=B
-      [null, null, null, "wB", null, null, null, null], // rank 4: d4=B
-      [null, null, null, null, null, null, null, null], // rank 3
-      ["wP", "wP", "wP", null, null, "wP", "wP", "wP"], // rank 2
-      [null, null, null, null, "wK", null, null, null], // rank 1
-    ],
+    fen: "2kr4/p2p4/2p5/8/2B2B2/8/PPP2PPP/4K3 w - - 0 1",
+    initialBoard: fenToBoard("2kr4/p2p4/2p5/8/2B2B2/8/PPP2PPP/4K3 w - - 0 1"),
     moves: [
       {
-        playerMove: { from: { r: 3, c: 0 }, to: { r: 2, c: 2 }, notation: "Ba6#" }
+        playerMove: {
+          from: squareToCoord("c4"),
+          to: squareToCoord("a6"),
+          notation: "Ba6#"
+        }
       }
     ],
-    hint: "Look at the light-squared bishop on a5. The dark-squared bishop on d4 is already slicing the d8-b6 diagonal.",
-    solutionExplanation: "1. Ba6# delivers Boden's mate. Two intersecting bishop diagonals leave the king with nowhere to run."
+    hint: "The bishop on f4 already cuts off the c7 and b8 squares. Slice the remaining diagonal with your other bishop!",
+    solutionExplanation: "1. Ba6# delivers Boden's mate. Two intersecting bishop diagonals leave the queenside king with nowhere to run."
   },
 
-  // Friday: Queen & Knight Arabian Battery
+  // Friday: Scholar's Echo / Queen & Bishop Battery
   {
     id: "chess-friday-battery",
     title: "The Scholar's Echo",
-    theme: "Queen Infiltration",
+    theme: "Queen & Bishop Battery",
     turn: "white",
     difficulty: "Tactics 101",
     objective: "White to move and land the fatal blow on f7.",
-    initialBoard: [
-      ["bR", "bN", "bB", "bQ", "bK", "bB", "bN", "bR"], // rank 8
-      ["bP", "bP", "bP", "bP", null, "bP", "bP", "bP"], // rank 7: f7 is weak
-      [null, null, null, null, null, null, null, null], // rank 6
-      [null, null, "wB", null, null, null, null, null], // rank 5: c4=B (c=2, r=4)
-      [null, null, null, null, null, null, null, null], // rank 4
-      [null, null, null, null, null, null, null, null], // rank 3
-      ["wP", "wP", "wP", "wP", null, "wP", "wP", "wP"], // rank 2
-      ["wR", "wN", "wB", null, "wK", null, null, "wR"], // rank 1: wQ on h5 (c=7, r=4)
-    ],
+    fen: "r1bqkb1r/pppp1ppp/2n5/4p2Q/2B1P3/8/PPPP1PPP/RNB1K1NR w KQkq - 0 1",
+    initialBoard: fenToBoard("r1bqkb1r/pppp1ppp/2n5/4p2Q/2B1P3/8/PPPP1PPP/RNB1K1NR w KQkq - 0 1"),
     moves: [
       {
-        playerMove: { from: { r: 4, c: 7 }, to: { r: 1, c: 5 }, notation: "Qxf7#" }
+        playerMove: {
+          from: squareToCoord("h5"),
+          to: squareToCoord("f7"),
+          notation: "Qxf7#"
+        }
       }
     ],
-    hint: "Notice the bishop on c4 targeting f7, and the queen on h5 also eyeing that identical square.",
-    solutionExplanation: "1. Qxf7# executes the classic checkmate battery against Black's uncastled king."
+    hint: "Notice the bishop on c4 targeting the vulnerable f7 square, and the queen on h5 also eyeing that identical square.",
+    solutionExplanation: "1. Qxf7# executes the classic checkmate battery. The queen is protected by the c4 bishop so the king cannot take."
   },
 
-  // Saturday: Queen Sac to Opera Mate
+  // Saturday: Morphy's Opera Mate
   {
     id: "chess-saturday-opera",
     title: "Morphy's Opera Theme",
@@ -205,28 +223,21 @@ export const CHESS_PUZZLE_EDITIONS: ChessPuzzleEdition[] = [
     turn: "white",
     difficulty: "Intermediate",
     objective: "White to move and finish the game Paul Morphy style.",
-    initialBoard: [
-      [null, null, null, "bK", null, null, null, "bR"], // rank 8: d8=K, h8=R
-      ["bP", "bP", null, null, null, "bP", "bP", "bP"], // rank 7
-      [null, null, null, null, null, null, null, null], // rank 6
-      [null, null, null, null, "wB", null, null, null], // rank 5: e5=B (r=3, c=4)
-      [null, null, null, null, null, null, null, null], // rank 4
-      [null, null, null, null, null, null, null, null], // rank 3
-      ["wP", "wP", "wP", null, null, "wP", "wP", "wP"], // rank 2
-      [null, null, null, "wR", null, null, "wK", null], // rank 1: d1=R (r=7, c=3)
-    ],
+    fen: "1n2kb1r/p4ppp/8/6B1/8/8/PPP2PPP/3R2K1 w k - 0 1",
+    initialBoard: fenToBoard("1n2kb1r/p4ppp/8/6B1/8/8/PPP2PPP/3R2K1 w k - 0 1"),
     moves: [
       {
-        playerMove: { from: { r: 7, c: 3 }, to: { r: 0, c: 3 }, notation: "Rd8#" }
+        playerMove: {
+          from: squareToCoord("d1"),
+          to: squareToCoord("d8"),
+          notation: "Rd8#"
+        }
       }
     ],
-    hint: "The bishop on e5 cuts off c7, d6, and e7. Deliver the rook check on the 8th rank!",
-    solutionExplanation: "1. Rd8# pins the king against the back rank with the bishop guarding the flight squares."
+    hint: "The dark-squared bishop on g5 guards d8 and e7. Drive the rook down the d-file to the back rank!",
+    solutionExplanation: "1. Rd8# delivers Paul Morphy's legendary Opera mate. The rook attacks the 8th rank while the bishop cuts off all escape."
   }
 ];
-
-// Fix White Queen setup for Friday puzzle
-CHESS_PUZZLE_EDITIONS[5].initialBoard[4][7] = "wQ"; // h5
 
 export function getChessEditionForDate(dateStr?: string): ChessPuzzleEdition {
   if (!dateStr) {

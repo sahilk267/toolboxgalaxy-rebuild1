@@ -279,10 +279,16 @@ export function RandomNumberTool() {
 
   // Cryptographically secure random integer
   const generateSecureRandomInt = (minVal: number, maxVal: number): number => {
-    const range = maxVal - minVal + 1;
+    const lower = Math.min(minVal, maxVal);
+    const upper = Math.max(minVal, maxVal);
+    const range = upper - lower + 1;
+    if (range <= 1) return lower;
     const array = new Uint32Array(1);
-    window.crypto.getRandomValues(array);
-    return minVal + (array[0] % range);
+    if (typeof window !== "undefined" && window.crypto && window.crypto.getRandomValues) {
+      window.crypto.getRandomValues(array);
+      return lower + (array[0] % range);
+    }
+    return lower + Math.floor(Math.random() * range);
   };
 
   const generateNumbers = useCallback(() => {
@@ -649,30 +655,39 @@ export function SeoMetaTool() {
   const titleLen = title.length;
   const descLen = description.length;
 
+  const escapeHtmlAttr = (str: string): string => {
+    return str
+      .replace(/&/g, "&amp;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#39;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;");
+  };
+
   const htmlOutput = useMemo(() => {
     return `<!-- Primary Meta Tags -->
-<title>${title}</title>
-<meta name="title" content="${title}">
-<meta name="description" content="${description}">
-<meta name="keywords" content="${keywords}">
-<meta name="author" content="${author}">
-<meta name="robots" content="${robots}">
-<link rel="canonical" href="${url}">
+<title>${escapeHtmlAttr(title)}</title>
+<meta name="title" content="${escapeHtmlAttr(title)}">
+<meta name="description" content="${escapeHtmlAttr(description)}">
+<meta name="keywords" content="${escapeHtmlAttr(keywords)}">
+<meta name="author" content="${escapeHtmlAttr(author)}">
+<meta name="robots" content="${escapeHtmlAttr(robots)}">
+<link rel="canonical" href="${escapeHtmlAttr(url)}">
 
 <!-- Open Graph / Facebook -->
 <meta property="og:type" content="website">
-<meta property="og:url" content="${url}">
-<meta property="og:title" content="${title}">
-<meta property="og:description" content="${description}">
-<meta property="og:image" content="${ogImage}">
-<meta property="og:site_name" content="${siteName}">
+<meta property="og:url" content="${escapeHtmlAttr(url)}">
+<meta property="og:title" content="${escapeHtmlAttr(title)}">
+<meta property="og:description" content="${escapeHtmlAttr(description)}">
+<meta property="og:image" content="${escapeHtmlAttr(ogImage)}">
+<meta property="og:site_name" content="${escapeHtmlAttr(siteName)}">
 
 <!-- Twitter -->
-<meta property="twitter:card" content="${twitterCard}">
-<meta property="twitter:url" content="${url}">
-<meta property="twitter:title" content="${title}">
-<meta property="twitter:description" content="${description}">
-<meta property="twitter:image" content="${ogImage}">`;
+<meta property="twitter:card" content="${escapeHtmlAttr(twitterCard)}">
+<meta property="twitter:url" content="${escapeHtmlAttr(url)}">
+<meta property="twitter:title" content="${escapeHtmlAttr(title)}">
+<meta property="twitter:description" content="${escapeHtmlAttr(description)}">
+<meta property="twitter:image" content="${escapeHtmlAttr(ogImage)}">`;
   }, [title, description, keywords, author, robots, url, ogImage, siteName, twitterCard]);
 
   const nextJsOutput = useMemo(() => {

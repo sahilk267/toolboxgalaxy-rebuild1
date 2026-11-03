@@ -16,12 +16,14 @@ export const DAILY_WORDLE_BANK: WordleEdition[] = [
   { id: "wordle-006", date: "2026-09-07", solution: "FORGE", hint: "Make or shape a metal object using fire", theme: "Engineering" },
   { id: "wordle-007", date: "2026-09-08", solution: "SPARK", hint: "A small fiery particle or ignition trigger", theme: "Energy" },
   { id: "wordle-008", date: "2026-09-09", solution: "BLAZE", hint: "A very large or fiercely burning fire", theme: "Light" },
-  { id: "wordle-009", date: "2026-09-10", solution: "NOVA", hint: "A star showing a sudden large increase in brightness", theme: "Cosmos" },
+  { id: "wordle-009", date: "2026-09-10", solution: "COMET", hint: "Celestial body of ice and dust with a glowing tail", theme: "Cosmos" },
   { id: "wordle-010", date: "2026-09-11", solution: "COSMO", hint: "Relating to the universe or world at large", theme: "Universe" },
   { id: "wordle-011", date: "2026-09-12", solution: "NEXUS", hint: "A connection or series of connections linking things", theme: "Logic" },
   { id: "wordle-012", date: "2026-09-13", solution: "RADAR", hint: "System for detecting presence or direction of objects", theme: "Detection" },
   { id: "wordle-013", date: "2026-09-14", solution: "LUNAR", hint: "Resembling or determined by the moon", theme: "Night Sky" },
-  { id: "wordle-014", date: "2026-09-15", solution: "ZENITH", hint: "The time at which something is most powerful or high", theme: "Apex" },
+  { id: "wordle-014", date: "2026-09-15", solution: "CREST", hint: "The top or highest point of a wave or mountain", theme: "Apex" },
+  { id: "wordle-015", date: "2026-11-04", solution: "ALPHA", hint: "First letter of Greek alphabet or leading star", theme: "Origins" },
+  { id: "wordle-016", date: "2026-11-09", solution: "GAMMA", hint: "High-energy electromagnetic radiation", theme: "Physics" },
 ];
 
 export const VALID_5_LETTER_WORDS = new Set([
@@ -38,7 +40,7 @@ export const VALID_5_LETTER_WORDS = new Set([
   "CLEAR", "CLICK", "CLOCK", "CLOSE", "COACH", "COAST", "COAST", "COLOR", "COUCH", "COUNT",
   "COURT", "COVER", "CRAFT", "CRANE", "CRASH", "CRAZY", "CREAM", "CRIME", "CROSS", "CROWD",
   "CROWN", "CRUDE", "CURVE", "CYCLE", "DAILY", "DANCE", "DATED", "DEALT", "DEATH", "DEBUT",
-  "DELAY", "DEPTH", "DIRT", "DODGE", "DRAFT", "DRAIN", "DRAMA", "DRAWN", "DREAM", "DRESS",
+  "DELAY", "DEPTH", "DRAKE", "DODGE", "DRAFT", "DRAIN", "DRAMA", "DRAWN", "DREAM", "DRESS",
   "DRIFT", "DRINK", "DRIVE", "DROVE", "DYING", "EAGER", "EARLY", "EARTH", "EIGHT", "ELITE",
   "EMPTY", "ENEMY", "ENJOY", "ENTER", "ENTRY", "EQUAL", "ERROR", "EVENT", "EVERY", "EXACT",
   "EXIST", "EXTRA", "FAITH", "FALSE", "FAULT", "FIBER", "FIELD", "FIFTH", "FIFTY", "FIGHT",
@@ -76,7 +78,7 @@ export const VALID_5_LETTER_WORDS = new Set([
   "VALUE", "VIDEO", "VIRUS", "VISIT", "VITAL", "VOICE", "WASTE", "WATCH", "WATER", "WHEEL",
   "WHERE", "WHICH", "WHILE", "WHITE", "WHOLE", "WHOSE", "WOMAN", "WOMEN", "WORLD", "WORRY",
   "WORSE", "WORST", "WORTH", "WOULD", "WOUND", "WRITE", "WRONG", "WROTE", "YIELD", "YOUNG",
-  "YOUTH", "ZENITH", "ORBIT", "SOLAR", "LUNAR", "RADAR", "COSMO"
+  "YOUTH", "CREST", "COMET", "ALPHA", "GAMMA", "ORBIT", "SOLAR", "LUNAR", "RADAR", "COSMO"
 ]);
 
 export function wordleEditionForDate(dateStr: string): WordleEdition {

@@ -58,9 +58,13 @@ export function WhatsappDirectTool() {
   const [qrDataUrl, setQrDataUrl] = useState("");
 
   const cleanNumber = useMemo(() => {
-    const digitsOnly = phoneNumber.replace(/\D/g, "");
-    const codeDigits = countryCode.replace("+", "");
+    let digitsOnly = phoneNumber.replace(/\D/g, "");
     if (!digitsOnly) return "";
+    digitsOnly = digitsOnly.replace(/^0+/, "");
+    const codeDigits = countryCode.replace("+", "");
+    if (digitsOnly.startsWith(codeDigits)) {
+      return digitsOnly;
+    }
     return `${codeDigits}${digitsOnly}`;
   }, [countryCode, phoneNumber]);
 
@@ -238,24 +242,27 @@ export function GstCalculatorTool() {
   const [isInterState, setIsInterState] = useState(false); // IGST vs CGST+SGST
   const [copied, setCopied] = useState(false);
 
-  const activeRate = customRate !== "" ? Number(customRate) || 0 : gstRate;
-  const numAmount = Number(amount) || 0;
+  const parsedRate = customRate !== "" ? parseFloat(customRate) : gstRate;
+  const activeRate = Number.isFinite(parsedRate) && parsedRate >= 0 ? parsedRate : 0;
+  const rawAmount = parseFloat(amount);
+  const numAmount = Number.isFinite(rawAmount) && rawAmount >= 0 ? rawAmount : 0;
 
   const result = useMemo(() => {
     const rateDecimal = activeRate / 100;
     if (isInclusive) {
       // Amount includes GST -> Base = Amount / (1 + rate)
-      const baseAmount = numAmount / (1 + rateDecimal);
-      const totalTax = numAmount - baseAmount;
+      const denominator = 1 + rateDecimal;
+      const baseAmount = denominator > 0 ? numAmount / denominator : numAmount;
+      const totalTax = Math.max(0, numAmount - baseAmount);
       const cgst = totalTax / 2;
       const sgst = totalTax / 2;
       return {
-        baseAmount,
-        totalTax,
-        cgst,
-        sgst,
-        igst: totalTax,
-        finalTotal: numAmount,
+        baseAmount: Math.round(baseAmount * 100) / 100,
+        totalTax: Math.round(totalTax * 100) / 100,
+        cgst: Math.round(cgst * 100) / 100,
+        sgst: Math.round(sgst * 100) / 100,
+        igst: Math.round(totalTax * 100) / 100,
+        finalTotal: Math.round(numAmount * 100) / 100,
       };
     } else {
       // Amount excludes GST -> Tax = Amount * rate
@@ -264,12 +271,12 @@ export function GstCalculatorTool() {
       const sgst = totalTax / 2;
       const finalTotal = numAmount + totalTax;
       return {
-        baseAmount: numAmount,
-        totalTax,
-        cgst,
-        sgst,
-        igst: totalTax,
-        finalTotal,
+        baseAmount: Math.round(numAmount * 100) / 100,
+        totalTax: Math.round(totalTax * 100) / 100,
+        cgst: Math.round(cgst * 100) / 100,
+        sgst: Math.round(sgst * 100) / 100,
+        igst: Math.round(totalTax * 100) / 100,
+        finalTotal: Math.round(finalTotal * 100) / 100,
       };
     }
   }, [numAmount, activeRate, isInclusive]);
@@ -934,17 +941,27 @@ function convertTwoDigits(n: number): string {
   return TENS_EN[ten] + (one ? " " + ONES_EN[one] : "");
 }
 
-function numberToIndianWords(num: number): string {
-  if (num === 0) return "Zero Rupees Only";
-  const str = Math.floor(num).toString();
-  if (str.length > 9) return "Amount exceeds Indian standard converter limit (99 Crores).";
+function numberToIndianWords(inputNum: number): string {
+  if (!Number.isFinite(inputNum) || inputNum < 0) {
+    return "Enter a valid positive number.";
+  }
+  const rounded = Math.round(inputNum * 100) / 100;
+  if (rounded === 0) return "Zero Rupees Only";
+
+  const totalPaise = Math.round(rounded * 100);
+  const wholeRupees = Math.floor(totalPaise / 100);
+  const paise = totalPaise % 100;
+
+  if (wholeRupees > 999999999) {
+    return "Amount exceeds Indian standard converter limit (99 Crores).";
+  }
 
   const parts: string[] = [];
-  const crores = Math.floor(num / 10000000);
-  const lakhs = Math.floor((num % 10000000) / 100000);
-  const thousands = Math.floor((num % 100000) / 1000);
-  const hundreds = Math.floor((num % 1000) / 100);
-  const rest = Math.floor(num % 100);
+  const crores = Math.floor(wholeRupees / 10000000);
+  const lakhs = Math.floor((wholeRupees % 10000000) / 100000);
+  const thousands = Math.floor((wholeRupees % 100000) / 1000);
+  const hundreds = Math.floor((wholeRupees % 1000) / 100);
+  const rest = wholeRupees % 100;
 
   if (crores > 0) parts.push(`${convertTwoDigits(crores)} Crore`);
   if (lakhs > 0) parts.push(`${convertTwoDigits(lakhs)} Lakh`);
@@ -952,10 +969,10 @@ function numberToIndianWords(num: number): string {
   if (hundreds > 0) parts.push(`${ONES_EN[hundreds]} Hundred`);
   if (rest > 0) parts.push(convertTwoDigits(rest));
 
-  const paise = Math.round((num - Math.floor(num)) * 100);
-  const paiseStr = paise > 0 ? ` and ${convertTwoDigits(paise)} Paise` : "";
+  const rupeeStr = parts.length > 0 ? `${parts.join(" ")} Rupees` : (paise > 0 ? "Zero Rupees" : "");
+  const paiseStr = paise > 0 ? `${parts.length > 0 ? " and " : ""}${convertTwoDigits(paise)} Paise` : "";
 
-  return `${parts.join(" ")} Rupees${paiseStr} Only`;
+  return `${rupeeStr}${paiseStr} Only`.trim();
 }
 
 export function NumberToWordsTool() {

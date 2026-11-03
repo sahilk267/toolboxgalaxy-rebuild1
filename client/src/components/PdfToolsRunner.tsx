@@ -46,6 +46,7 @@ export function PdfMergeSplitTool() {
     if (!inputFiles || inputFiles.length === 0) return;
 
     const newItems: PdfFileItem[] = [];
+    const skippedFiles: string[] = [];
     for (let i = 0; i < inputFiles.length; i++) {
       const file = inputFiles[i];
       try {
@@ -60,8 +61,11 @@ export function PdfMergeSplitTool() {
           bytes,
         });
       } catch (err) {
-        console.warn("Skipping invalid PDF:", file.name);
+        skippedFiles.push(file.name);
       }
+    }
+    if (skippedFiles.length > 0) {
+      alert(`Could not load ${skippedFiles.length} file(s): ${skippedFiles.join(", ")}. Please ensure they are valid, unencrypted PDFs.`);
     }
     setFiles((prev) => [...prev, ...newItems]);
     e.target.value = "";
@@ -147,25 +151,46 @@ export function PdfMergeSplitTool() {
       const sourceDoc = await PDFDocument.load(splitFile.bytes);
       const totalPages = sourceDoc.getPageCount();
 
-      // Parse range string (e.g. "1-3, 5, 7-9")
+      // Parse range string (e.g. "1-3, 5, 7-9") with strict validation
       const pagesToExtract: number[] = [];
-      const parts = pageRange.split(",").map((p) => p.trim());
+      const parts = pageRange.split(",").map((p) => p.trim()).filter(Boolean);
+
+      if (parts.length === 0) {
+        alert("Please enter at least one page number or range (e.g. 1-3, 5).");
+        setIsSplitting(false);
+        return;
+      }
       
       for (const part of parts) {
-        if (part.includes("-")) {
-          const [startStr, endStr] = part.split("-");
+        if (/^\d+$/.test(part)) {
+          const num = parseInt(part, 10);
+          if (num < 1 || num > totalPages) {
+            alert(`Page ${num} is out of bounds. The document has pages 1 to ${totalPages}.`);
+            setIsSplitting(false);
+            return;
+          }
+          if (!pagesToExtract.includes(num - 1)) pagesToExtract.push(num - 1);
+        } else if (/^\d+\s*-\s*\d+$/.test(part)) {
+          const [startStr, endStr] = part.split("-").map((s) => s.trim());
           const start = parseInt(startStr, 10);
           const end = parseInt(endStr, 10);
-          if (!isNaN(start) && !isNaN(end)) {
-            for (let i = Math.max(1, start); i <= Math.min(totalPages, end); i++) {
-              if (!pagesToExtract.includes(i - 1)) pagesToExtract.push(i - 1);
-            }
+          if (start > end) {
+            alert(`Invalid range "${part}": start page (${start}) cannot be greater than end page (${end}).`);
+            setIsSplitting(false);
+            return;
+          }
+          if (start < 1 || end > totalPages) {
+            alert(`Page range "${part}" is out of bounds. The document has pages 1 to ${totalPages}.`);
+            setIsSplitting(false);
+            return;
+          }
+          for (let i = start; i <= end; i++) {
+            if (!pagesToExtract.includes(i - 1)) pagesToExtract.push(i - 1);
           }
         } else {
-          const num = parseInt(part, 10);
-          if (!isNaN(num) && num >= 1 && num <= totalPages) {
-            if (!pagesToExtract.includes(num - 1)) pagesToExtract.push(num - 1);
-          }
+          alert(`Malformed page token "${part}". Please provide numbers and ranges like "1-3, 5" without letters or double dashes.`);
+          setIsSplitting(false);
+          return;
         }
       }
 
@@ -395,6 +420,37 @@ interface ImageItem {
   bytes: Uint8Array;
 }
 
+async function renderImageToPngBytes(dataUrl: string): Promise<Uint8Array> {
+  return new Promise((resolve, reject) => {
+    const el = new Image();
+    el.crossOrigin = "anonymous";
+    el.onload = () => {
+      try {
+        const canvas = document.createElement("canvas");
+        canvas.width = el.naturalWidth || el.width;
+        canvas.height = el.naturalHeight || el.height;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) {
+          reject(new Error("Unable to obtain 2D rendering context"));
+          return;
+        }
+        ctx.drawImage(el, 0, 0);
+        canvas.toBlob((blob) => {
+          if (!blob) {
+            reject(new Error("Unable to serialize canvas to PNG blob"));
+            return;
+          }
+          blob.arrayBuffer().then((buf) => resolve(new Uint8Array(buf))).catch(reject);
+        }, "image/png");
+      } catch (e) {
+        reject(e);
+      }
+    };
+    el.onerror = () => reject(new Error("Failed to load and decode image data"));
+    el.src = dataUrl;
+  });
+}
+
 export function ImagesToPdfTool() {
   const [images, setImages] = useState<ImageItem[]>([]);
   const [pageSize, setPageSize] = useState<"a4" | "letter" | "fit">("a4");
@@ -455,11 +511,27 @@ export function ImagesToPdfTool() {
 
       for (const img of images) {
         let embeddedImage;
-        if (img.type === "image/png") {
-          embeddedImage = await pdfDoc.embedPng(img.bytes);
+        const isPng = img.type === "image/png" || img.name.toLowerCase().endsWith(".png");
+        const isJpg = img.type === "image/jpeg" || img.type === "image/jpg" || /\.jpe?g$/i.test(img.name);
+
+        if (isPng) {
+          try {
+            embeddedImage = await pdfDoc.embedPng(img.bytes);
+          } catch {
+            const pngBytes = await renderImageToPngBytes(img.dataUrl);
+            embeddedImage = await pdfDoc.embedPng(pngBytes);
+          }
+        } else if (isJpg) {
+          try {
+            embeddedImage = await pdfDoc.embedJpg(img.bytes);
+          } catch {
+            const pngBytes = await renderImageToPngBytes(img.dataUrl);
+            embeddedImage = await pdfDoc.embedPng(pngBytes);
+          }
         } else {
-          // jpg or webp
-          embeddedImage = await pdfDoc.embedJpg(img.bytes);
+          // WebP, BMP, GIF, SVG, etc: render to compatible PNG bitmap
+          const pngBytes = await renderImageToPngBytes(img.dataUrl);
+          embeddedImage = await pdfDoc.embedPng(pngBytes);
         }
 
         const imgWidth = embeddedImage.width;

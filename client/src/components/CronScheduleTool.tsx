@@ -51,6 +51,7 @@ function parseField(field: string, min: number, max: number, mapNames?: Record<s
   for (const part of parts) {
     if (part.includes("/")) {
       const [rangeStr, stepStr] = part.split("/");
+      if (!stepStr || !/^\d+$/.test(stepStr)) return null;
       const step = parseInt(stepStr, 10);
       if (isNaN(step) || step <= 0) return null;
 
@@ -58,11 +59,14 @@ function parseField(field: string, min: number, max: number, mapNames?: Record<s
       let end = max;
       if (rangeStr !== "*") {
         if (rangeStr.includes("-")) {
-          const [rStart, rEnd] = rangeStr.split("-").map(Number);
+          const rangeParts = rangeStr.split("-");
+          if (rangeParts.length !== 2 || !/^\d+$/.test(rangeParts[0]) || !/^\d+$/.test(rangeParts[1])) return null;
+          const [rStart, rEnd] = rangeParts.map(Number);
           if (isNaN(rStart) || isNaN(rEnd)) return null;
           start = rStart;
           end = rEnd;
         } else {
+          if (!/^\d+$/.test(rangeStr)) return null;
           start = parseInt(rangeStr, 10);
           if (isNaN(start)) return null;
         }
@@ -72,12 +76,15 @@ function parseField(field: string, min: number, max: number, mapNames?: Record<s
         if (i >= min && i <= max) result.add(i);
       }
     } else if (part.includes("-")) {
-      const [rStart, rEnd] = part.split("-").map(Number);
+      const rangeParts = part.split("-");
+      if (rangeParts.length !== 2 || !/^\d+$/.test(rangeParts[0]) || !/^\d+$/.test(rangeParts[1])) return null;
+      const [rStart, rEnd] = rangeParts.map(Number);
       if (isNaN(rStart) || isNaN(rEnd) || rStart > rEnd) return null;
       for (let i = rStart; i <= rEnd; i++) {
         if (i >= min && i <= max) result.add(i);
       }
     } else {
+      if (!/^\d+$/.test(part)) return null;
       const num = parseInt(part, 10);
       if (isNaN(num) || num < min || num > max) return null;
       result.add(num);

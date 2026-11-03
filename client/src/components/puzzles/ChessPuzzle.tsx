@@ -1,9 +1,13 @@
 import { useState, useEffect, useRef, useMemo } from "react";
 import { Link } from "wouter";
 import confetti from "canvas-confetti";
+import { Chess, type Square } from "chess.js";
 import { OrbitAudio } from "@/game/audio";
 import {
   getChessEditionForDate,
+  coordToSquare,
+  squareToCoord,
+  fenToBoard,
   type ChessPuzzleEdition,
   type ChessCoord,
   type ChessPiece
@@ -12,18 +16,13 @@ import { markPuzzleFieldComplete } from "@/lib/puzzleCompletion";
 import GameAudioControls from "@/components/GameAudioControls";
 import {
   ArrowLeft,
-  Check,
   HelpCircle,
   Lightbulb,
   RotateCcw,
-  Share2,
-  Sparkles,
   Timer,
   Trophy,
   X,
-  Swords,
-  Send,
-  ShieldAlert
+  Swords
 } from "lucide-react";
 
 const orbitMark = "/orbit-mark.svg";
@@ -55,9 +54,8 @@ export default function ChessPuzzle() {
 
   const edition: ChessPuzzleEdition = useMemo(() => getChessEditionForDate(dateStr), [dateStr]);
 
-  const [board, setBoard] = useState<ChessPiece[][]>(() =>
-    edition.initialBoard.map((row) => [...row])
-  );
+  const [chessInstance, setChessInstance] = useState<Chess>(() => new Chess(edition.fen));
+  const [board, setBoard] = useState<ChessPiece[][]>(() => fenToBoard(edition.fen));
   const [currentStepIndex, setCurrentStepIndex] = useState(0);
   const [selectedCoord, setSelectedCoord] = useState<ChessCoord | null>(null);
   const [isSolved, setIsSolved] = useState(false);
@@ -66,9 +64,9 @@ export default function ChessPuzzle() {
   const [showRules, setShowRules] = useState(false);
   const [showVictoryModal, setShowVictoryModal] = useState(false);
   const [hintActive, setHintActive] = useState(false);
-  const [copied, setCopied] = useState(false);
+  const [moveHistory, setMoveHistory] = useState<string[]>([]);
 
-  // Sync board when edition changes
+  // Sync board and chess engine when edition changes
   useEffect(() => {
     handleReset();
   }, [edition]);
@@ -82,12 +80,15 @@ export default function ChessPuzzle() {
 
   const handleReset = () => {
     audio.current.play("rotate");
-    setBoard(edition.initialBoard.map((row) => [...row]));
+    const freshEngine = new Chess(edition.fen);
+    setChessInstance(freshEngine);
+    setBoard(fenToBoard(edition.fen));
     setCurrentStepIndex(0);
     setSelectedCoord(null);
     setIsSolved(false);
     setShowVictoryModal(false);
     setHintActive(false);
+    setMoveHistory([]);
     setMessage({ text: edition.objective, type: "info" });
   };
 
@@ -104,13 +105,26 @@ export default function ChessPuzzle() {
     }
   };
 
+  // Compute legal moves from the selected square using chess.js
+  const legalTargets = useMemo(() => {
+    if (!selectedCoord) return new Set<string>();
+    const square = coordToSquare(selectedCoord) as Square;
+    try {
+      const moves = chessInstance.moves({ square, verbose: true });
+      return new Set(moves.map((m) => m.to));
+    } catch {
+      return new Set<string>();
+    }
+  }, [chessInstance, selectedCoord]);
+
   const onSquareClick = (r: number, c: number) => {
     if (isSolved) return;
 
+    const clickedSquare = coordToSquare({ r, c }) as Square;
     const piece = board[r][c];
     const isPlayerPiece = piece && piece.startsWith(edition.turn === "white" ? "w" : "b");
 
-    // Case 1: Selecting or switching selected friendly piece
+    // Case 1: Selecting or re-selecting a friendly piece
     if (!selectedCoord) {
       if (isPlayerPiece) {
         audio.current.play("rotate");
@@ -119,57 +133,86 @@ export default function ChessPuzzle() {
       return;
     }
 
-    if (isPlayerPiece) {
+    // If clicking another friendly piece, switch selection
+    if (isPlayerPiece && !(selectedCoord.r === r && selectedCoord.c === c)) {
       audio.current.play("rotate");
       setSelectedCoord({ r, c });
       return;
     }
 
     // Case 2: Attempting move from selectedCoord to {r, c}
+    const fromSquare = coordToSquare(selectedCoord) as Square;
+
+    // Check legality in chess.js engine first
+    if (!legalTargets.has(clickedSquare)) {
+      audio.current.play("relayFail");
+      setMessage({
+        text: `Illegal move: That piece cannot legally move to ${clickedSquare}.`,
+        type: "error"
+      });
+      return;
+    }
+
     const step = edition.moves[currentStepIndex];
     if (!step) return;
 
-    const isTarget =
+    const isTacticalTarget =
       selectedCoord.r === step.playerMove.from.r &&
       selectedCoord.c === step.playerMove.from.c &&
       r === step.playerMove.to.r &&
       c === step.playerMove.to.c;
 
-    if (isTarget) {
-      // Correct player move
-      audio.current.play("relayCorrect");
-      const nextBoard = board.map((row) => [...row]);
-      const movingPiece = nextBoard[selectedCoord.r][selectedCoord.c];
-      nextBoard[selectedCoord.r][selectedCoord.c] = null;
-      nextBoard[r][c] = movingPiece;
-      setBoard(nextBoard);
-      setSelectedCoord(null);
-      setHintActive(false);
+    if (isTacticalTarget) {
+      // Execute verified tactical move on chess.js
+      try {
+        const moveRes = chessInstance.move({
+          from: fromSquare,
+          to: clickedSquare,
+          promotion: "q"
+        });
 
-      if (step.opponentReply) {
-        // Opponent must respond
-        setMessage({ text: `Brilliant! Opponent responds ${step.opponentReply.notation}...`, type: "success" });
-        setTimeout(() => {
-          audio.current.play("rotate");
-          const reply = step.opponentReply!;
-          const boardAfterReply = nextBoard.map((row) => [...row]);
-          const oppPiece = boardAfterReply[reply.from.r][reply.from.c];
-          boardAfterReply[reply.from.r][reply.from.c] = null;
-          boardAfterReply[reply.to.r][reply.to.c] = oppPiece;
-          setBoard(boardAfterReply);
-          setCurrentStepIndex(currentStepIndex + 1);
-          setMessage({ text: "Deliver the final winning blow!", type: "info" });
-        }, 650);
-      } else {
-        // Puzzle fully solved!
-        finishPuzzle();
+        audio.current.play("relayCorrect");
+        setBoard(fenToBoard(chessInstance.fen()));
+        setSelectedCoord(null);
+        setHintActive(false);
+
+        const newHistory = [...moveHistory, moveRes.san];
+        setMoveHistory(newHistory);
+
+        if (step.opponentReply) {
+          // Opponent plays their scripted verified response
+          setMessage({
+            text: `Superb! Opponent responds ${step.opponentReply.notation}...`,
+            type: "success"
+          });
+          setTimeout(() => {
+            audio.current.play("rotate");
+            const reply = step.opponentReply!;
+            const oppFrom = coordToSquare(reply.from) as Square;
+            const oppTo = coordToSquare(reply.to) as Square;
+            const replyRes = chessInstance.move({
+              from: oppFrom,
+              to: oppTo,
+              promotion: "q"
+            });
+            setBoard(fenToBoard(chessInstance.fen()));
+            setCurrentStepIndex(currentStepIndex + 1);
+            setMoveHistory([...newHistory, replyRes.san]);
+            setMessage({ text: "Deliver the final winning blow!", type: "info" });
+          }, 650);
+        } else {
+          // Fully solved!
+          finishPuzzle();
+        }
+      } catch (err) {
+        console.error("Chess move error:", err);
       }
     } else {
-      // Inaccurate move
+      // Legal chess move, but not the puzzle's required tactical win
       audio.current.play("relayFail");
       setSelectedCoord(null);
       setMessage({
-        text: "That move isn't the most decisive. Try again!",
+        text: `Legal move (${fromSquare} to ${clickedSquare}), but not the sharpest tactical blow! Try again.`,
         type: "error"
       });
     }
@@ -179,8 +222,9 @@ export default function ChessPuzzle() {
     setIsSolved(true);
     markPuzzleFieldComplete("chess-puzzles", edition.id);
     audio.current.play("puzzleSolve");
+    const isMate = chessInstance.isCheckmate();
     setMessage({
-      text: `🏆 Checkmate! ${edition.solutionExplanation}`,
+      text: isMate ? `🏆 Checkmate! ${edition.solutionExplanation}` : `🏆 Solved! ${edition.solutionExplanation}`,
       type: "success"
     });
     confetti({
@@ -295,8 +339,10 @@ export default function ChessPuzzle() {
             <div className="grid grid-cols-8 grid-rows-8 w-[320px] h-[320px] sm:w-[384px] sm:h-[384px] border border-[#2b3850] rounded-lg overflow-hidden shadow-inner">
               {board.map((row, r) =>
                 row.map((piece, c) => {
+                  const squareName = coordToSquare({ r, c });
                   const isDark = (r + c) % 2 === 1;
                   const isSelected = selectedCoord?.r === r && selectedCoord?.c === c;
+                  const isLegalTarget = legalTargets.has(squareName);
                   const isHintTarget =
                     hintActive &&
                     currentStep &&
@@ -316,6 +362,15 @@ export default function ChessPuzzle() {
                           : "bg-[#7b8ea8] hover:bg-[#889cb8]"
                       } ${isHintTarget ? "ring-2 ring-amber-400 ring-inset animate-pulse" : ""}`}
                     >
+                      {/* Legal Move Indicator Dot */}
+                      {isLegalTarget && (
+                        <span
+                          className={`absolute w-3.5 h-3.5 rounded-full pointer-events-none z-10 ${
+                            piece ? "ring-2 ring-amber-400 bg-amber-400/30" : "bg-emerald-400/60 shadow-sm"
+                          }`}
+                        />
+                      )}
+
                       {/* Board coordinate markers */}
                       {c === 0 && (
                         <span className="absolute top-0.5 left-1 text-[9px] font-mono font-bold opacity-40 text-white">
@@ -347,8 +402,16 @@ export default function ChessPuzzle() {
             </div>
           </div>
 
+          {/* Move History / Notation Bar */}
+          {moveHistory.length > 0 && (
+            <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-900 border border-white/10 text-xs font-mono text-slate-300">
+              <Swords size={13} className="text-amber-400" />
+              <span>Moves: {moveHistory.join("  ·  ")}</span>
+            </div>
+          )}
+
           <p className="text-[11px] text-slate-400 text-center font-mono">
-            Click your piece to select it, then tap the destination square.
+            Click your piece to see legal moves, then click the destination square.
           </p>
         </div>
       </main>
@@ -372,11 +435,11 @@ export default function ChessPuzzle() {
             </div>
             <div className="text-sm text-slate-300 space-y-2.5">
               <p>
-                Each daily position presents a tactical challenge where you play the winning sequence.
+                Each daily position presents a tactical challenge governed by genuine chess rules.
               </p>
               <ul className="list-disc pl-5 space-y-1.5 text-xs text-slate-400">
-                <li>Find the most forcing move (checkmate, fork, pin, or deflection).</li>
-                <li>Tap your piece to pick it up, then tap its destination square.</li>
+                <li>Find the most forcing move (checkmate, royal fork, pin, or deflection).</li>
+                <li>Tap your piece to pick it up — dots appear on legal squares according to chess rules.</li>
                 <li>If the puzzle requires multiple moves, the opponent will counter automatically.</li>
                 <li>Use the <b>Hint</b> button if you need guidance on which piece to activate.</li>
               </ul>

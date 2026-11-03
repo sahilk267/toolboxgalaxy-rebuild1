@@ -1,0 +1,2091 @@
+# TOOLBOXGALAXY — COMPLETE FUNCTIONAL REPAIR, GAME VALIDATION & PRODUCTION QUALITY IMPROVEMENT
+
+## YOUR ROLE
+
+You are acting as a team of senior software engineers, including:
+
+- Senior React and TypeScript Engineer
+- Full-Stack Application Architect
+- PDF and Document Processing Specialist
+- Spreadsheet and Data Conversion Engineer
+- Game Engine Developer
+- Puzzle and Game Logic Validator
+- Security and Privacy Engineer
+- Performance Optimization Engineer
+- Mobile UX Specialist
+- Software Quality Assurance Engineer
+
+Your assignment is to systematically inspect, debug, repair, test, and improve the existing ToolboxGalaxy application.
+
+This is a REAL CODE IMPLEMENTATION task.
+
+Do not simply provide recommendations, an implementation plan, or explanations.
+
+**You must make actual changes to the application's source code in the connected workspace.**
+
+---
+
+# 1. PROJECT INFORMATION
+
+Project: ToolboxGalaxy
+
+GitHub repository:
+
+https://github.com/sahilk267/toolboxgalaxy-rebuild1
+
+Primary branch: `main`
+
+The repository is connected to Google AI Studio through GitHub synchronization.
+
+Current application technologies include:
+
+- React
+- TypeScript
+- Vite
+- Tailwind CSS
+- Radix UI
+- Express
+- PDF.js
+- pdf-lib
+- Tesseract.js
+- Babylon.js
+- Three.js
+- Browser-based storage
+- Browser-based file processing
+
+The application currently includes:
+
+- 61 registered utility tools
+- 18 game catalog entries, including Logic Lab
+- PDF and document-processing features
+- Spreadsheet utilities
+- Image-processing utilities
+- Developer utilities
+- Financial calculators
+- Regional Indian utilities
+- Logic puzzle games
+- 2D and 3D games
+
+The main business objective is to make every published feature genuinely useful, reliable, fast, trustworthy, and enjoyable.
+
+Users should never encounter tools that appear functional but silently generate incorrect results.
+
+Games should follow their actual rules, have valid solutions, provide responsive controls, and offer a satisfying playing experience.
+
+---
+
+# 2. CRITICAL INSTRUCTIONS — READ FIRST
+
+## RULE 1: PRESERVE THE EXISTING APPLICATION
+
+Do not rebuild ToolboxGalaxy from scratch.
+
+Do not replace the current application with a simplified version.
+
+Do not remove tools or games to make validation easier.
+
+Do not replace sophisticated tools with text-only demonstrations or placeholder interfaces.
+
+Preserve:
+
+- Existing visual identity
+- Dark space-themed design
+- Sidebar navigation
+- Home dashboard
+- Tools Foundry
+- Document Studio
+- Game pages
+- Logic Lab
+- User preferences
+- Existing routing structure
+- Responsive layouts
+- Language support
+- Favorites and achievements
+- Existing functional features
+
+Improve existing implementations rather than unnecessarily replacing working code.
+
+## RULE 2: ACTUAL FUNCTIONALITY IS MORE IMPORTANT THAN APPEARANCE
+
+A polished interface is not enough.
+
+Every tool must perform the operation promised by its name and description.
+
+Every game must follow valid gameplay rules.
+
+Every file export must create a genuinely valid file of the advertised format.
+
+Every calculation must produce correct results.
+
+If a feature cannot reliably deliver its advertised functionality, either implement it properly or clearly disclose its actual limitations.
+
+Never simulate success.
+
+Never generate fake results.
+
+Never silently discard user data.
+
+## RULE 3: NO SHORTCUTS
+
+Do not:
+
+- Hardcode calculations to match examples.
+- Replace real functionality with mock outputs.
+- Hide errors.
+- Silently skip unsupported files.
+- Rename HTML as PDF, DOC, or PPT and call it a genuine conversion.
+- Mark invalid puzzle answers as correct.
+- Pretend an incomplete feature is production-ready.
+- Remove advanced functionality without justification.
+- Weaken security validation to make tests pass.
+- Delete failing tests instead of fixing underlying bugs.
+- Replace the existing UI with a generic template.
+
+## RULE 4: PRESERVE USER DATA
+
+Document and spreadsheet processing must prioritize data integrity.
+
+Whenever an operation is lossy:
+
+1. Explain the limitation before execution.
+2. Preserve the original input.
+3. Avoid overwriting source files.
+4. Provide a reliable download.
+5. Validate the generated output.
+
+Do not claim that an operation is lossless unless it has been verified.
+
+## RULE 5: WORK IN CONTROLLED PHASES
+
+This is a large repository.
+
+Do not attempt an uncontrolled rewrite of hundreds of files.
+
+Work module by module.
+
+Before modifying source code:
+
+1. Inspect the current implementation.
+2. Identify the root cause.
+3. Determine the smallest reliable fix.
+4. Implement that fix.
+5. Add regression tests.
+6. Run relevant validation.
+7. Record the result.
+8. Continue to the next module.
+
+Do not let automatic context summarization cause you to lose track of completed or unresolved work.
+
+Maintain a persistent implementation progress file.
+
+Suggested filename:
+
+`TOOLBOXGALAXY_REPAIR_PROGRESS.md`
+
+Track every tool and game using:
+
+- Not reviewed
+- Reviewed
+- Defect confirmed
+- Fix implemented
+- Automated tests passed
+- Browser tested
+- Remaining limitations
+
+Never label an item fully verified solely because its code compiles.
+
+---
+
+# 3. FIRST TASK — REPOSITORY INSPECTION
+
+Before making substantial changes, inspect the repository.
+
+Pay special attention to:
+
+`package.json`
+
+`client/src/App.tsx`
+
+`client/src/pages/ToolWorkspace.tsx`
+
+`shared/toolsData.ts`
+
+`shared/gamesData.ts`
+
+`client/src/components/`
+
+`client/src/game/`
+
+`client/src/lib/`
+
+`server/index.ts`
+
+`scripts/`
+
+Understand the complete route-to-tool execution flow.
+
+Identify:
+
+- All registered tool routes
+- All game routes
+- Shared calculation engines
+- File-processing libraries
+- Puzzle validation engines
+- Game rendering systems
+- Browser storage dependencies
+- Existing tests
+- Deployment configurations
+- Security boundaries
+
+Check the current Git working tree before editing.
+
+Do not overwrite unrelated changes.
+
+Establish a baseline by running the existing TypeScript checks and production build.
+
+Record any baseline errors separately from newly introduced issues.
+
+---
+
+# 4. PHASE ONE — FIX CRITICAL GAME DEFECTS
+
+These problems were identified during an independent source-code audit and must be treated as priority issues.
+
+## 4.1 FIX WORDLE COMPLETELY
+
+Relevant files:
+
+`client/src/game/logicPuzzles/wordleBank.ts`
+
+`client/src/game/logicPuzzles/wordle.ts`
+
+`client/src/components/puzzles/WordlePuzzle.tsx`
+
+Current confirmed defects:
+
+The Wordle game requires five-letter solutions.
+
+However, the edition bank contains:
+
+`NOVA` — four characters.
+
+`ZENITH` — six characters.
+
+These solutions cannot be entered normally through a five-character input system.
+
+### Required changes
+
+1. Replace invalid solutions with legitimate five-letter words.
+2. Ensure every solution exists in the accepted vocabulary.
+3. Validate every solution before publishing it.
+4. Confirm that every daily edition is solvable.
+5. Preserve correct handling of repeated letters.
+6. Ensure green, yellow, and gray evaluations are accurate.
+7. Make keyboard and touchscreen inputs consistent.
+8. Ensure Enter and Backspace work correctly.
+9. Prevent submissions after game completion.
+10. Ensure hint interactions never produce impossible states.
+11. Verify attempt counting.
+12. Verify win and loss conditions.
+13. Verify daily persistence.
+14. Verify restart behavior.
+15. Improve accessibility and mobile keyboard usability.
+
+Add automatic validation:
+
+- Every solution must match `^[A-Z]{5}$`.
+- Every solution must be accepted as a valid guess.
+- Every solution must be winnable within the allowed attempts.
+- Duplicate-letter evaluation must be correct.
+
+Test dates including November 4 and November 9, 2026.
+
+## 4.2 COMPLETELY REPAIR CHESS PUZZLES
+
+Relevant files:
+
+`client/src/game/logicPuzzles/chessBank.ts`
+
+`client/src/components/puzzles/ChessPuzzle.tsx`
+
+### Confirmed critical problem
+
+All seven current chess editions contain at least one invalid scripted move or response.
+
+Examples include:
+
+- Rook moving through its own pawn.
+- King moving onto a square occupied by its own queen.
+- Knight moving in an impossible direction.
+- Rook moving through its own king.
+- Bishop moving in an invalid direction.
+- Queen moving along an invalid path.
+- A scripted move attempting to capture the opposing king.
+
+The current implementation also relies on comparing moves against predetermined coordinates instead of fully validating chess rules.
+
+### REQUIRED SOLUTION
+
+Implement genuine chess move validation.
+
+Prefer an established, maintained chess rules library such as `chess.js`, provided it integrates properly with the existing project.
+
+Support:
+
+- Legal piece movement
+- Turn validation
+- Obstructed movement
+- Captures
+- Check detection
+- Checkmate detection
+- Illegal king exposure
+- Valid opponent responses
+- Move notation
+- Puzzle completion validation
+
+Replace invalid authored positions with verified chess positions.
+
+Use standard FEN notation where appropriate.
+
+For every puzzle:
+
+- Validate the initial position.
+- Confirm both kings exist.
+- Confirm the starting position is legal.
+- Confirm the advertised tactical move is legal.
+- Validate every opponent response.
+- Confirm that the stated tactical objective is actually achieved.
+
+Do not confuse check with checkmate.
+
+Do not allow illegal king captures.
+
+Do not declare victory merely because the user clicked a hardcoded target square.
+
+If the puzzle claims checkmate, verify checkmate using chess rules.
+
+Improve:
+
+- Square selection
+- Legal move highlighting
+- Selected-piece feedback
+- Correct and incorrect move feedback
+- Hint explanations
+- Mobile tap interactions
+- Victory animations
+- Puzzle reset
+- Move history
+
+A chess learner should never be taught an illegal move.
+
+## 4.3 REBUILD INVALID MINI CROSSWORD CONTENT
+
+Relevant files:
+
+`client/src/game/logicPuzzles/miniCrosswordBank.ts`
+
+`client/src/components/puzzles/MiniCrosswordPuzzle.tsx`
+
+Current problems include nonsensical answers and conflicting crossword data.
+
+Examples of problematic entries:
+
+- REOPT
+- AIRGO
+- RVGLP
+- KEEET
+- HOSME
+- OUOTE
+- SITRK
+- SCESS
+
+One authored clue answer also disagrees with the letters actually present in its column.
+
+### Required changes
+
+Create properly authored crossword puzzles.
+
+Every puzzle must satisfy:
+
+- Valid grid dimensions
+- Valid across answers
+- Valid down answers
+- Correct word intersections
+- Correct clue numbering
+- Correct clue lengths
+- Meaningful clues
+- Consistent solution checking
+
+Do not manufacture fake English words simply to complete a grid.
+
+If a valid crossword cannot be produced automatically, use a curated and validated word grid.
+
+Add automated checks that reconstruct every answer directly from its grid.
+
+Verify that clue answers exactly match the grid.
+
+Improve:
+
+- Keyboard navigation
+- Touch selection
+- Across/down switching
+- Selected-word highlighting
+- Hint behavior
+- Error feedback
+- Victory detection
+- Daily completion persistence
+
+---
+
+# 5. PHASE TWO — FIX DOCUMENT PROCESSING
+
+Document tools are among the most important features of ToolboxGalaxy.
+
+These must behave reliably with real user documents.
+
+## 5.1 IMAGES TO PDF
+
+File:
+
+`client/src/components/PdfToolsRunner.tsx`
+
+Confirmed problem:
+
+The tool advertises support for JPG, PNG, and WebP.
+
+However, WebP files are passed to the JPEG embedding function.
+
+### Fix requirements
+
+Support genuine conversion of:
+
+- JPEG
+- PNG
+- WebP
+
+Convert WebP into a compatible bitmap representation before PDF embedding.
+
+Preserve correct aspect ratios.
+
+Support portrait and landscape layouts.
+
+Prevent image stretching.
+
+Respect margins.
+
+Maintain the selected image order.
+
+Handle transparent images correctly.
+
+Handle corrupted files gracefully.
+
+Validate PDF output after creation.
+
+Test single-image and multi-image exports.
+
+Ensure exported PDFs open correctly in standard PDF readers.
+
+## 5.2 PDF COMPRESSOR
+
+File:
+
+`client/src/components/PdfCompressTool.tsx`
+
+Current lossy profiles rasterize PDF pages into JPEG images.
+
+This can destroy:
+
+- Selectable text
+- Searchability
+- Embedded hyperlinks
+- Interactive forms
+- Vector graphics
+- Certain document accessibility features
+
+The stated DPI values also do not correspond accurately to the actual rendering scales.
+
+### Required improvements
+
+Provide clearly distinguished compression modes:
+
+**Mode A — Structure-preserving optimization**
+
+Preserve document structure and selectable text wherever technically possible.
+
+Optimize supported PDF objects and streams safely.
+
+**Mode B — Raster compression**
+
+Allow image-based compression when users prioritize file size.
+
+Clearly warn that the result may lose text selection, links, form functionality, and vector quality.
+
+### Additional requirements
+
+- Correct DPI descriptions.
+- Remove unsupported percentage-reduction guarantees.
+- Show actual input and output sizes.
+- Show actual percentage saved.
+- Warn when the output becomes larger.
+- Provide a cancellation mechanism when practical.
+- Handle very large documents safely.
+- Avoid unnecessary memory duplication.
+- Preserve orientation and page dimensions.
+- Verify the output PDF can be reopened.
+- Handle encrypted or unsupported PDFs honestly.
+
+Never claim lossless compression for an operation that rasterizes pages.
+
+## 5.3 PDF VISUAL EDITOR
+
+File:
+
+`client/src/components/PdfEditorTool.tsx`
+
+This is a large, complex component.
+
+Perform a detailed review of:
+
+- PDF upload
+- Page rendering
+- Page navigation
+- Zoom controls
+- Text insertion
+- Existing-text editing
+- Text positioning
+- Font handling
+- Color handling
+- Shape annotations
+- Image insertion
+- Page rotation
+- Page deletion
+- Page duplication
+- Undo
+- Redo
+- Saving
+- Exporting
+- OCR
+- Text extraction
+- Searchable PDF creation
+- Redaction
+- Document conversion
+
+### Security-critical requirement
+
+Visually covering text is not equivalent to securely deleting it.
+
+Verify that permanent redaction actually removes sensitive underlying content from the exported artifact.
+
+For each redaction test:
+
+1. Create a PDF containing known sensitive text.
+2. Redact the sensitive region.
+3. Export the PDF.
+4. Extract text from the output.
+5. Inspect the resulting PDF structure where feasible.
+6. Confirm sensitive information cannot be recovered through ordinary extraction or object inspection.
+
+If a secure guarantee cannot be established, do not describe the operation as permanently secure.
+
+Preserve the existing editor interface as much as possible.
+
+Refactor oversized components only when it improves maintainability without breaking features.
+
+## 5.4 PDF MERGE AND SPLIT
+
+Improve page-range parsing.
+
+Reject malformed values such as:
+
+`1abc`
+
+`2-xyz`
+
+`3--5`
+
+Validate all page indexes.
+
+Support properly formatted ranges.
+
+Reject invalid ranges with helpful messages.
+
+Preserve the requested page order.
+
+Ensure corrupted PDFs do not silently disappear from the workflow.
+
+Verify merged and extracted output files.
+
+## 5.5 PDF TO PRESENTATION
+
+File:
+
+`client/src/lib/pdfExtraction.ts`
+
+Current implementation creates HTML content but downloads it using a `.ppt` extension.
+
+This is not a genuine PowerPoint presentation.
+
+Replace this implementation with valid PPTX generation when the feature is advertised as PowerPoint conversion.
+
+Use a suitable maintained presentation-generation library.
+
+Preserve page order.
+
+Convert extracted content into actual slides.
+
+Handle long text using appropriate slide layouts.
+
+Clearly disclose limitations concerning original PDF formatting.
+
+If only an HTML outline is supported, label it as HTML rather than pretending it is PowerPoint.
+
+---
+
+# 6. PHASE THREE — FIX EXCEL AND WORD TOOLS
+
+## 6.1 EXCEL SPREADSHEET STUDIO
+
+File:
+
+`client/src/components/ExcelStudioTool.tsx`
+
+Confirmed issue:
+
+The current export path creates a new workbook containing only the active worksheet.
+
+This risks losing:
+
+- Other worksheets
+- Formulas
+- Formatting
+- Workbook structure
+- Edits made across different sheets
+
+### Required improvements
+
+Preserve all worksheets during supported XLSX export operations.
+
+Implement consistent editing state across sheets.
+
+Ensure switching sheets does not discard changes.
+
+Preserve formulas wherever possible.
+
+Avoid silently replacing formulas with calculated values.
+
+Handle:
+
+- Empty cells
+- Numbers
+- Dates
+- Currency
+- Boolean values
+- Text
+- Unicode
+- Large datasets
+- Duplicate rows
+- Missing columns
+- CSV imports
+
+Clearly disclose formatting or feature limitations imposed by the spreadsheet library.
+
+When exporting to PDF, prevent text overlap and incorrect column layouts.
+
+Test files containing multiple worksheets and formulas.
+
+Test that exporting and reopening produces the expected data.
+
+## 6.2 WORD DOCX CONVERTER
+
+File:
+
+`client/src/components/WordDocxTool.tsx`
+
+Current issues:
+
+HTML-to-Markdown conversion relies heavily on regular expressions.
+
+Complex document structure may be lost.
+
+A fallback creates HTML and downloads it with a `.doc` extension.
+
+### Required improvements
+
+Support genuine DOCX generation.
+
+Improve preservation of:
+
+- Paragraphs
+- Headings
+- Bold text
+- Italic text
+- Lists
+- Tables
+- Line breaks
+- Special characters
+- Unicode text
+
+Use structured parsing instead of fragile HTML stripping wherever practical.
+
+Do not present HTML disguised as a Word binary document.
+
+Clearly label plain-text extraction versus formatting-preserving conversion.
+
+Ensure generated DOCX files can be reopened.
+
+---
+
+# 7. PHASE FOUR — FIX CALCULATORS AND TEXT UTILITIES
+
+## 7.1 AGE CALCULATOR
+
+File:
+
+`client/src/components/AdvancedToolRunners.tsx`
+
+Confirmed incorrect example:
+
+From January 31, 2026, to March 1, 2026, the current calculation can produce negative days.
+
+Use calendar-aware calculations.
+
+Test:
+
+- End-of-month dates
+- February
+- Leap years
+- Same-day birthdays
+- Future dates
+- Year transitions
+
+Never output negative remaining days for valid chronological inputs.
+
+## 7.2 GST CALCULATOR
+
+File:
+
+`client/src/components/RegionalHighDemandTools.tsx`
+
+Validate:
+
+- Transaction amount
+- Custom tax rates
+- Inclusive calculation
+- Exclusive calculation
+- Finite numeric values
+- Negative inputs
+- Division-by-zero situations
+
+Ensure mathematically correct tax calculations.
+
+Do not silently display Infinity or NaN.
+
+Round currency amounts appropriately.
+
+Avoid describing a calculated result as legally authoritative tax advice.
+
+## 7.3 NUMBER TO WORDS — RUPEES
+
+Fix paise rounding.
+
+For example:
+
+`100.999`
+
+Must not produce an invalid representation containing 100 paise.
+
+Round to the supported currency precision first.
+
+Then calculate rupees and paise.
+
+Support valid Indian numbering terminology:
+
+- Thousand
+- Lakh
+- Crore
+
+Validate negative and out-of-range values.
+
+Ensure Hindi and English outputs remain consistent.
+
+## 7.4 TEXT CASE CONVERTER
+
+File:
+
+`client/src/components/AdvancedToolRunners.tsx`
+
+Current word splitting can remove punctuation and non-Latin characters.
+
+Support Unicode-aware processing.
+
+Test:
+
+- English
+- Hindi
+- Arabic
+- Accented Latin characters
+- Numbers
+- Punctuation
+- Mixed-language text
+
+Preserve characters that should not be removed by the selected case operation.
+
+## 7.5 UNIT CONVERTER
+
+File:
+
+`client/src/pages/ToolWorkspace.tsx`
+
+Fix numeric formatting.
+
+Current example:
+
+`1 km → 1.`
+
+Expected:
+
+`1 km → 1 km`
+
+Do not leave dangling decimal points.
+
+Avoid unnecessary rounding errors.
+
+## 7.6 ALL REMAINING CALCULATORS
+
+Audit:
+
+- Basic Calculator
+- Percentage Calculator
+- BMI Calculator
+- Discount Calculator
+- Date Difference
+- Business Days
+- Time Zone Meeting Planner
+- Timestamp Converter
+- Split Bill & Tip
+- Loan EMI
+- Work Shift Duration
+- Land Area Converter
+
+For every calculator, test:
+
+- Normal values
+- Zero
+- Negative values
+- Empty inputs
+- Invalid strings
+- Decimal precision
+- Boundary values
+- Very large values
+- Rounding
+- Date and timezone edge cases
+
+Correct any confirmed defects.
+
+---
+
+# 8. PHASE FIVE — FIX DEVELOPER UTILITIES
+
+## 8.1 JSON TO ZOD / TYPESCRIPT
+
+File:
+
+`client/src/components/JsonToZodTool.tsx`
+
+Fix:
+
+- Invalid TypeScript identifiers
+- Numeric-leading names
+- Reserved keywords
+- Valid JSON `null`
+- Primitive root values
+- Heterogeneous arrays
+- Nested objects
+- Optional properties
+- Nullable values
+- Empty arrays
+
+Generated TypeScript must compile.
+
+Generated Zod schemas must validate the representative input.
+
+Do not produce invalid source code.
+
+## 8.2 JSON TO CSV
+
+Files:
+
+`client/src/lib/structuredDataEngines.ts`
+
+`client/src/components/StructuredDataRunners.tsx`
+
+Preserve actual data values during conversion.
+
+Avoid silently modifying text values such as:
+
+`-1`
+
+`+123`
+
+`=value`
+
+Implement optional spreadsheet-formula safety handling separately from raw-data conversion.
+
+Make any export transformation explicit.
+
+Verify round-trip behavior.
+
+## 8.3 REGEX TESTER
+
+File:
+
+`client/src/components/RegexTesterTool.tsx`
+
+User-defined regular expressions can cause catastrophic backtracking.
+
+Do not execute untrusted complex regex patterns indefinitely on the main browser thread.
+
+Use an isolated worker where practical.
+
+Implement execution limits and cancellation.
+
+Provide meaningful error feedback.
+
+Prevent the entire browser tab from freezing.
+
+Apply similar protection to regex-based Find & Replace.
+
+## 8.4 CRON SCHEDULE VISUALIZER
+
+File:
+
+`client/src/components/CronScheduleTool.tsx`
+
+Reject malformed expressions.
+
+Do not accept partially valid numeric tokens.
+
+Validate the complete field grammar.
+
+Test:
+
+- Wildcards
+- Ranges
+- Steps
+- Lists
+- Named weekdays
+- Named months
+- Day-of-month and day-of-week semantics
+- Leap years
+- Timezones
+- Daylight saving transitions
+
+Document the supported cron dialect.
+
+Do not claim compatibility with unsupported cron syntax.
+
+## 8.5 CURL TO CODE
+
+File:
+
+`client/src/components/CurlToCodeTool.tsx`
+
+Improve shell token parsing.
+
+Correctly escape generated source strings.
+
+Handle:
+
+- Quoted URLs
+- Headers
+- POST bodies
+- JSON bodies
+- Authentication
+- Cookies
+- Escaped characters
+- Multiline commands
+
+Generated JavaScript must be syntactically valid.
+
+Prevent inserted user text from breaking generated code.
+
+Do not transmit or log user-provided credentials.
+
+## 8.6 RANDOM NUMBER GENERATOR
+
+File:
+
+`client/src/components/GenerativeToolRunners.tsx`
+
+Use appropriate cryptographic randomness when advertised.
+
+Avoid modulo bias through rejection sampling.
+
+Validate supported numeric ranges.
+
+Correctly handle uniqueness.
+
+Prevent duplicate values after rounding when unique results are requested.
+
+Reject impossible requests rather than silently violating constraints.
+
+## 8.7 SEO META GENERATOR
+
+File:
+
+`client/src/components/GenerativeToolRunners.tsx`
+
+Correctly escape:
+
+- HTML text
+- HTML attributes
+- Quotes
+- Special characters
+- Generated TypeScript strings
+
+Ensure generated HTML is valid.
+
+Ensure generated Next.js metadata source is valid.
+
+Avoid inserting unescaped user input into source code.
+
+## 8.8 FAKE DATA GENERATOR
+
+File:
+
+`client/src/components/FakeDataGeneratorTool.tsx`
+
+Improve:
+
+- UUID generation
+- SQL escaping
+- Table name validation
+- CSV escaping
+- JSON output
+- Unicode support
+- Record counts
+- Fake data consistency
+- Field generation
+
+Generated SQL must not contain invalid unescaped identifiers.
+
+Ensure generated mock data is explicitly identified as synthetic.
+
+---
+
+# 9. PHASE SIX — FIX REGIONAL UTILITIES
+
+## WHATSAPP DIRECT CHAT
+
+Support valid international number handling.
+
+Prevent duplicate country-code prefixes.
+
+Validate phone numbers.
+
+Normalize numbers to the format required by WhatsApp.
+
+Preserve message encoding.
+
+Handle invalid numbers with helpful feedback.
+
+## PASSPORT PHOTO RESIZER
+
+Respect requested pixel dimensions.
+
+Preserve image quality where possible.
+
+Correctly apply aspect-ratio handling.
+
+Avoid unintentionally cropping faces.
+
+If the requested file size cannot be achieved, show an explicit failure or warning.
+
+Never report success when the file exceeds the chosen KB limit.
+
+Test:
+
+- JPG
+- PNG
+- Portrait photos
+- Landscape photos
+- Transparent backgrounds
+- Very large uploads
+
+Support government-specific presets only when the actual requirements are verified.
+
+Do not imply one photo size is universally accepted by every government portal.
+
+## TRACKING URL CLEANER
+
+File:
+
+`client/src/components/TrackingUrlCleanerTool.tsx`
+
+Current QR functionality can contact an external QR generation service.
+
+This conflicts with the local-processing promise.
+
+Use the existing browser-local QR library.
+
+Do not transmit cleaned URLs to a third party.
+
+Preserve essential URL parameters.
+
+Remove known tracking parameters without damaging valid links.
+
+---
+
+# 10. PHASE SEVEN — VERIFY ALL 61 REGISTERED TOOLS
+
+Do not limit the audit to the known defects.
+
+Individually inspect and test every registered tool.
+
+The full scope includes:
+
+### General utilities
+
+1. Basic Calculator
+2. Percentage Calculator
+3. Unit Converter
+4. Base64 Workbench
+5. JSON Station
+6. Password Generator
+7. Text Statistics
+8. Color Signal
+
+### Calculators and conversion tools
+
+9. BMI Calculator
+10. Discount Calculator
+11. Age Calculator
+12. Date Difference
+13. URL Encoder / Decoder
+14. HTML Entity Tool
+15. Text Case Tool
+16. UUID Generator
+
+### Design and security tools
+
+17. Gradient Forge
+18. QR Code Generator
+19. Image Resizer
+20. Favicon Generator
+21. Hash Generator
+22. Password Strength Auditor
+23. Markdown Workspace
+24. Color Contrast Checker
+
+### Productivity tools
+
+25. Business Days Calculator
+26. Time Zone Meeting Planner
+27. Timestamp Converter
+28. Text Diff Checker
+29. Find / Replace Workspace
+30. Split Bill & Tip Calculator
+31. Loan EMI Calculator
+32. Work Shift Duration
+
+### Data and image tools
+
+33. JSON ↔ CSV Converter
+34. CSV Viewer & Cleaner
+35. Image Crop / Rotate / Convert
+36. Line Sorter & Deduplicator
+37. Image Metadata Remover
+
+### Document studio
+
+38. PDF Visual Editor
+39. Enterprise PDF Suite
+40. PDF Compressor
+41. PDF Merge & Split
+42. Images to PDF
+43. Excel Spreadsheet Studio
+44. Word DOCX Converter
+
+### Regional tools
+
+45. WhatsApp Direct Chat
+46. GST Calculator
+47. Passport Photo Resizer
+48. Land Area Converter
+49. Rupees to Words
+
+### Developer tools
+
+50. JSON to Zod
+51. Tracking URL Cleaner
+52. JWT Debugger
+53. Cron Schedule Visualizer
+54. Regex Tester
+55. cURL to Code
+
+### Content generators
+
+56. Lorem Ipsum Generator
+57. Random Number Generator
+58. SEO Meta Generator
+59. Username Generator
+60. OpenGraph Image Builder
+61. Fake Data Generator
+
+For EACH tool:
+
+- Read the implementation.
+- Inspect its dependencies.
+- Identify its expected behavior.
+- Test valid inputs.
+- Test invalid inputs.
+- Test boundaries.
+- Test empty inputs.
+- Test large inputs where relevant.
+- Verify output correctness.
+- Verify error handling.
+- Check browser compatibility.
+- Check mobile usability.
+- Check keyboard accessibility.
+- Check performance.
+- Check privacy.
+- Check copy and download actions.
+
+Create at least one positive test and one negative or boundary test per tool, with additional tests for complex or high-risk functions.
+
+Do not mark tools complete simply because their components render.
+
+---
+
+# 11. PHASE EIGHT — VERIFY ALL 18 GAME ENTRIES
+
+Audit these game catalog entries:
+
+1. Strands
+2. The Hive
+3. Connections
+4. Wordle
+5. Queens
+6. Mini Sudoku
+7. Tango
+8. Patches
+9. Zip
+10. Wend
+11. Chess Puzzles
+12. Nonogram
+13. Orbit Dash
+14. Diep Tank Evolution
+15. Surviv Battle Royale
+16. Krunker Voxel FPS
+17. Mini Crossword
+18. Logic Lab
+
+Logic Lab is a puzzle hub, so evaluate its navigation, puzzle selection, and integration rather than pretending it is an additional independent game engine.
+
+## PUZZLE GAME REQUIREMENTS
+
+Every puzzle must have:
+
+- Valid starting state
+- Correct rules
+- Valid solutions
+- Appropriate difficulty
+- Accurate hints
+- Correct mistake detection
+- Correct completion detection
+- Proper restart
+- Reliable state persistence
+- Responsive mobile controls
+
+Where a puzzle promises a unique solution, independently verify uniqueness.
+
+For authored puzzle banks, add automatic validation covering every edition.
+
+## DAILY GAME CONTENT
+
+Several games currently recycle small banks.
+
+Examples:
+
+- Wordle has 14 authored editions.
+- Mini Crossword has 3 authored editions.
+- Hive has 6 authored editions.
+- Strands has 7 authored editions selected by weekday.
+
+Improve content variety without compromising puzzle quality.
+
+Do not generate hundreds of fake or invalid puzzles merely to increase counts.
+
+Prefer a smaller fully verified collection over a larger broken collection.
+
+Where daily content repeats, make the repeat policy transparent.
+
+Aim for a meaningful non-repeating content horizon using validated puzzles.
+
+## NONOGRAM
+
+Validate that row and column clues exactly match their solution grids.
+
+Ensure victory conditions match the puzzle rules.
+
+Test correctly completed grids, incomplete grids, and incorrect cells.
+
+## ZIP
+
+Correct public descriptions that call the game 5×5 when the actual authored boards are 6×6.
+
+Verify paths, blocked edges, checkpoint order, and completion conditions.
+
+## CHESS
+
+Apply the complete chess repair requirements described earlier.
+
+## STRANDS
+
+Verify:
+
+- Word paths
+- Adjacency
+- Spangram correctness
+- Grid coverage
+- Hint tracking
+- Touch selection
+- Completion logic
+
+## CONNECTIONS
+
+Verify:
+
+- Four valid groups
+- Four words per group
+- Correct category relationships
+- Mistake tracking
+- Shuffle behavior
+- Completion logic
+
+## HIVE
+
+Verify:
+
+- Center-letter requirement
+- Minimum word length
+- Allowed letters
+- Pangrams
+- Scoring
+- Rank thresholds
+- Duplicate submissions
+
+---
+
+# 12. PHASE NINE — 2D AND 3D GAME ENGINE IMPROVEMENTS
+
+Audit the actual gameplay engines, not just their menus.
+
+## ORBIT DASH
+
+Check:
+
+- Player movement
+- Collision detection
+- Obstacles
+- Difficulty progression
+- Score tracking
+- Restart
+- Camera behavior
+- Mobile input
+- Performance
+
+## DIEP TANK EVOLUTION
+
+Files include:
+
+`client/src/game/diep/engine.ts`
+
+`client/src/components/DiepCanvas.tsx`
+
+Check:
+
+- Tank movement
+- Mouse aiming
+- Mobile dual joysticks
+- Shooting
+- Bullet collisions
+- Damage
+- Health regeneration
+- Stat upgrades
+- Bot AI
+- Evolution unlocks
+- Respawning
+- Scoring
+- Memory cleanup
+
+## SURVIV BATTLE ROYALE
+
+Files include:
+
+`client/src/game/surviv/engine.ts`
+
+`client/src/components/SurvivCanvas.tsx`
+
+Verify:
+
+- Player movement
+- Weapon switching
+- Shooting
+- Reloading
+- Loot collection
+- Healing
+- Armor
+- Collision detection
+- Bot behavior
+- Shrinking zone
+- Gas damage
+- Match completion
+- Mobile controls
+
+## KRUNKER VOXEL FPS
+
+Files include:
+
+`client/src/game/krunker/engine.ts`
+
+`client/src/components/KrunkerCanvas.tsx`
+
+Verify:
+
+- Pointer lock
+- Mouse aiming
+- WASD movement
+- Jumping
+- Sliding
+- Weapon firing
+- Hit detection
+- Damage
+- Reloading
+- Bot behavior
+- Respawning
+- Match timer
+- Mobile controls
+- Three.js resource disposal
+
+### PERFORMANCE REQUIREMENTS
+
+Target smooth gameplay on reasonable desktop hardware.
+
+Use frame-time-aware movement.
+
+Avoid excessive object creation inside animation loops.
+
+Dispose of unused geometries, textures, materials, and event listeners.
+
+Prevent duplicate animation loops after component remounts.
+
+Pause or reduce unnecessary processing when games are inactive.
+
+Optimize for mobile devices where feasible.
+
+Do not claim a fixed FPS target has been achieved without runtime measurements.
+
+---
+
+# 13. PHASE TEN — SECURITY AND PRIVACY
+
+Audit the complete application for privacy and security problems.
+
+## TELEGRAM BOT SECURITY
+
+Investigate:
+
+`client/src/lib/telegramAlerts.ts`
+
+Ensure Telegram bot tokens are never bundled into public frontend JavaScript.
+
+Do not use `VITE_` variables for confidential bot credentials.
+
+Move secret-dependent communication to a properly secured server endpoint when needed.
+
+Never expose credentials in public logs.
+
+## CONTACT FORM
+
+The UI must not report successful delivery unless the configured delivery mechanism confirms success.
+
+Provide meaningful fallback behavior.
+
+## ANALYTICS
+
+Review:
+
+`client/index.html`
+
+`client/src/lib/analytics.ts`
+
+`client/src/pages/Privacy.tsx`
+
+Ensure actual tracking behavior matches privacy disclosures.
+
+Review:
+
+- Google Tag Manager
+- Google Analytics
+- Consent handling
+- Do Not Track
+- Global Privacy Control
+- Telemetry sanitization
+- Search query handling
+
+Do not claim zero telemetry if analytics or event notifications are transmitted.
+
+## FILE PRIVACY
+
+Document-processing files should remain browser-local wherever the product promises local processing.
+
+Audit any:
+
+- Fetch requests
+- External API requests
+- Remote QR generation
+- Analytics payloads
+- File uploads
+- Error-reporting integrations
+
+Ensure that sensitive document contents, passwords, tokens, and private user input are not accidentally transmitted.
+
+---
+
+# 14. PHASE ELEVEN — PERFORMANCE OPTIMIZATION
+
+The application contains heavyweight document tools and game engines.
+
+Investigate initial bundle size.
+
+Apply lazy loading to suitable heavy modules.
+
+Potential candidates include:
+
+- PDF Studio
+- Excel Studio
+- Word Studio
+- OCR components
+- 3D games
+- Advanced game engines
+
+Avoid loading heavyweight functionality before a user needs it.
+
+Review unnecessary rerenders.
+
+Optimize expensive calculations.
+
+Use Web Workers for suitable CPU-intensive operations.
+
+Avoid blocking the main UI thread.
+
+Prevent object URL memory leaks.
+
+Clean up event listeners.
+
+Measure actual production bundle output.
+
+Keep navigation responsive.
+
+Preserve the existing visual design.
+
+---
+
+# 15. PHASE TWELVE — MOBILE USER EXPERIENCE
+
+Review the entire application at approximately:
+
+- 320px width
+- 375px width
+- 390px width
+- 768px width
+- Desktop widths
+
+Check:
+
+- Navigation
+- Sidebar
+- Tool forms
+- Buttons
+- Modal dialogs
+- Download controls
+- Game canvases
+- Touch interactions
+- Overflow
+- Input visibility
+- Keyboard accessibility
+
+Fix clipped controls.
+
+Fix unusable mobile layouts.
+
+Ensure buttons are large enough for touch interaction.
+
+Avoid unwanted page scrolling while interacting with game controls.
+
+Make loading states visible.
+
+Make error messages understandable.
+
+Do not alter the established visual identity unnecessarily.
+
+---
+
+# 16. AUTOMATED TESTING REQUIREMENTS
+
+Implement or expand automated tests.
+
+Use the existing test infrastructure where possible.
+
+Do not introduce unnecessarily heavy dependencies.
+
+Suggested test categories:
+
+## UNIT TESTS
+
+Cover:
+
+- Calculator formulas
+- Currency rounding
+- Date calculations
+- Unit conversions
+- Text processing
+- JSON conversion
+- CSV conversion
+- Validation utilities
+
+## GAME LOGIC TESTS
+
+Cover:
+
+- Wordle rules
+- Chess legality
+- Crossword intersections
+- Sudoku solutions
+- Queens solutions
+- Tango rules
+- Connections groups
+- Hive word validity
+- Strands paths
+- Zip paths
+- Patches exact covers
+- Wend validity
+- Nonogram clues
+
+## FILE PROCESSING TESTS
+
+Use actual generated test fixtures for:
+
+- Valid PDFs
+- Corrupted PDFs
+- Multi-page PDFs
+- PDFs containing selectable text
+- PDFs containing annotations and forms
+- JPG images
+- PNG images
+- WebP images
+- Multi-sheet spreadsheets
+- DOCX documents
+- Unicode documents
+
+Whenever possible, reopen generated files using independent parsers.
+
+## BROWSER TESTS
+
+Verify:
+
+- Tool navigation
+- Tool execution
+- Error handling
+- File uploads
+- Downloads
+- Game controls
+- Responsive layouts
+- Local storage persistence
+
+Use Playwright or existing browser-test infrastructure if available.
+
+If browser execution is unavailable, explicitly record that limitation.
+
+Do not invent passing browser-test results.
+
+---
+
+# 17. FIX THE TEST COVERAGE GAP
+
+Review existing verification scripts.
+
+The repository already includes logic-puzzle verification.
+
+However, important game content such as chess, Wordle, and Mini Crossword was not adequately covered by the previously reviewed logic-puzzle verification script.
+
+Extend the automated verification pipeline.
+
+Add tests that fail when:
+
+- Wordle solutions have invalid lengths.
+- Wordle answers are not in the accepted vocabulary.
+- Chess scripted moves are illegal.
+- Chess solutions do not satisfy the advertised objective.
+- Crossword answers disagree with their grids.
+- Puzzle banks contain invalid authored data.
+- Generated code is syntactically invalid.
+- File-conversion outputs do not match their advertised formats.
+
+Ensure important verification scripts run as part of a standard project validation command.
+
+Where appropriate, configure CI so regressions are detected before deployment.
+
+---
+
+# 18. PRODUCTION BUILD REQUIREMENTS
+
+After implementing repairs:
+
+1. Run TypeScript validation.
+2. Run the production build.
+3. Run existing repository verification scripts.
+4. Run newly created regression tests.
+5. Run game-data validators.
+6. Run relevant file-conversion tests.
+7. Check for missing imports.
+8. Check for broken routes.
+9. Check for new runtime errors.
+10. Inspect production bundle sizes.
+
+Do not claim a successful production build unless the build actually completed.
+
+Do not suppress TypeScript errors using unnecessary `any` types or blanket ignore directives.
+
+Fix the underlying issues.
+
+---
+
+# 19. SEO AND DEPLOYMENT CONSISTENCY
+
+The application targets Hostinger hosting.
+
+Ensure production behavior matches the chosen deployment architecture.
+
+Review:
+
+- Static hosting behavior
+- Deep-link navigation
+- Route-specific metadata
+- Open Graph metadata
+- Sitemap
+- robots.txt
+- Canonical URLs
+- Unknown-route handling
+- Service worker behavior
+- MCP configuration
+
+Do not advertise an MCP endpoint that is not implemented.
+
+Ensure important routes provide correct metadata for search engines and social previews.
+
+Do not disrupt working navigation.
+
+---
+
+# 20. USER EXPERIENCE QUALITY STANDARD
+
+Every published tool should meet these expectations:
+
+### Accuracy
+
+The result must be correct.
+
+### Clarity
+
+Users should understand what the tool does and what its limitations are.
+
+### Responsiveness
+
+The interface should provide feedback during long operations.
+
+### Reliability
+
+Errors should be handled gracefully.
+
+### Privacy
+
+User data should be handled according to the application's actual privacy commitments.
+
+### Accessibility
+
+Forms, controls, and important interactions should support accessible use.
+
+### Performance
+
+Routine operations should complete without unnecessary delays.
+
+### Trust
+
+Never show false success messages.
+
+### Recovery
+
+Users should be able to correct mistakes, reset inputs, and retry failed operations.
+
+### Consistency
+
+The same interaction patterns should work across the application.
+
+---
+
+# 21. IMPLEMENTATION PRIORITY ORDER
+
+Follow this order:
+
+## PRIORITY P0 — BROKEN CORE FUNCTIONALITY
+
+Fix first:
+
+1. Chess puzzle legality
+2. Wordle invalid answers
+3. Mini Crossword invalid content
+4. Images-to-PDF WebP handling
+5. Any additional confirmed crashes or data-corruption defects
+
+## PRIORITY P1 — DOCUMENT AND DATA CORRECTNESS
+
+Then fix:
+
+1. Excel workbook preservation
+2. PDF compression behavior
+3. PDF export validity
+4. DOCX export validity
+5. Age calculation
+6. GST calculation
+7. Rupees-to-words calculation
+8. JSON-to-Zod output
+9. JSON/CSV data integrity
+10. Privacy leaks
+11. Generated-source escaping
+
+## PRIORITY P2 — FUNCTIONAL POLISH
+
+Then improve:
+
+1. Remaining calculators
+2. Regex safety
+3. Cron parsing
+4. cURL parsing
+5. Random number generation
+6. International phone validation
+7. Passport photo output guarantees
+8. Image resizing safeguards
+9. Game input reliability
+10. Accessibility
+11. Mobile usability
+
+## PRIORITY P3 — LONG-TERM QUALITY
+
+Finally improve:
+
+1. Puzzle content variety
+2. Game balance
+3. Performance
+4. Lazy loading
+5. Error reporting
+6. Test coverage
+7. Maintainability
+8. User-facing documentation
+
+---
+
+# 22. REQUIRED PROGRESS TRACKING
+
+Create or update:
+
+`TOOLBOXGALAXY_REPAIR_PROGRESS.md`
+
+Include the following tables.
+
+### Tool verification table
+
+Columns:
+
+- Tool name
+- Source files
+- Original defect
+- Fix implemented
+- Unit tests
+- Browser tests
+- Remaining limitations
+- Status
+
+Include all 61 tools.
+
+### Game verification table
+
+Columns:
+
+- Game name
+- Source files
+- Rules validated
+- Puzzle bank validated
+- Input controls checked
+- Gameplay tested
+- Performance checked
+- Remaining limitations
+- Status
+
+Include all 18 game catalog entries.
+
+### Critical issue tracker
+
+Columns:
+
+- Issue ID
+- Priority
+- File
+- Root cause
+- Fix
+- Regression test
+- Verification result
+
+Maintain accurate statuses throughout the process.
+
+---
+
+# 23. IMPORTANT ENGINEERING SAFEGUARDS
+
+Do not make large unrelated changes simply to increase the number of modified files.
+
+Preserve stable APIs where possible.
+
+Use shared utilities for repeated logic.
+
+Avoid duplicating complex calculations.
+
+Keep business logic separate from visual components.
+
+Prefer deterministic tests.
+
+Do not depend on random test outcomes.
+
+Do not hide incomplete implementations.
+
+Do not silently alter user documents.
+
+Do not make unsupported security guarantees.
+
+Do not silently remove features.
+
+Do not fabricate test results.
+
+Do not claim all 61 tools are verified until each has actually undergone its required checks.
+
+Do not claim every game is fully tested until its rules and user interactions have been validated.
+
+Preserve existing working features while repairing defects.
+
+---
+
+# 24. FINAL ACCEPTANCE CRITERIA
+
+The repair project is complete only when:
+
+1. All 61 registered tools have been reviewed.
+2. All 18 game catalog entries have been reviewed.
+3. All confirmed P0 defects have been fixed.
+4. Every Wordle solution has the correct length.
+5. All published chess puzzle moves are legal.
+6. All published crossword answers match their grids.
+7. Supported image formats convert correctly.
+8. Document exports create valid advertised file formats.
+9. Spreadsheet exports preserve supported workbook data.
+10. Calculators pass representative edge cases.
+11. Generated code passes syntax validation.
+12. Known privacy leaks have been addressed.
+13. Existing navigation continues working.
+14. Existing styling remains recognizable.
+15. Relevant automated tests pass.
+16. The production build succeeds.
+17. Remaining limitations are honestly documented.
+
+A component rendering successfully is not sufficient evidence of functional correctness.
+
+---
+
+# 25. FINAL DELIVERY REQUIREMENTS
+
+At the end of each implementation phase, report:
+
+### A. FILES MODIFIED
+
+List the actual modified files.
+
+### B. BUGS FIXED
+
+Explain the root cause and the implemented correction.
+
+### C. TEST RESULTS
+
+State which tests were actually executed.
+
+### D. BUILD STATUS
+
+Report the real build outcome.
+
+### E. REMAINING WORK
+
+List unfinished items explicitly.
+
+### F. REGRESSION RISKS
+
+Identify any existing functionality potentially affected by the changes.
+
+### G. PROGRESS COUNTS
+
+Report:
+
+- Tools reviewed out of 61
+- Tools fixed
+- Tools verified with tests
+- Games reviewed out of 18
+- Games fixed
+- Game banks validated
+- Remaining P0 issues
+- Remaining P1 issues
+- Remaining P2 issues
+
+Do not inflate counts.
+
+Do not describe static inspection as successful browser testing.
+
+---
+
+# 26. START IMPLEMENTATION NOW
+
+Begin by checking the actual connected repository and establishing the current baseline.
+
+Then immediately start the P0 repairs in this order:
+
+1. Wordle
+2. Chess Puzzles
+3. Mini Crossword
+4. Images to PDF
+
+For each, make actual source-code changes and add regression tests.
+
+After completing a phase, run the available verification commands.
+
+Continue through the remaining phases while maintaining the progress file.
+
+If the environment limits how much work can be completed in one execution, finish the current coherent batch, save all changes, update the progress file, and clearly identify the next unfinished task.
+
+Do not replace implementation with a planning-only response.
+
+Do not report success for unfinished tasks.
+
+Do not make unrelated UI redesigns.
+
+Do not deploy to production automatically.
+
+**THE PRIMARY GOAL IS A TOOLBOXGALAXY APPLICATION WHERE REAL USERS CAN TRUST EVERY RESULT, ENJOY EVERY GAME, AND COMPLETE IMPORTANT TASKS WITHOUT UNEXPECTED FAILURES.**
+
+START THE ACTUAL CODE REPAIR PROCESS.

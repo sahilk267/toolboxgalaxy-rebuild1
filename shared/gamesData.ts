@@ -53,7 +53,7 @@ export const GAMES_CATALOG: GameMetadata[] = [
   {
     slug: "zip",
     name: "Zip",
-    detail: "5×5 ordered wall path",
+    detail: "6×6 ordered wall path",
   },
   {
     slug: "wend",

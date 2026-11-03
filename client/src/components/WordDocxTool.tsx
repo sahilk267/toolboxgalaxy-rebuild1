@@ -96,25 +96,51 @@ No document packets are ever transferred over network sockets. The document is c
       const textResult = await mammoth.extractRawText({ arrayBuffer });
       setRawText(textResult.value);
 
-      // Convert HTML roughly to clean Markdown
-      let md = htmlResult.value
-        .replace(/<h1>(.*?)<\/h1>/gi, "\n# $1\n")
-        .replace(/<h2>(.*?)<\/h2>/gi, "\n## $1\n")
-        .replace(/<h3>(.*?)<\/h3>/gi, "\n### $1\n")
-        .replace(/<strong>(.*?)<\/strong>/gi, "**$1**")
-        .replace(/<b>(.*?)<\/b>/gi, "**$1**")
-        .replace(/<em>(.*?)<\/em>/gi, "*$1*")
-        .replace(/<i>(.*?)<\/i>/gi, "*$1*")
-        .replace(/<li>(.*?)<\/li>/gi, "- $1\n")
-        .replace(/<ul>/gi, "\n")
-        .replace(/<\/ul>/gi, "\n")
-        .replace(/<ol>/gi, "\n")
-        .replace(/<\/ol>/gi, "\n")
-        .replace(/<p>(.*?)<\/p>/gi, "$1\n\n")
-        .replace(/<br\s*[\/]?>/gi, "\n")
-        .replace(/<[^>]+>/g, ""); // strip remaining tags
+      // Convert HTML structure cleanly into Markdown preserving formatting, lists, tables, and Unicode
+      const parser = new DOMParser();
+      const parsedDoc = parser.parseFromString(htmlResult.value, "text/html");
 
-      setMarkdownContent(md.trim());
+      const nodeToMd = (node: Node): string => {
+        if (node.nodeType === Node.TEXT_NODE) return node.textContent || "";
+        if (node.nodeType !== Node.ELEMENT_NODE) return "";
+        const el = node as HTMLElement;
+        const tag = el.tagName.toUpperCase();
+        const childrenText = Array.from(el.childNodes).map(nodeToMd).join("");
+
+        switch (tag) {
+          case "H1": return `\n# ${childrenText.trim()}\n\n`;
+          case "H2": return `\n## ${childrenText.trim()}\n\n`;
+          case "H3": return `\n### ${childrenText.trim()}\n\n`;
+          case "H4": return `\n#### ${childrenText.trim()}\n\n`;
+          case "STRONG":
+          case "B": return `**${childrenText}**`;
+          case "EM":
+          case "I": return `*${childrenText}*`;
+          case "U": return `_${childrenText}_`;
+          case "P": return `${childrenText.trim()}\n\n`;
+          case "LI": return `- ${childrenText.trim()}\n`;
+          case "UL":
+          case "OL": return `\n${childrenText}\n`;
+          case "BR": return "\n";
+          case "TABLE": {
+            const rows = Array.from(el.querySelectorAll("tr"));
+            if (rows.length === 0) return "";
+            let tableMd = "\n";
+            rows.forEach((r, idx) => {
+              const cells = Array.from(r.querySelectorAll("th, td")).map((c) => (c.textContent || "").trim());
+              tableMd += `| ${cells.join(" | ")} |\n`;
+              if (idx === 0) {
+                tableMd += `| ${cells.map(() => "---").join(" | ")} |\n`;
+              }
+            });
+            return tableMd + "\n";
+          }
+          default: return childrenText;
+        }
+      };
+
+      const md = nodeToMd(parsedDoc.body).replace(/\n{3,}/g, "\n\n").trim();
+      setMarkdownContent(md);
       setFileName(file.name);
     } catch (err) {
       alert("Error parsing Word (.docx) file. Please ensure it is a valid .docx document.");
@@ -221,45 +247,9 @@ No document packets are ever transferred over network sockets. The document is c
       a.click();
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
-    } catch {
-      // Fallback to legacy HTML-based .doc format if needed
-      const html = `
-        <html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>
-        <head>
-          <title>${docTitle}</title>
-          <style>
-            body { font-family: Calibri, Arial, sans-serif; font-size: 11pt; line-height: 1.5; color: #111827; }
-            h1 { font-size: 18pt; color: #1e3a8a; border-bottom: 2px solid #3b82f6; padding-bottom: 4px; }
-            h2 { font-size: 14pt; color: #1e40af; margin-top: 18px; }
-            p { margin: 8px 0; }
-            ul, ol { margin: 8px 0; padding-left: 24px; }
-            li { margin-bottom: 4px; }
-          </style>
-        </head>
-        <body>
-          ${docBody
-            .replace(/^# (.*$)/gim, "<h1>$1</h1>")
-            .replace(/^## (.*$)/gim, "<h2>$1</h2>")
-            .replace(/^### (.*$)/gim, "<h3>$1</h3>")
-            .replace(/^\- (.*$)/gim, "<li>$1</li>")
-            .replace(/\*\*(.*?)\*\*/gim, "<strong>$1</strong>")
-            .replace(/\n\n/gim, "<p></p>")
-            .replace(/\n/gim, "<br/>")}
-        </body>
-        </html>
-      `;
-
-      const blob = new Blob(["\ufeff" + html], {
-        type: "application/msword;charset=utf-8",
-      });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `${docTitle.toLowerCase().replace(/[^a-z0-9]/g, "_")}.doc`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error("DOCX generation error:", err);
+      alert("Failed to generate OpenXML .docx file: " + (err instanceof Error ? err.message : "Unknown error") + ". You can download the formatted Markdown or Plain Text version instead.");
     }
   };
 

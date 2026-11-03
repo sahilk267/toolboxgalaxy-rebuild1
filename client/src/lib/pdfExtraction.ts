@@ -1,6 +1,8 @@
 import * as pdfjsLib from "pdfjs-dist";
 import { ensurePdfWorkerConfigured } from "./pdfWorkerSetup";
 import * as XLSX from "xlsx";
+import pptxgen from "pptxgenjs";
+import { Document, Packer, Paragraph, TextRun, HeadingLevel } from "docx";
 import { parseDigitalPdfStructure, exportStructureToDocx } from "./pdfLayoutEngine";
 
 ensurePdfWorkerConfigured();
@@ -193,47 +195,48 @@ export async function exportPdfToWordDocx(bytes: Uint8Array, filename: string): 
     throw new Error("No readable text found in document.");
   }
 
-  // Fallback HTML-based doc representation
-  const htmlContent = `
-    <!DOCTYPE html>
-    <html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>
-    <head>
-      <meta charset='utf-8'>
-      <title>${filename}</title>
-      <style>
-        body { font-family: Calibri, Arial, sans-serif; font-size: 11pt; line-height: 1.5; color: #1f2937; margin: 40px; }
-        h1 { font-size: 18pt; color: #1e3a8a; border-bottom: 1.5pt solid #cbd5e1; padding-bottom: 4pt; margin-top: 24pt; }
-        p { margin-bottom: 10pt; text-align: justify; }
-        .page-break { page-break-before: always; mso-break-type: page-break; }
-      </style>
-    </head>
-    <body>
-      ${pages
-        .map(
-          (p, idx) => `
-          <div class="${idx > 0 ? "page-break" : ""}">
-            <h1>Section: Page ${p.pageNumber}</h1>
-            ${p.text
-              .split("\n\n")
-              .filter((para) => para.trim())
-              .map((para) => `<p>${escapeHtml(para)}</p>`)
-              .join("")}
-          </div>`
-        )
-        .join("")}
-    </body>
-    </html>
-  `;
+  // Structured DOCX generation fallback using docx library
+  const children: Paragraph[] = [];
+  pages.forEach((p, idx) => {
+    children.push(
+      new Paragraph({
+        text: `Page ${p.pageNumber}`,
+        heading: HeadingLevel.HEADING_1,
+        pageBreakBefore: idx > 0,
+      })
+    );
 
-  const blob = new Blob(["\ufeff" + htmlContent], {
-    type: "application/msword;charset=utf-8",
+    const paragraphs = p.text.split("\n\n").filter((para) => para.trim());
+    paragraphs.forEach((para) => {
+      children.push(
+        new Paragraph({
+          children: [
+            new TextRun({
+              text: para.trim(),
+              size: 22, // 11pt
+            }),
+          ],
+          spacing: { after: 160 },
+        })
+      );
+    });
   });
 
-  triggerBrowserDownload(blob, `${filename.replace(/\.pdf$/i, "")}_converted.doc`);
+  const doc = new Document({
+    sections: [
+      {
+        properties: {},
+        children,
+      },
+    ],
+  });
+
+  const blob = await Packer.toBlob(doc);
+  triggerBrowserDownload(blob, `${filename.replace(/\.pdf$/i, "")}_converted.docx`);
 }
 
 /**
- * Converts PDF extracted pages into a structured presentation slide deck outline (.ppt).
+ * Converts PDF extracted pages into a genuine PowerPoint presentation (.pptx).
  */
 export async function exportPdfToPresentationPpt(bytes: Uint8Array, filename: string): Promise<void> {
   const { pages } = await extractPdfText(bytes);
@@ -241,44 +244,59 @@ export async function exportPdfToPresentationPpt(bytes: Uint8Array, filename: st
     throw new Error("No readable text found in document.");
   }
 
-  const slidesHtml = `
-    <!DOCTYPE html>
-    <html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:p='urn:schemas-microsoft-com:office:powerpoint' xmlns='http://www.w3.org/TR/REC-html40'>
-    <head>
-      <meta charset='utf-8'>
-      <title>${filename}</title>
-      <style>
-        body { font-family: Calibri, Arial, sans-serif; margin: 40px; background-color: #f8fafc; color: #1e293b; }
-        .slide { background: #ffffff; border: 1.5pt solid #cbd5e1; border-radius: 8px; padding: 32px; margin-bottom: 24px; page-break-after: always; min-height: 400px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); }
-        .slide-header { font-size: 22pt; font-weight: bold; color: #1e3a8a; border-bottom: 2pt solid #3b82f6; padding-bottom: 8pt; margin-bottom: 16pt; }
-        .bullet-point { font-size: 14pt; margin-bottom: 8pt; line-height: 1.5; }
-      </style>
-    </head>
-    <body>
-      ${pages
-        .map(
-          (p) => `
-        <div class="slide">
-          <div class="slide-header">Slide ${p.pageNumber}: ${escapeHtml(filename.replace(/\.pdf$/i, ""))}</div>
-          <ul>
-            ${p.text
-              .split("\n")
-              .filter((line) => line.trim())
-              .map((line) => `<li class="bullet-point">${escapeHtml(line.trim())}</li>`)
-              .join("")}
-          </ul>
-        </div>`
-        )
-        .join("")}
-    </body>
-    </html>
-  `;
+  const pptx = new pptxgen();
+  pptx.layout = "LAYOUT_16x9";
+  pptx.author = "Toolbox Galaxy";
+  pptx.title = filename.replace(/\.pdf$/i, "");
 
-  const blob = new Blob(["\ufeff" + slidesHtml], {
-    type: "application/vnd.ms-powerpoint;charset=utf-8",
-  });
+  for (const page of pages) {
+    const slide = pptx.addSlide();
 
-  triggerBrowserDownload(blob, `${filename.replace(/\.pdf$/i, "")}_presentation.ppt`);
+    // Slide Header
+    slide.addText(`Slide ${page.pageNumber}: ${filename.replace(/\.pdf$/i, "")}`, {
+      x: 0.8,
+      y: 0.5,
+      w: 8.4,
+      h: 0.6,
+      fontSize: 18,
+      bold: true,
+      color: "0f172a",
+    });
+
+    const lines = page.text
+      .split("\n")
+      .map((l) => l.trim())
+      .filter(Boolean);
+
+    if (lines.length > 0) {
+      const bullets = lines.slice(0, 12).map((line) => ({
+        text: line,
+        options: { fontSize: 13, color: "334155", bullet: true, breakLine: true },
+      }));
+
+      slide.addText(bullets, {
+        x: 0.8,
+        y: 1.3,
+        w: 8.4,
+        h: 4.8,
+        align: "left",
+        valign: "top",
+      });
+    } else {
+      slide.addText("(Empty or graphical page)", {
+        x: 0.8,
+        y: 2.0,
+        w: 8.4,
+        h: 1.0,
+        fontSize: 14,
+        italic: true,
+        color: "94a3b8",
+      });
+    }
+  }
+
+  const baseName = filename.replace(/\.pdf$/i, "");
+  await pptx.writeFile({ fileName: `${baseName}_presentation.pptx` });
 }
 
 function escapeHtml(str: string): string {

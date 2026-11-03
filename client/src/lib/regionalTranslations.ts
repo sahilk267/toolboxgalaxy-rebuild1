@@ -41,11 +41,13 @@ const HINDI_NUMS_0_99 = [
 
 export function numberToHindiWords(num: number): string {
   if (!Number.isFinite(num) || num < 0) return "कृपया मान्य धनात्मक संख्या दर्ज करें।";
-  if (num === 0) return "शून्य रुपये केवल";
-  if (num > 999999999) return "राशि भारतीय मानक सीमा (99 करोड़) से अधिक है।";
+  const rounded = Math.round(num * 100) / 100;
+  if (rounded === 0) return "शून्य रुपये केवल";
+  if (rounded > 999999999) return "राशि भारतीय मानक सीमा (99 करोड़) से अधिक है।";
 
-  const intPart = Math.floor(num);
-  const paise = Math.round((num - intPart) * 100);
+  const totalPaise = Math.round(rounded * 100);
+  const intPart = Math.floor(totalPaise / 100);
+  const paise = totalPaise % 100;
 
   const parts: string[] = [];
   const crores = Math.floor(intPart / 10000000);

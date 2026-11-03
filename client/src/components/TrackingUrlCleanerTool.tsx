@@ -1,4 +1,5 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
+import QRCodeLib from "qrcode";
 import { trackPageView } from "@/lib/analytics";
 import { 
   Link2, 
@@ -87,6 +88,7 @@ export default function TrackingUrlCleanerTool() {
   const [inputUrl, setInputUrl] = useState<string>(SAMPLE_URLS[0].url);
   const [copied, setCopied] = useState(false);
   const [showQr, setShowQr] = useState(false);
+  const [qrDataUrl, setQrDataUrl] = useState<string>("");
 
   // Parse and strip trackers
   const cleanResult = useMemo<CleanResult | null>(() => {
@@ -145,6 +147,20 @@ export default function TrackingUrlCleanerTool() {
       hasTrackers: removedParams.length > 0
     };
   }, [inputUrl]);
+
+  useEffect(() => {
+    if (showQr && cleanResult && cleanResult.success) {
+      QRCodeLib.toDataURL(cleanResult.cleanUrl, {
+        width: 180,
+        margin: 1,
+        color: { dark: "#0f172a", light: "#ffffff" }
+      })
+        .then(setQrDataUrl)
+        .catch(() => setQrDataUrl(""));
+    } else {
+      setQrDataUrl("");
+    }
+  }, [showQr, cleanResult]);
 
   const handleCopy = async () => {
     if (!cleanResult || !cleanResult.success) return;
@@ -265,14 +281,14 @@ export default function TrackingUrlCleanerTool() {
               </a>
             </div>
 
-            {/* Optional QR Code */}
-            {showQr && (
+            {/* Optional Offline QR Code */}
+            {showQr && qrDataUrl && (
               <div className="p-4 rounded-xl bg-black/60 border border-white/10 flex flex-col items-center justify-center space-y-2">
-                <p className="text-xs font-mono text-white/60">Scan to open clean URL on mobile device:</p>
+                <p className="text-xs font-mono text-white/60">Scan to open clean URL on mobile device (100% offline generated):</p>
                 <img
-                  src={`https://api.qrserver.com/v1/create-qr-code/?size=160x160&data=${encodeURIComponent(cleanResult.cleanUrl)}`}
+                  src={qrDataUrl}
                   alt="QR Code for Clean Link"
-                  className="w-40 h-40 rounded-lg bg-white p-2"
+                  className="w-40 h-40 rounded-lg bg-white p-2 shadow"
                 />
               </div>
             )}

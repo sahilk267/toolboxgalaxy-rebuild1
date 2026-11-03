@@ -103,6 +103,21 @@ const isIsoDate = (val: string) => /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?
 const isEmail = (val: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(val);
 const isUrl = (val: string) => /^https?:\/\/[^\s/$.?#].[^\s]*$/.test(val);
 
+const RESERVED_TS_WORDS = new Set([
+  "break", "case", "catch", "class", "const", "continue", "debugger", "default", "delete", "do",
+  "else", "enum", "export", "extends", "false", "finally", "for", "function", "if", "import",
+  "in", "instanceof", "new", "null", "return", "super", "switch", "this", "throw", "true",
+  "try", "typeof", "var", "void", "while", "with", "yield", "type", "interface", "declare"
+]);
+
+function sanitizeIdentifier(name: string, fallback = "DataModel"): string {
+  let cleaned = name.trim().replace(/[^a-zA-Z0-9_$]/g, "_");
+  if (!cleaned) cleaned = fallback;
+  if (/^[0-9]/.test(cleaned)) cleaned = `Model_${cleaned}`;
+  if (RESERVED_TS_WORDS.has(cleaned.toLowerCase())) cleaned = `${cleaned}Model`;
+  return cleaned;
+}
+
 function capitalize(str: string): string {
   if (!str) return "Item";
   return str.charAt(0).toUpperCase() + str.slice(1);
@@ -114,7 +129,7 @@ function jsonToZodSchema(value: any, keyName = "root", indent = 2, detectFormats
   const padInner = " ".repeat(indent + 2);
 
   if (value === null) {
-    return `z.any().nullable()`;
+    return `z.null()`;
   }
 
   if (typeof value === "string") {
@@ -138,8 +153,13 @@ function jsonToZodSchema(value: any, keyName = "root", indent = 2, detectFormats
     if (value.length === 0) {
       return `z.array(z.unknown())`;
     }
-    const elemSchema = jsonToZodSchema(value[0], `${keyName}Item`, indent, detectFormats);
-    return `z.array(${elemSchema})`;
+    const uniqueSchemas = Array.from(
+      new Set(value.map((item) => jsonToZodSchema(item, `${keyName}Item`, indent, detectFormats)))
+    );
+    if (uniqueSchemas.length === 1) {
+      return `z.array(${uniqueSchemas[0]})`;
+    }
+    return `z.array(z.union([${uniqueSchemas.join(", ")}]))`;
   }
 
   if (typeof value === "object") {
@@ -149,7 +169,8 @@ function jsonToZodSchema(value: any, keyName = "root", indent = 2, detectFormats
     }
 
     const lines = keys.map((k) => {
-      const sanitizedKey = /^[a-zA-Z_$][a-zA-Z0-9_$]*$/.test(k) ? k : JSON.stringify(k);
+      const isClean = /^[a-zA-Z_$][a-zA-Z0-9_$]*$/.test(k) && !RESERVED_TS_WORDS.has(k);
+      const sanitizedKey = isClean ? k : JSON.stringify(k);
       const val = value[k];
       const valSchema = jsonToZodSchema(val, k, indent + 2, detectFormats);
       return `${padInner}${sanitizedKey}: ${valSchema}`;
@@ -161,7 +182,7 @@ function jsonToZodSchema(value: any, keyName = "root", indent = 2, detectFormats
   return `z.unknown()`;
 }
 
-// Generates pure TypeScript interfaces recursively
+// Generates pure TypeScript interfaces and types recursively
 function jsonToTsInterface(value: any, rootName = "Root", detectFormats = true): string {
   const interfaces: string[] = [];
   const visitedNames = new Set<string>();
@@ -170,34 +191,39 @@ function jsonToTsInterface(value: any, rootName = "Root", detectFormats = true):
     const pad = " ".repeat(indent);
     const padInner = " ".repeat(indent + 2);
 
-    if (val === null) return "null | any";
+    if (val === null) return "null";
     if (typeof val === "string") return "string";
     if (typeof val === "number") return "number";
     if (typeof val === "boolean") return "boolean";
 
     if (Array.isArray(val)) {
-      if (val.length === 0) return "any[]";
-      const itemType = helper(val[0], `${typeName}Item`, indent);
-      return itemType.includes(" | ") ? `(${itemType})[]` : `${itemType}[]`;
+      if (val.length === 0) return "unknown[]";
+      const itemTypes = Array.from(
+        new Set(val.map((item) => helper(item, `${typeName}Item`, indent)))
+      );
+      if (itemTypes.length === 1) {
+        return itemTypes[0].includes(" ") ? `(${itemTypes[0]})[]` : `${itemTypes[0]}[]`;
+      }
+      return `(${itemTypes.join(" | ")})[]`;
     }
 
     if (typeof val === "object") {
       const keys = Object.keys(val);
       if (keys.length === 0) return "Record<string, unknown>";
 
-      const currentInterfaceName = typeName;
-      let finalName = currentInterfaceName;
+      let finalName = sanitizeIdentifier(typeName);
       let counter = 1;
       while (visitedNames.has(finalName)) {
-        finalName = `${currentInterfaceName}_${counter++}`;
+        finalName = sanitizeIdentifier(`${typeName}_${counter++}`);
       }
       visitedNames.add(finalName);
 
       const fields = keys.map((k) => {
-        const sanitizedKey = /^[a-zA-Z_$][a-zA-Z0-9_$]*$/.test(k) ? k : JSON.stringify(k);
+        const isClean = /^[a-zA-Z_$][a-zA-Z0-9_$]*$/.test(k) && !RESERVED_TS_WORDS.has(k);
+        const sanitizedKey = isClean ? k : JSON.stringify(k);
         const childVal = val[k];
         const isNull = childVal === null;
-        const subTypeName = capitalize(k);
+        const subTypeName = `${typeName}${capitalize(k.replace(/[^a-zA-Z0-9_$]/g, ""))}`;
         const subType = helper(childVal, subTypeName, indent + 2);
         return `${padInner}${sanitizedKey}${isNull ? "?" : ""}: ${subType};`;
       });
@@ -209,7 +235,10 @@ function jsonToTsInterface(value: any, rootName = "Root", detectFormats = true):
     return "unknown";
   }
 
-  helper(value, rootName);
+  const rootResult = helper(value, rootName);
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return `export type ${sanitizeIdentifier(rootName)} = ${rootResult};\n`;
+  }
   return interfaces.join("\n\n");
 }
 
@@ -223,25 +252,24 @@ export default function JsonToZodTool() {
   // Parse JSON with error location
   const parseResult = useMemo(() => {
     if (!jsonInput.trim()) {
-      return { parsed: null, error: "Please enter or paste valid JSON." };
+      return { parsed: undefined, hasValue: false, error: "Please enter or paste valid JSON." };
     }
     try {
       const parsed = JSON.parse(jsonInput);
-      return { parsed, error: null };
+      return { parsed, hasValue: true, error: null };
     } catch (err: any) {
-      return { parsed: null, error: err.message || "Invalid JSON syntax." };
+      return { parsed: undefined, hasValue: false, error: err.message || "Invalid JSON syntax." };
     }
   }, [jsonInput]);
 
   // Clean schema / type name
   const cleanName = useMemo(() => {
-    const raw = rootName.trim().replace(/[^a-zA-Z0-9_$]/g, "");
-    return raw ? capitalize(raw) : "DataModel";
+    return sanitizeIdentifier(capitalize(rootName.trim()), "DataModel");
   }, [rootName]);
 
   // Generated code outputs
   const generatedCode = useMemo(() => {
-    if (!parseResult.parsed) return "";
+    if (!parseResult.hasValue) return "";
 
     if (outputTab === "zod") {
       const schemaName = `${cleanName.charAt(0).toLowerCase() + cleanName.slice(1)}Schema`;
@@ -257,7 +285,7 @@ export type ${typeName} = z.infer<typeof ${schemaName}>;
     } else {
       return jsonToTsInterface(parseResult.parsed, cleanName, detectFormats);
     }
-  }, [parseResult.parsed, outputTab, cleanName, detectFormats]);
+  }, [parseResult.hasValue, parseResult.parsed, outputTab, cleanName, detectFormats]);
 
   const handleCopy = async () => {
     if (!generatedCode) return;
