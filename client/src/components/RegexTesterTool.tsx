@@ -1,4 +1,5 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
+import type { RegexResponse } from "../workers/regexWorker";
 import { 
   Check, 
   Copy, 
@@ -78,80 +79,106 @@ export default function RegexTesterTool() {
     return res;
   }, [flags]);
 
-  const evaluation = useMemo(() => {
-    if (!pattern) {
-      return { matches: [], error: null, count: 0, executionTimeMs: 0 };
-    }
+  const [evaluation, setEvaluation] = useState<RegexResponse>({
+    id: 0,
+    matches: [],
+    count: 0,
+    error: null,
+    executionTimeMs: 0,
+    replacedResult: "",
+  });
+  const workerRef = useRef<Worker | null>(null);
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const requestIdRef = useRef<number>(0);
 
-    const startTime = performance.now();
-    try {
-      const regex = new RegExp(pattern, flagString);
-      const matches: {
-        index: number;
-        length: number;
-        fullMatch: string;
-        groups: string[];
-      }[] = [];
-
-      if (flags.g) {
-        let match: RegExpExecArray | null;
-        let count = 0;
-        const maxMatches = 500;
-        while ((match = regex.exec(testString)) !== null && count < maxMatches) {
-          if (performance.now() - startTime > 1000) {
-            throw new Error("Execution timed out (>1000ms): possible catastrophic backtracking (ReDoS).");
-          }
-          count++;
-          matches.push({
-            index: match.index,
-            length: match[0].length,
-            fullMatch: match[0],
-            groups: match.slice(1)
-          });
-          if (match[0].length === 0) {
-            regex.lastIndex++; // Prevent infinite loop on zero-length matches
-          }
-        }
-      } else {
-        const match = regex.exec(testString);
-        if (match) {
-          matches.push({
-            index: match.index,
-            length: match[0].length,
-            fullMatch: match[0],
-            groups: match.slice(1)
-          });
-        }
+  useEffect(() => {
+    const debounceTimer = setTimeout(() => {
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+        timeoutRef.current = null;
+      }
+      if (workerRef.current) {
+        workerRef.current.terminate();
+        workerRef.current = null;
       }
 
-      let replacedResult = "";
-      if (enableReplace) {
-        try {
-          replacedResult = testString.replace(regex, replacement);
-        } catch {
-          replacedResult = testString;
-        }
+      if (!pattern) {
+        setEvaluation({
+          id: 0,
+          matches: [],
+          count: 0,
+          error: null,
+          executionTimeMs: 0,
+          replacedResult: "",
+        });
+        return;
       }
 
-      const executionTimeMs = +(performance.now() - startTime).toFixed(2);
+      const reqId = ++requestIdRef.current;
+      const worker = new Worker(new URL("../workers/regexWorker.ts", import.meta.url), {
+        type: "module",
+      });
+      workerRef.current = worker;
 
-      return {
-        matches,
-        count: matches.length,
-        error: null,
-        executionTimeMs,
-        replacedResult
+      timeoutRef.current = setTimeout(() => {
+        if (workerRef.current === worker) {
+          worker.terminate();
+          workerRef.current = null;
+          setEvaluation({
+            id: reqId,
+            matches: [],
+            count: 0,
+            error: "Execution timed out (>800ms): catastrophic backtracking (ReDoS) guard triggered. Worker terminated.",
+            executionTimeMs: 800,
+            replacedResult: "",
+          });
+        }
+      }, 800);
+
+      worker.onmessage = (event: MessageEvent<RegexResponse>) => {
+        if (event.data.id === reqId) {
+          if (timeoutRef.current) {
+            clearTimeout(timeoutRef.current);
+            timeoutRef.current = null;
+          }
+          setEvaluation(event.data);
+        }
       };
-    } catch (e: any) {
-      return {
-        matches: [],
-        count: 0,
-        error: e.message || "Invalid regular expression syntax.",
-        executionTimeMs: 0,
-        replacedResult: ""
+
+      worker.onerror = (err) => {
+        if (timeoutRef.current) {
+          clearTimeout(timeoutRef.current);
+          timeoutRef.current = null;
+        }
+        setEvaluation({
+          id: reqId,
+          matches: [],
+          count: 0,
+          error: err.message || "Regex evaluation worker encountered an error.",
+          executionTimeMs: 0,
+          replacedResult: "",
+        });
       };
-    }
-  }, [pattern, flagString, testString, flags.g, enableReplace, replacement]);
+
+      worker.postMessage({
+        id: reqId,
+        pattern,
+        flags: flagString,
+        testString,
+        enableReplace,
+        replacement,
+      });
+    }, 250);
+
+    return () => {
+      clearTimeout(debounceTimer);
+      if (timeoutRef.current) clearTimeout(timeoutRef.current);
+      if (workerRef.current) {
+        workerRef.current.terminate();
+        workerRef.current = null;
+      }
+    };
+  }, [pattern, flagString, testString, enableReplace, replacement]);
 
   const handleCopy = async (text: string, key: string) => {
     await navigator.clipboard.writeText(text);

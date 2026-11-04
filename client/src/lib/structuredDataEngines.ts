@@ -39,17 +39,32 @@ export function tableFromCsv(input: string): StructuredResult<CsvTable> {
   return { value: { headers, rows } };
 }
 
-const csvCell = (rawValue: string) => {
+export const rawCsvCell = (rawValue: string) => {
+  return /[",\n\r]/.test(rawValue) ? `"${rawValue.replaceAll('"', '""')}"` : rawValue;
+};
+
+export const spreadsheetCsvCell = (rawValue: string) => {
   const isPureNumber = /^\s*[+\-]?(\d+(\.\d*)?|\.\d+)\s*$/.test(rawValue);
   const isFormulaInjection = !isPureNumber && /^\s*[=+\-@]/.test(rawValue);
   const value = isFormulaInjection ? `'${rawValue}` : rawValue;
   return /[",\n\r]/.test(value) ? `"${value.replaceAll('"', '""')}"` : value;
 };
-export function tableToCsv(table: CsvTable) { return [table.headers, ...table.rows].map((row) => row.map(csvCell).join(",")).join("\r\n"); }
+
+export function tableToRawCsv(table: CsvTable): string {
+  return [table.headers, ...table.rows].map((row) => row.map(rawCsvCell).join(",")).join("\r\n");
+}
+
+export function tableToSpreadsheetCsv(table: CsvTable): string {
+  return [table.headers, ...table.rows].map((row) => row.map(spreadsheetCsvCell).join(",")).join("\r\n");
+}
+
+export function tableToCsv(table: CsvTable, options?: { spreadsheetSafe?: boolean }): string {
+  return options?.spreadsheetSafe === false ? tableToRawCsv(table) : tableToSpreadsheetCsv(table);
+}
 
 export function previewCsvTable(table: CsvTable, rowLimit = 12, columnLimit = 12) { const headers = table.headers.slice(0, columnLimit); return { headers, rows: table.rows.slice(0, rowLimit).map((row) => row.slice(0, columnLimit)), truncated: table.rows.length > rowLimit || table.headers.length > columnLimit }; }
 
-export function jsonToCsv(input: string): StructuredResult<{ csv: string; table: CsvTable }> {
+export function jsonToCsv(input: string, options?: { spreadsheetSafe?: boolean }): StructuredResult<{ csv: string; rawCsv: string; table: CsvTable }> {
   if (input.length > maxCharacters) return { error: "Use a smaller pasted JSON array (up to 250,000 characters) for this local workspace." };
   let parsed: unknown; try { parsed = JSON.parse(input); } catch { return { error: "Paste a valid JSON array of flat objects." }; }
   if (!Array.isArray(parsed) || !parsed.length) return { error: "JSON must be a non-empty array of flat objects." };
@@ -59,7 +74,7 @@ export function jsonToCsv(input: string): StructuredResult<{ csv: string; table:
   if (!headers.length || headers.length > maxColumns) return { error: "Use a JSON array with 1 to 60 named fields." };
   const rows: string[][] = [];
   for (let index = 0; index < parsed.length; index += 1) { const row = parsed[index]; const values: string[] = []; for (const key of headers) { const cell = primitiveCell(row[key]); if (cell === null) return { error: `JSON item ${index + 1}, field “${key}” must be text, a number, true/false, or null—not nested data.` }; values.push(cell); } rows.push(values); }
-  const table = { headers, rows }; return { value: { table, csv: tableToCsv(table) } };
+  const table = { headers, rows }; return { value: { table, csv: tableToCsv(table, options), rawCsv: tableToRawCsv(table) } };
 }
 
 export function csvToJson(input: string): StructuredResult<{ json: string; table: CsvTable; skippedEmptyRows: number }> {
@@ -68,9 +83,9 @@ export function csvToJson(input: string): StructuredResult<{ json: string; table
   return { value: { table: { headers: parsed.value.headers, rows: keptRows }, json: JSON.stringify(records, null, 2), skippedEmptyRows: parsed.value.rows.length - keptRows.length } };
 }
 
-export function cleanCsvTable(input: string, options: { trimCells: boolean; removeEmptyRows: boolean }): StructuredResult<{ table: CsvTable; csv: string; trimmedCells: number; removedRows: number }> {
+export function cleanCsvTable(input: string, options: { trimCells: boolean; removeEmptyRows: boolean; spreadsheetSafe?: boolean }): StructuredResult<{ table: CsvTable; csv: string; rawCsv: string; trimmedCells: number; removedRows: number }> {
   const parsed = tableFromCsv(input); if ("error" in parsed) return { error: parsed.error ?? "CSV could not be read." };
   let trimmedCells = 0; const cleanedRows = parsed.value.rows.map((row) => row.map((cell) => { const next = options.trimCells ? cell.trim() : cell; if (next !== cell) trimmedCells += 1; return next; }));
   const removedRows = options.removeEmptyRows ? cleanedRows.filter(emptyRow).length : 0; const rows = options.removeEmptyRows ? cleanedRows.filter((row) => !emptyRow(row)) : cleanedRows;
-  const table = { headers: parsed.value.headers, rows }; return { value: { table, csv: tableToCsv(table), trimmedCells, removedRows } };
+  const table = { headers: parsed.value.headers, rows }; return { value: { table, csv: tableToCsv(table, options), rawCsv: tableToRawCsv(table), trimmedCells, removedRows } };
 }

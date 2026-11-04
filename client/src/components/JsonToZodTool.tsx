@@ -237,7 +237,11 @@ function jsonToTsInterface(value: any, rootName = "Root", detectFormats = true):
 
   const rootResult = helper(value, rootName);
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
-    return `export type ${sanitizeIdentifier(rootName)} = ${rootResult};\n`;
+    const rootTypeDecl = `export type ${sanitizeIdentifier(rootName)} = ${rootResult};`;
+    if (interfaces.length > 0) {
+      return `${interfaces.join("\n\n")}\n\n${rootTypeDecl}\n`;
+    }
+    return `${rootTypeDecl}\n`;
   }
   return interfaces.join("\n\n");
 }

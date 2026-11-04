@@ -43,6 +43,10 @@ export function sanitizeWinAnsiText(str: string | null | undefined): string {
     .replace(/[£]/g, "GBP ")
     .replace(/[¥]/g, "JPY ");
 
+  // Decompose accented characters to base Latin letters + combining marks, then strip combining marks
+  // This maps café -> cafe, résumé -> resume, Zürich -> Zurich without deleting the letters
+  const unaccented = mapped.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+
   // Retain only valid ASCII characters (0x20 through 0x7E, plus tab and newline) to prevent WinAnsi throw
-  return mapped.replace(/[^\x20-\x7E\t\n]/g, " ");
+  return unaccented.replace(/[^\x20-\x7E\t\n]/g, " ");
 }

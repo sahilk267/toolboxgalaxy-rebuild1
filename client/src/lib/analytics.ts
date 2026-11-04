@@ -52,7 +52,7 @@ export function getAnalyticsConfig(): AnalyticsConfig {
     return {
       provider: "google",
       measurementId: gaMeasurementId.trim(),
-      respectDNT: false, // Standard GA4 measurement
+      respectDNT: true, // Honor visitor DNT and GPC signals in accordance with Privacy statement
     };
   }
 
@@ -87,14 +87,15 @@ export function getAnalyticsConfig(): AnalyticsConfig {
 }
 
 /**
- * Checks if the visitor has enabled "Do Not Track" in their browser.
+ * Checks if the visitor has enabled "Do Not Track" or Global Privacy Control (GPC) in their browser.
  */
 export function isDoNotTrackEnabled(): boolean {
   if (typeof window === "undefined" || typeof navigator === "undefined") return false;
   return (
     navigator.doNotTrack === "1" ||
     (window as unknown as { doNotTrack?: string }).doNotTrack === "1" ||
-    (navigator as unknown as { msDoNotTrack?: string }).msDoNotTrack === "1"
+    (navigator as unknown as { msDoNotTrack?: string }).msDoNotTrack === "1" ||
+    (navigator as unknown as { globalPrivacyControl?: boolean }).globalPrivacyControl === true
   );
 }
 

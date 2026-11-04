@@ -1,0 +1,1530 @@
+# TOOLBOXGALAXY — PRECISION REPAIR ENGINEERING TASK
+
+## ROLE AND OBJECTIVE
+
+You are a senior React, TypeScript, security, document-processing, and testing engineer.
+
+Your task is to FIX the remaining verified defects in the existing ToolboxGalaxy repository.
+
+You must modify actual source files, write focused regression tests, and verify the changes.
+
+Do not produce a planning-only response.
+
+**Repository:** https://github.com/sahilk267/toolboxgalaxy-rebuild1
+
+**Branch:** main
+
+**Last independently reviewed commit:** `798a15e`
+
+The repository already contains substantial fixes implemented by a previous AI agent.
+
+DO NOT repeat completed work.
+
+DO NOT rebuild the application.
+
+DO NOT change the visual design.
+
+DO NOT make unnecessary changes to working games.
+
+This task focuses on REMAINING defects and inaccurate verification claims.
+
+---
+
+# 1. NON-NEGOTIABLE ENGINEERING RULES
+
+Follow these rules throughout execution.
+
+### RULE 1 — CHECK BEFORE EDITING
+
+Read the current file before modifying it.
+
+Check whether the identified defect still exists.
+
+If already fixed correctly, skip it.
+
+If the current HEAD is newer than `798a15e`, preserve those newer changes.
+
+Never overwrite recent unrelated work.
+
+### RULE 2 — MINIMAL CHANGES
+
+Modify only files required for the current defect.
+
+Do not rewrite complete components when changing a few functions is sufficient.
+
+Do not change working business logic unnecessarily.
+
+Avoid new dependencies unless they are genuinely needed.
+
+### RULE 3 — NO FAKE IMPLEMENTATIONS
+
+Never:
+
+- Return hardcoded results instead of calculations.
+- Simulate successful file exports.
+- Invent successful test results.
+- Hide exceptions.
+- Silently remove document content.
+- Generate fake PDF, DOCX, XLSX, or PPTX files.
+- Replace real tools with demonstrations.
+- Claim security guarantees without verification.
+
+### RULE 4 — PRESERVE EXISTING FUNCTIONALITY
+
+Keep existing:
+
+- React application structure
+- Routes
+- UI design
+- Dark theme
+- Navigation
+- Tool catalog
+- Games
+- Document Studio
+- Responsive styling
+- Local storage
+- User preferences
+- SEO structure
+
+### RULE 5 — DO NOT TRUST THE EXISTING PROGRESS REPORT
+
+The repository contains:
+
+`TOOLBOXGALAXY_REPAIR_PROGRESS.md`
+
+Its current claims that all 61 tools and 18 games are fully PASSED are not supported by independent end-to-end verification.
+
+Treat it as a historical progress ledger, NOT proof of correctness.
+
+Update only the entries corresponding to work actually checked.
+
+Use these statuses:
+
+- SOURCE REVIEWED
+- FIX IMPLEMENTED
+- AUTOMATED TEST PASSED
+- BROWSER TEST PASSED
+- NOT VERIFIED
+- BLOCKED
+
+Never use PASSED without stating which test was actually executed.
+
+### RULE 6 — SAVE TOKENS
+
+Do not repeatedly describe the entire architecture.
+
+Do not generate long explanations before editing.
+
+Work directly on the identified files.
+
+For each task:
+
+1. Inspect relevant code.
+2. Confirm the defect.
+3. Apply the smallest safe fix.
+4. Run focused tests.
+5. Continue.
+
+Use concise progress messages.
+
+Do not output complete file contents unless specifically required.
+
+### RULE 7 — NEVER SILENTLY DESTROY USER DATA
+
+If an operation cannot preserve formulas, text, formatting, or other important content:
+
+- Do not pretend that it can.
+- Preserve the original file.
+- Clearly warn the user.
+- Disable unsafe operations where necessary.
+- Document the limitation.
+
+Data correctness is more important than feature count.
+
+---
+
+# 2. ESTABLISH BASELINE
+
+Before modifying code:
+
+1. Inspect `package.json`.
+2. Check current Git HEAD.
+3. Check the working tree for uncommitted changes.
+4. Identify current build and test commands.
+5. Inspect existing verification scripts.
+
+Run, if the environment supports them:
+
+```bash
+npm run check
+npx tsx scripts/verify-logic-puzzles.ts
+```
+
+Record failures.
+
+Do not modify unrelated files to silence errors.
+
+Do not assume the build is valid merely because the application preview renders.
+
+Keep baseline reporting under 150 words.
+
+---
+
+# 3. TASK A — FIX REGEX TESTER BROWSER FREEZING
+
+**Priority: P0**
+
+File:
+
+`client/src/components/RegexTesterTool.tsx`
+
+## CONFIRMED DEFECT
+
+The current code executes JavaScript regular expressions synchronously inside React's `useMemo`.
+
+It checks:
+
+```ts
+performance.now() - startTime > 1000
+```
+
+inside the matching loop.
+
+THIS IS NOT A RELIABLE TIMEOUT.
+
+A single catastrophic `regex.exec()` call can block the browser before the timeout condition is evaluated.
+
+## REQUIRED FIX
+
+Move all user-supplied regex execution into an isolated Web Worker.
+
+Create:
+
+`client/src/workers/regexWorker.ts`
+
+Keep the existing Regex Tester UI.
+
+### Worker requirements
+
+The worker must accept:
+
+```ts
+type RegexRequest = {
+  pattern: string;
+  flags: string;
+  text: string;
+  replacement: string;
+  enableReplace: boolean;
+};
+```
+
+It must return:
+
+```ts
+type RegexResponse = {
+  matches: {
+    index: number;
+    length: number;
+    fullMatch: string;
+    groups: string[];
+  }[];
+  count: number;
+  executionTimeMs: number;
+  replacedResult: string;
+  error: string | null;
+};
+```
+
+Implement the existing matching functionality inside the worker.
+
+Limit:
+
+- Maximum input text: 20,000 characters.
+- Maximum matches returned: 300.
+- Maximum output size: 20,000 characters.
+- Main-thread waiting time: 800 ms.
+
+The worker must support:
+
+- Global matching
+- Case-insensitive matching
+- Multiline matching
+- Dot-all matching
+- Unicode mode
+- Capture groups
+- Replacement mode
+- Zero-length matches
+
+Use:
+
+```ts
+const worker = new Worker(
+  new URL("../workers/regexWorker.ts", import.meta.url),
+  { type: "module" }
+);
+```
+
+Use an actual main-thread timeout:
+
+```ts
+const timeoutId = window.setTimeout(() => {
+  worker.terminate();
+
+  setEvaluation({
+    matches: [],
+    count: 0,
+    executionTimeMs: 800,
+    replacedResult: "",
+    error: "Regex execution exceeded the 800ms safety limit."
+  });
+}, 800);
+```
+
+Adapt the example to the component's actual state structure.
+
+IMPORTANT:
+
+- Do not retain the original synchronous matching execution.
+- Do not use `Promise.race()` alone to interrupt blocking JavaScript.
+- Terminate outdated workers when inputs change.
+- Terminate workers during component unmount.
+- Debounce user input by approximately 200–300 ms.
+- Ignore stale worker responses.
+- Handle worker initialization errors.
+- Never evaluate an untrusted regex on the main thread as a fallback.
+
+### Regression tests
+
+Test:
+
+```text
+Pattern: \d+
+Input: abc123def456
+Expected: 123, 456
+```
+
+```text
+Pattern: (ab)+
+Input: abab
+Expected: One match, valid capture group
+```
+
+```text
+Pattern: ^(a+)+$
+Input: 40 consecutive "a" characters followed by "!"
+Expected: Timeout handled without freezing the main UI
+```
+
+Also test invalid regex syntax.
+
+Mark complete only when the UI remains responsive during the catastrophic-backtracking test.
+
+If the browser environment cannot instantiate Web Workers, show an explicit unavailable-state error rather than executing the dangerous operation on the main thread.
+
+---
+
+# 4. TASK B — FIX TELEGRAM SECRET EXPOSURE
+
+**Priority: P0 SECURITY**
+
+File:
+
+`client/src/lib/telegramAlerts.ts`
+
+## CONFIRMED DEFECT
+
+The current frontend reads:
+
+```ts
+import.meta.env.VITE_TELEGRAM_BOT_TOKEN
+```
+
+Then directly calls:
+
+```text
+https://api.telegram.org/bot<TOKEN>/sendMessage
+```
+
+Vite exposes `VITE_` environment variables in the public client bundle.
+
+This architecture is unsafe for confidential Telegram credentials.
+
+## REQUIRED FIX
+
+1. Remove frontend access to confidential Telegram bot credentials.
+2. Do not make Telegram Bot API calls directly from the browser.
+3. Preserve existing function exports where other modules depend on them.
+4. Avoid breaking tool usage, visitor tracking, or page rendering.
+5. Do not transmit private form contents through an insecure frontend channel.
+
+### Deployment decision
+
+The project may be deployed through Hostinger static hosting or an Express-capable server.
+
+Check the actual deployment configuration.
+
+If a working secure backend environment is available:
+
+- Implement a server-side Telegram relay.
+- Read bot credentials only from server environment variables.
+- Never return the token to the browser.
+- Validate and limit incoming request sizes.
+- Apply rate limiting and anti-abuse controls.
+- Avoid creating an unrestricted public Telegram message relay.
+
+If no deployable secure backend is available:
+
+**Disable browser-based Telegram delivery safely.**
+
+Do not invent a backend endpoint.
+
+Do not make the frontend pretend messages were delivered.
+
+The core application must continue working without Telegram.
+
+### Verification
+
+Search for remaining references to:
+
+```text
+VITE_TELEGRAM_BOT_TOKEN
+api.telegram.org/bot
+```
+
+No frontend code must contain a functioning secret-dependent Telegram request.
+
+Do not print any real credentials in logs.
+
+Document whether server-side delivery is implemented or disabled.
+
+If an existing token was publicly deployed, add a note that it must be rotated.
+
+---
+
+# 5. TASK C — FIX CONTACT FORM FALSE SUCCESS
+
+**Priority: P0**
+
+File:
+
+`client/src/pages/Contact.tsx`
+
+Supporting file:
+
+`client/src/lib/contactApi.ts`
+
+## CONFIRMED DEFECT
+
+The current form calls:
+
+```ts
+sendContactNotification(...)
+```
+
+without awaiting a verified delivery result.
+
+If the contact API is unavailable, it displays:
+
+```text
+Message dispatched!
+```
+
+even when nothing was delivered.
+
+## REQUIRED FIX
+
+Remove false success behavior.
+
+Use this precise flow:
+
+```text
+FORM SUBMISSION
+       |
+       v
+Is contact API configured?
+       |
+   YES | NO
+       | 
+       |------ NO ----> Show email/LinkedIn fallback
+       |
+       v
+Submit to API
+       |
+       v
+Did API confirm success?
+       |
+   YES | NO
+       |
+       |------ NO ----> Show failure + retry
+       |
+       v
+Show actual success
+```
+
+### Required behavior
+
+If a configured API confirms delivery:
+
+```text
+Your message was received successfully.
+```
+
+If API delivery fails:
+
+```text
+We could not send your message. Please try again or use email.
+```
+
+If no API exists:
+
+```text
+Online message delivery is not configured.
+Please use the email or LinkedIn contact option.
+```
+
+Keep the existing contact page design.
+
+Keep the `mailto:` fallback.
+
+Do not auto-open email applications without a user action.
+
+Do not clear form contents after failed delivery.
+
+Prevent duplicate submissions while sending.
+
+Use honest loading and error states.
+
+### Test
+
+Test:
+
+1. API unavailable.
+2. API returns success.
+3. API returns HTTP 500.
+4. Network unavailable.
+5. User submits twice quickly.
+
+Only scenario 2 should produce a confirmed delivery message.
+
+---
+
+# 6. TASK D — FIX EXCEL WORKBOOK DATA LOSS
+
+**Priority: P0 DATA INTEGRITY**
+
+File:
+
+`client/src/components/ExcelStudioTool.tsx`
+
+## CONFIRMED DEFECT
+
+The current code contains:
+
+```ts
+workbook.Sheets[activeSheet] =
+  XLSX.utils.aoa_to_sheet(rawData);
+```
+
+This replaces the complete worksheet.
+
+It may destroy:
+
+- Formulas
+- Original cell types
+- Formatting
+- Hyperlinks
+- Comments
+- Merged-cell metadata
+- Column widths
+- Row heights
+- Other worksheet properties
+
+The same problem appears during sheet switching and export.
+
+## REQUIRED FIX
+
+Do not reconstruct an entire imported worksheet merely to persist its preview data.
+
+Separate:
+
+```text
+Original workbook
+       |
+       v
+Display data
+       |
+       v
+Explicit user changes
+       |
+       v
+Validated workbook update
+       |
+       v
+Export
+```
+
+### Implementation requirements
+
+1. Preserve the original workbook object.
+2. Track changes explicitly.
+3. Do not treat reading or switching sheets as an edit.
+4. Do not replace untouched worksheets.
+5. Do not replace worksheet objects merely because the user exports.
+6. Preserve cell formulas whenever untouched.
+7. Preserve supported cell metadata.
+8. Preserve sheet order and names.
+9. Keep original uploaded bytes available where practical.
+10. Warn users when an operation cannot preserve advanced Excel features.
+
+For simple cell changes, update only the affected cells.
+
+Use SheetJS cell addresses appropriately, such as:
+
+```ts
+const address = XLSX.utils.encode_cell({
+  r: rowIndex,
+  c: columnIndex
+});
+```
+
+Update the specific worksheet cell rather than recreating the entire worksheet.
+
+Do not apply this simple cell-update approach blindly to structural row deletion, because formulas and references may require coordinated updates.
+
+### Structural operations
+
+Operations such as:
+
+- Remove duplicates
+- Delete rows
+- Shift rows
+- Reorder rows
+
+can affect references and formulas.
+
+If safe formula-preserving structural editing cannot be implemented reliably, detect unsupported workbooks and block the destructive operation with a clear explanation.
+
+Do not silently break formulas.
+
+### Required regression fixture
+
+Create a test XLSX workbook containing:
+
+**Sheet 1 — Sales**
+
+| A | B | C |
+|---|---|---|
+| Item | Price | Quantity |
+| Product A | 100 | 2 |
+| Product B | 200 | 3 |
+
+Include a formula:
+
+```excel
+=SUMPRODUCT(B2:B3,C2:C3)
+```
+
+**Sheet 2 — Summary**
+
+Include a cross-sheet formula:
+
+```excel
+=Sales!B2*Sales!C2
+```
+
+Also include a styled cell and a hyperlink.
+
+### Test scenarios
+
+1. Open workbook.
+2. Switch Sheet 1 → Sheet 2 → Sheet 1.
+3. Export without editing.
+4. Reopen exported workbook.
+5. Verify both sheets exist.
+6. Verify formulas are preserved.
+7. Verify values and supported metadata.
+8. Test a supported cell edit.
+9. Verify untouched formulas remain intact.
+10. Test a potentially destructive cleaning operation.
+
+Do not claim full Excel fidelity if the library cannot preserve certain workbook features.
+
+If exact preservation of an untouched workbook is required, use the original bytes rather than unnecessarily serializing it.
+
+Do not add a new spreadsheet library unless necessary.
+
+---
+
+# 7. TASK E — MAKE PDF COMPRESSION HONEST AND SAFE
+
+**Priority: P1**
+
+File:
+
+`client/src/components/PdfCompressTool.tsx`
+
+## CONFIRMED DEFECT
+
+Current lossy compression renders pages into JPEG images.
+
+This can remove:
+
+- Selectable text
+- Searchable text
+- Hyperlinks
+- Form fields
+- Vector graphics
+- Some accessibility information
+
+Current descriptions advertise estimated compression percentages that are not guaranteed.
+
+The so-called lossless mode also modifies document metadata.
+
+## REQUIRED FIX
+
+Preserve existing compression functionality.
+
+Do not attempt a risky complete rewrite of the compression engine.
+
+Make the existing modes accurate and safe.
+
+### Lossy modes
+
+Clearly label them:
+
+```text
+Image-Based Compression
+```
+
+Display this warning BEFORE execution:
+
+```text
+This mode converts PDF pages into images.
+
+Selectable text, hyperlinks, interactive forms,
+and some vector details may be lost.
+
+Keep your original PDF.
+```
+
+Make the loss explicit.
+
+### Structure-preserving mode
+
+Do not claim that all metadata and features are preserved without verification.
+
+Avoid unnecessary metadata clearing.
+
+Do not use misleading labels such as:
+
+```text
+100% Vector Intact
+```
+
+unless validated.
+
+### Compression percentages
+
+Remove guaranteed savings claims such as:
+
+```text
+65%–80% Smaller
+```
+
+Display actual results:
+
+```text
+Original size: X
+Output size: Y
+Size change: Z%
+```
+
+If the output is larger:
+
+```text
+This compression setting increased file size.
+Try another setting or keep the original.
+```
+
+### File validation
+
+After generating a PDF:
+
+- Check that output bytes represent a valid PDF.
+- Reopen output with the available PDF parser.
+- Verify expected page count.
+- Avoid replacing the original file.
+
+### DPI accuracy
+
+Correct misleading DPI descriptions.
+
+PDF.js viewport scale is not automatically equivalent to the currently advertised DPI.
+
+Describe the real rendering resolution accurately.
+
+### Test
+
+Use PDFs containing:
+
+- Selectable text
+- Vector shapes
+- Multiple pages
+- Images
+- Hyperlinks
+
+Verify that warnings match actual behavior.
+
+Do not label rasterized output lossless.
+
+---
+
+# 8. TASK F — FIX PDF TO POWERPOINT CONTENT LOSS
+
+**Priority: P1**
+
+File:
+
+`client/src/lib/pdfExtraction.ts`
+
+## CURRENT STATUS
+
+A genuine PPTX generator has already been implemented using `pptxgenjs`.
+
+DO NOT revert this fix.
+
+## REMAINING DEFECT
+
+The current function effectively uses:
+
+```ts
+lines.slice(0, 12)
+```
+
+This silently discards text after the first 12 lines on each PDF page.
+
+## REQUIRED FIX
+
+Preserve all extracted text.
+
+If the content is too long for one slide:
+
+- Create continuation slides.
+- Preserve source page ordering.
+- Preserve text ordering.
+- Avoid clipping.
+- Avoid overflowing slide boundaries.
+
+Use a bounded layout strategy.
+
+Example:
+
+```text
+PDF Page 1:
+  35 text lines
+
+PowerPoint:
+  Slide 1 — Lines 1–12
+  Slide 2 — Lines 13–24
+  Slide 3 — Lines 25–35
+```
+
+This is an illustrative grouping; adjust for actual available space and line wrapping.
+
+Important:
+
+A long line may wrap into several visual lines.
+
+Do not assume 12 source lines always fit.
+
+Use appropriate text measurements or conservative layout calculations.
+
+Do not silently truncate long lines.
+
+### Test
+
+Generate a PDF with 30–40 recognizable numbered text lines.
+
+Convert it to PPTX.
+
+Reopen the PPTX.
+
+Verify:
+
+- Every recognizable line is present.
+- Order is correct.
+- Slides are valid.
+- No content is silently omitted.
+
+Do not promise exact visual reproduction of the PDF when the converter primarily extracts text.
+
+---
+
+# 9. TASK G — FIX OCR LANGUAGE CLAIMS AND TEXT LOSS
+
+**Priority: P1**
+
+File:
+
+`client/src/lib/pdfOcr.ts`
+
+## CONFIRMED DEFECT
+
+The implementation initializes Tesseract with:
+
+```ts
+createWorker("eng")
+```
+
+It later removes non-ASCII characters using:
+
+```ts
+cleanLineText.replace(/[^\x20-\x7E]/g, " ")
+```
+
+This can silently remove recognized non-English characters from the searchable layer.
+
+## REQUIRED FIX
+
+Do not silently replace recognized characters with spaces and pretend they were preserved.
+
+Choose the smallest reliable solution.
+
+### Option A — Proper multilingual implementation
+
+Only use this if Unicode font embedding and necessary OCR language assets can be implemented and validated properly.
+
+Requirements:
+
+- Correct Unicode font embedding.
+- Appropriate OCR language models.
+- Correct searchable text encoding.
+- Valid text extraction from exported PDFs.
+- Tested Devanagari and English examples.
+
+### Option B — Explicit supported-language limitation
+
+If proper multilingual searchable output cannot be implemented safely:
+
+- Clearly label the feature English-only.
+- Keep extracted Unicode text intact in TXT output where available.
+- Detect characters that cannot be represented in the searchable PDF.
+- Show an explicit error or warning rather than silently deleting them.
+- Do not generate an output falsely advertised as complete multilingual OCR.
+
+Do not add large font assets or language packs without actual need and licensing checks.
+
+### Test
+
+Use English text and a Hindi text sample.
+
+Verify actual extracted output.
+
+Do not mark Hindi OCR supported unless the recognition and exported searchable PDF both pass verification.
+
+---
+
+# 10. TASK H — FIX JSON TO TYPESCRIPT GENERATION
+
+**Priority: P1**
+
+File:
+
+`client/src/components/JsonToZodTool.tsx`
+
+## CURRENT STATUS
+
+The previous agent improved:
+
+- Null handling
+- Falsy root values
+- Invalid identifiers
+- Heterogeneous arrays
+
+Preserve these improvements.
+
+## REMAINING DEFECT
+
+Root-level arrays containing objects can produce references to generated types without including the required interface declarations.
+
+## REQUIRED FIX
+
+Ensure generated TypeScript includes all referenced type definitions.
+
+For example, input:
+
+```json
+[
+  {
+    "id": 1,
+    "name": "Test"
+  }
+]
+```
+
+Expected valid output resembles:
+
+```ts
+export interface UserItem {
+  id: number;
+  name: string;
+}
+
+export type User = UserItem[];
+```
+
+Names may differ, but the generated code must compile.
+
+Also test:
+
+```json
+null
+```
+
+```json
+0
+```
+
+```json
+false
+```
+
+```json
+[1, "text", null]
+```
+
+```json
+{"class": "A", "123abc": 5}
+```
+
+```json
+[{"a": 1}, {"b": true}]
+```
+
+The generator should not produce undefined type references.
+
+If object-array items contain different structures, handle their inferred types coherently.
+
+Generated Zod code must also parse its representative sample.
+
+Do not rewrite the UI.
+
+---
+
+# 11. TASK I — FIX RANDOM NUMBER GENERATION
+
+**Priority: P1**
+
+File:
+
+`client/src/components/GenerativeToolRunners.tsx`
+
+## CONFIRMED DEFECT
+
+The current cryptographic integer generator uses:
+
+```ts
+array[0] % range
+```
+
+This can introduce modulo bias.
+
+It also falls back to `Math.random()`.
+
+For a tool advertising cryptographically secure randomness, that fallback is misleading.
+
+## REQUIRED FIX
+
+Use rejection sampling for supported integer ranges.
+
+Implementation reference:
+
+```ts
+function secureRandomInt(min: number, max: number): number {
+  if (
+    !Number.isSafeInteger(min) ||
+    !Number.isSafeInteger(max) ||
+    max < min
+  ) {
+    throw new Error("Invalid integer range.");
+  }
+
+  const range = max - min + 1;
+  const maxUint32 = 0x100000000;
+
+  if (!Number.isSafeInteger(range) || range > maxUint32) {
+    throw new Error("Unsupported range size.");
+  }
+
+  if (!globalThis.crypto?.getRandomValues) {
+    throw new Error("Secure randomness is unavailable.");
+  }
+
+  const limit = Math.floor(maxUint32 / range) * range;
+  const buffer = new Uint32Array(1);
+
+  let value: number;
+
+  do {
+    globalThis.crypto.getRandomValues(buffer);
+    value = buffer[0];
+  } while (value >= limit);
+
+  return min + (value % range);
+}
+```
+
+Integrate this safely with the existing component.
+
+Additional requirements:
+
+- Validate numeric bounds.
+- Reject impossible uniqueness requests.
+- Prevent infinite duplicate-generation loops.
+- Ensure count limits are reasonable.
+- Validate decimal precision.
+- If unique decimal output is supported, uniqueness must hold AFTER rounding.
+- Do not claim cryptographic security when using non-secure randomness.
+
+### Test
+
+Test:
+
+- Range 1–6
+- Range 0–0
+- Negative ranges
+- Invalid minimum/maximum
+- Count exceeding available unique values
+- Decimal rounding collisions
+- Secure randomness unavailable
+
+Do not require exact random output.
+
+Test correctness of bounds and constraints.
+
+---
+
+# 12. TASK J — FIX NEXT.JS SEO CODE GENERATION
+
+**Priority: P1**
+
+File:
+
+`client/src/components/GenerativeToolRunners.tsx`
+
+## CONFIRMED DEFECT
+
+The generated Next.js metadata uses direct string interpolation.
+
+Example:
+
+```ts
+title: '${title.replace(/'/g, "\\'")}'
+```
+
+This does not reliably handle every combination of quotes, backslashes, newlines, and other special characters.
+
+## REQUIRED FIX
+
+Use `JSON.stringify()` for all user-controlled string literals included in generated TypeScript.
+
+Example:
+
+```ts
+const safeTitle = JSON.stringify(title);
+const safeDescription = JSON.stringify(description);
+const safeUrl = JSON.stringify(url);
+```
+
+Then generate:
+
+```ts
+title: ${safeTitle},
+description: ${safeDescription},
+```
+
+Apply consistently to:
+
+- Title
+- Description
+- Author
+- Canonical URL
+- Open Graph URL
+- Open Graph title
+- Open Graph description
+- Open Graph image
+- Site name
+- Twitter metadata
+
+Preserve the existing HTML escaping functionality.
+
+### Test
+
+Use this title:
+
+```text
+John's "Developer" Guide \ 2026
+```
+
+Also test strings containing newlines and special characters.
+
+Ensure the generated TypeScript parses successfully.
+
+---
+
+# 13. TASK K — CORRECT CSV DATA TRANSFORMATION
+
+**Priority: P1**
+
+File:
+
+`client/src/lib/structuredDataEngines.ts`
+
+The current CSV generator prefixes certain values with an apostrophe to reduce spreadsheet formula injection risks.
+
+This can alter original data.
+
+## REQUIRED FIX
+
+Separate two behaviors:
+
+### Raw CSV
+
+Preserve original field values exactly, subject only to valid CSV escaping.
+
+### Spreadsheet-safe CSV
+
+Provide an explicitly labeled security mode that protects against formula execution in spreadsheet applications.
+
+Clearly document that spreadsheet-safe transformations may change field contents.
+
+Do not silently corrupt raw conversion results.
+
+### Test values
+
+```text
+-1
++123
+=SUM(1,2)
+@username
+Hello, World
+Text "quoted"
+```
+
+Verify that raw mode preserves values correctly.
+
+Verify spreadsheet-safe mode applies its documented protections.
+
+Do not weaken spreadsheet-injection protection silently.
+
+---
+
+# 14. TASK L — PRIVACY AND ANALYTICS CONSISTENCY
+
+**Priority: P1**
+
+Files:
+
+`client/index.html`
+
+`client/src/lib/analytics.ts`
+
+`client/src/pages/Privacy.tsx`
+
+## CURRENT PROBLEM
+
+Google Tag Manager currently loads unconditionally.
+
+The analytics implementation and privacy claims are not fully consistent.
+
+## REQUIRED FIX
+
+Make actual behavior match public privacy statements.
+
+Check:
+
+- Google Tag Manager loading
+- Google Analytics loading
+- Consent behavior
+- Do Not Track
+- Global Privacy Control
+- Search-query telemetry
+- Data sent to external services
+
+Choose a privacy-consistent architecture.
+
+If appropriate consent controls are not implemented, do not activate optional tracking before consent.
+
+Do not claim zero telemetry while external analytics is operating.
+
+Do not send sensitive user content or private document data to analytics.
+
+Keep necessary functionality intact.
+
+Do not remove analytics merely to make tests pass without documenting the product impact.
+
+Provide accurate privacy disclosures.
+
+---
+
+# 15. TASK M — CORRECT TESTING AND PROGRESS REPORTING
+
+**Priority: P1**
+
+Files:
+
+`package.json`
+
+`scripts/verify-logic-puzzles.ts`
+
+`TOOLBOXGALAXY_REPAIR_PROGRESS.md`
+
+## REQUIRED FIX
+
+The repository already contains a logic puzzle verification script covering Wordle, Chess, and Mini Crossword.
+
+However, the default `npm run check` command does not invoke it.
+
+Add an explicit script:
+
+```json
+"verify:logic": "tsx scripts/verify-logic-puzzles.ts"
+```
+
+Include the logic verification in the default check workflow.
+
+Preserve existing check scripts.
+
+### IMPORTANT
+
+Do not assume that adding the command means the tests pass.
+
+Execute it.
+
+Fix actual failures.
+
+Never delete tests merely because they reveal defects.
+
+### Progress ledger
+
+Review the existing progress ledger.
+
+Correct false or unsupported statements.
+
+Examples requiring attention:
+
+- Claims that every tool has browser-tested successfully.
+- Claims that all games achieved 60 FPS without measurements.
+- Incorrect tool source-file references.
+- Incorrect puzzle bank counts.
+- Unsupported claims of complete XLSX formatting preservation.
+- Claims that the Regex Tester is safe against catastrophic backtracking.
+- Claims that all document exports preserve full original content.
+
+Make the ledger factual and concise.
+
+---
+
+# 16. DO NOT REPAIR ALREADY-VALID PUZZLES AGAIN
+
+The latest independently reviewed repository already includes major corrections for:
+
+- Wordle
+- Chess
+- Mini Crossword
+- Mini Sudoku
+- Queens
+- Tango
+- Patches
+- Zip
+- Wend
+
+Do not regenerate their puzzle banks.
+
+Do not replace existing chess positions merely for variety.
+
+Do not change answer-selection algorithms unnecessarily.
+
+Do not rewrite existing puzzle components unless a new reproducible defect is found.
+
+The goal is stability, not more code.
+
+For the 2D/3D games, avoid gameplay-engine rewrites in this task.
+
+Their actual runtime performance has not been independently measured, so do not claim they run at a verified 60 FPS.
+
+Add documented test coverage where feasible, but do not redesign the games.
+
+---
+
+# 17. IMPLEMENTATION ORDER
+
+Work in these exact batches.
+
+## BATCH 1 — SECURITY AND IMMEDIATE FAILURES
+
+1. Regex Tester
+2. Telegram credentials
+3. Contact form
+
+Run relevant tests and TypeScript checks.
+
+## BATCH 2 — DATA INTEGRITY
+
+4. Excel Studio
+5. PDF Compressor
+6. PDF to PowerPoint
+7. OCR handling
+
+Run file-generation and round-trip tests.
+
+## BATCH 3 — CODE GENERATORS AND CALCULATIONS
+
+8. JSON to TypeScript
+9. Random Number Generator
+10. SEO code generator
+11. CSV conversion
+
+Run focused tests.
+
+## BATCH 4 — PRIVACY AND FINAL VERIFICATION
+
+12. Analytics consistency
+13. Verification scripts
+14. Progress ledger accuracy
+
+Run final checks.
+
+Do not start an unrelated feature during these batches.
+
+If time or context is limited, finish the current batch, save changes, update the ledger, and stop with a precise next task.
+
+Never leave a partially rewritten file.
+
+---
+
+# 18. REGRESSION SAFEGUARDS
+
+After each batch:
+
+- Check imports.
+- Check TypeScript errors.
+- Check affected component rendering where possible.
+- Run relevant unit tests.
+- Check for accidental file deletion.
+- Confirm existing routes remain unchanged.
+
+After all batches:
+
+```bash
+npm run check
+npm run verify:logic
+npm run build
+```
+
+If `verify:logic` was not successfully added, use:
+
+```bash
+npx tsx scripts/verify-logic-puzzles.ts
+```
+
+Do not pretend commands ran if the environment cannot execute them.
+
+Use the package manager supported by the repository.
+
+Do not regenerate lockfiles unnecessarily.
+
+Do not introduce unrelated dependencies.
+
+---
+
+# 19. MANDATORY ACCEPTANCE TESTS
+
+The work is successful only when the following conditions are satisfied.
+
+| Area | Acceptance condition |
+|---|---|
+| Regex | Catastrophic regex cannot freeze main UI |
+| Telegram | No public frontend bot token |
+| Contact | No false delivery confirmation |
+| Excel | Unchanged formulas survive sheet switching/export |
+| PDF compression | Lossy behavior is clearly disclosed |
+| PPTX | No silent omission of extracted text |
+| OCR | No silent claim of preserved unsupported text |
+| JSON to TS | Generated object-array types compile |
+| Random | Supported secure integer ranges avoid modulo bias |
+| SEO generator | Generated TS handles quotes and backslashes |
+| CSV | Raw conversion does not silently mutate values |
+| Analytics | Actual tracking matches privacy disclosures |
+| Tests | Existing and new relevant tests genuinely execute |
+| Build | Production build actually succeeds |
+
+Any condition not verified must be marked NOT VERIFIED.
+
+Do not mark a defect fixed merely because TypeScript compilation succeeds.
+
+---
+
+# 20. FINAL RESPONSE FORMAT — STRICT TOKEN BUDGET
+
+Do not give a long explanation.
+
+Use this format:
+
+```text
+HEAD:
+<commit>
+
+COMPLETED:
+- <file>: <actual fix>
+- <file>: <actual fix>
+
+TESTS:
+- npm run check: PASS/FAIL/NOT RUN
+- npm run verify:logic: PASS/FAIL/NOT RUN
+- npm run build: PASS/FAIL/NOT RUN
+- Browser tests: PASS/FAIL/NOT RUN
+
+BLOCKED:
+- <specific issue, if any>
+
+REMAINING:
+- <unfinished work, if any>
+
+FILES CHANGED:
+- <file paths>
+```
+
+Keep the final response under approximately 350 words.
+
+Do not paste long code files into the response.
+
+Do not repeat the original task instructions.
+
+---
+
+# 21. FINAL COMMAND
+
+START WORKING ON THE ACTUAL SOURCE CODE NOW.
+
+Read the current HEAD.
+
+Preserve existing fixes.
+
+Begin with Batch 1.
+
+Fix only confirmed defects.
+
+Write focused tests.
+
+Continue through the batches when the environment permits.
+
+Do not produce a plan instead of making changes.
+
+Do not claim successful browser tests without actual browser execution.
+
+Do not deploy automatically.
+
+Do not fabricate results.
+
+**SUCCESS MEANS: RELIABLE IMPLEMENTATION, PRESERVED USER DATA, VERIFIED CORRECTNESS, AND NO NEW REGRESSIONS.**

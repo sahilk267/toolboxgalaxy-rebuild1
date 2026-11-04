@@ -277,18 +277,28 @@ export function RandomNumberTool() {
   const [coinHistory, setCoinHistory] = useState<("HEADS" | "TAILS")[]>([]);
   const [lastCoin, setLastCoin] = useState<"HEADS" | "TAILS" | null>(null);
 
-  // Cryptographically secure random integer
+  // Cryptographically secure random integer using rejection sampling to eliminate modulo bias
   const generateSecureRandomInt = (minVal: number, maxVal: number): number => {
     const lower = Math.min(minVal, maxVal);
     const upper = Math.max(minVal, maxVal);
     const range = upper - lower + 1;
     if (range <= 1) return lower;
-    const array = new Uint32Array(1);
-    if (typeof window !== "undefined" && window.crypto && window.crypto.getRandomValues) {
-      window.crypto.getRandomValues(array);
-      return lower + (array[0] % range);
+
+    if (typeof window === "undefined" || !window.crypto || !window.crypto.getRandomValues) {
+      throw new Error("Cryptographically secure RNG (window.crypto.getRandomValues) is required.");
     }
-    return lower + Math.floor(Math.random() * range);
+
+    // Rejection sampling: reject values above largest multiple of range to eliminate modulo bias
+    const maxUint32 = 0xffffffff;
+    const limit = maxUint32 - (maxUint32 % range);
+    const buffer = new Uint32Array(1);
+
+    while (true) {
+      window.crypto.getRandomValues(buffer);
+      if (buffer[0] < limit) {
+        return lower + (buffer[0] % range);
+      }
+    }
   };
 
   const generateNumbers = useCallback(() => {
@@ -316,10 +326,17 @@ export function RandomNumberTool() {
     for (let i = 0; i < count; i++) {
       if (isDecimal) {
         const array = new Uint32Array(1);
-        window.crypto.getRandomValues(array);
-        const factor = array[0] / (0xffffffff + 1);
-        const val = lower + factor * (upper - lower);
-        output.push(Number(val.toFixed(precision)));
+        let candidate = 0;
+        let attempts = 0;
+        do {
+          window.crypto.getRandomValues(array);
+          const factor = array[0] / (0xffffffff + 1);
+          const val = lower + factor * (upper - lower);
+          candidate = Number(val.toFixed(precision));
+          attempts++;
+        } while (!allowDuplicates && used.has(candidate) && attempts < 1000);
+        if (!allowDuplicates) used.add(candidate);
+        output.push(candidate);
       } else {
         if (!allowDuplicates) {
           let attempts = 0;
@@ -694,34 +711,34 @@ export function SeoMetaTool() {
     return `import type { Metadata } from 'next';
 
 export const metadata: Metadata = {
-  title: '${title.replace(/'/g, "\\'")}',
-  description: '${description.replace(/'/g, "\\'")}',
+  title: ${JSON.stringify(title)},
+  description: ${JSON.stringify(description)},
   keywords: ${JSON.stringify(keywords.split(",").map((s) => s.trim()))},
-  authors: [{ name: '${author.replace(/'/g, "\\'")}' }],
-  robots: '${robots}',
+  authors: [{ name: ${JSON.stringify(author)} }],
+  robots: ${JSON.stringify(robots)},
   alternates: {
-    canonical: '${url}',
+    canonical: ${JSON.stringify(url)},
   },
   openGraph: {
     type: 'website',
-    url: '${url}',
-    title: '${title.replace(/'/g, "\\'")}',
-    description: '${description.replace(/'/g, "\\'")}',
-    siteName: '${siteName.replace(/'/g, "\\'")}',
+    url: ${JSON.stringify(url)},
+    title: ${JSON.stringify(title)},
+    description: ${JSON.stringify(description)},
+    siteName: ${JSON.stringify(siteName)},
     images: [
       {
-        url: '${ogImage}',
+        url: ${JSON.stringify(ogImage)},
         width: 1200,
         height: 630,
-        alt: '${title.replace(/'/g, "\\'")}',
+        alt: ${JSON.stringify(title)},
       },
     ],
   },
   twitter: {
-    card: '${twitterCard}',
-    title: '${title.replace(/'/g, "\\'")}',
-    description: '${description.replace(/'/g, "\\'")}',
-    images: ['${ogImage}'],
+    card: ${JSON.stringify(twitterCard)},
+    title: ${JSON.stringify(title)},
+    description: ${JSON.stringify(description)},
+    images: [${JSON.stringify(ogImage)}],
   },
 };`;
   }, [title, description, keywords, author, robots, url, ogImage, siteName, twitterCard]);

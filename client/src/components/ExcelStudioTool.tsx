@@ -25,6 +25,8 @@ export default function ExcelStudioTool() {
   const [fileName, setFileName] = useState<string>("data.xlsx");
   const [searchTerm, setSearchTerm] = useState<string>("");
   const [copied, setCopied] = useState<string | null>(null);
+  const [hasUserEdits, setHasUserEdits] = useState<boolean>(false);
+  const [originalRawBytes, setOriginalRawBytes] = useState<Uint8Array | null>(null);
 
   // Load sample dataset
   const loadSampleData = () => {
@@ -59,6 +61,8 @@ export default function ExcelStudioTool() {
     setActiveSheet("Staff Directory");
     setRawData(sampleRows);
     setFileName("sample_company_data.xlsx");
+    setOriginalRawBytes(null);
+    setHasUserEdits(false);
   };
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -68,8 +72,9 @@ export default function ExcelStudioTool() {
     const reader = new FileReader();
     reader.onload = (evt) => {
       try {
-        const bstr = evt.target?.result;
-        const wb = XLSX.read(bstr, { type: "binary" });
+        const arrayBuf = evt.target?.result as ArrayBuffer;
+        const bytes = new Uint8Array(arrayBuf);
+        const wb = XLSX.read(bytes, { type: "array", cellStyles: true, cellFormula: true, cellNF: true });
         const firstSheet = wb.SheetNames[0];
         const sheetData = XLSX.utils.sheet_to_json<any[]>(wb.Sheets[firstSheet], { header: 1 });
         
@@ -78,18 +83,78 @@ export default function ExcelStudioTool() {
         setActiveSheet(firstSheet);
         setRawData(sheetData);
         setFileName(file.name);
+        setOriginalRawBytes(bytes);
+        setHasUserEdits(false);
       } catch (err) {
         alert("Failed to parse Excel/CSV file. Please check file format.");
       }
     };
-    reader.readAsBinaryString(file);
+    reader.readAsArrayBuffer(file);
   };
+
+function syncDataToWorksheet(ws: XLSX.WorkSheet | undefined, data: any[][]): XLSX.WorkSheet {
+  if (!ws) {
+    return XLSX.utils.aoa_to_sheet(data);
+  }
+
+  // Preserve all existing sheet properties (!merges, !cols, !margins, etc.)
+  // Update cells individually using encode_cell to preserve untouched formulas and types
+  const existingRange = ws["!ref"] ? XLSX.utils.decode_range(ws["!ref"]) : { s: { r: 0, c: 0 }, e: { r: 0, c: 0 } };
+  let maxCol = existingRange.e.c;
+  const maxRow = Math.max(existingRange.e.r, data.length - 1);
+
+  for (let r = 0; r < data.length; r++) {
+    const row = data[r];
+    if (!row) continue;
+    if (row.length - 1 > maxCol) maxCol = row.length - 1;
+    for (let c = 0; c < row.length; c++) {
+      const cellRef = XLSX.utils.encode_cell({ r, c });
+      const currentCell = ws[cellRef];
+      const newVal = row[c];
+
+      if (currentCell) {
+        // If the cell contains an existing formula, keep formula intact and update cached value
+        if (currentCell.f) {
+          if (newVal !== undefined && newVal !== null && newVal !== currentCell.v) {
+            currentCell.v = newVal;
+          }
+        } else {
+          // Update value preserving appropriate type
+          if (typeof newVal === "number") {
+            ws[cellRef] = { ...currentCell, t: "n", v: newVal };
+          } else if (typeof newVal === "boolean") {
+            ws[cellRef] = { ...currentCell, t: "b", v: newVal };
+          } else if (newVal === null || newVal === undefined || newVal === "") {
+            delete ws[cellRef];
+          } else {
+            ws[cellRef] = { ...currentCell, t: "s", v: String(newVal) };
+          }
+        }
+      } else if (newVal !== null && newVal !== undefined && newVal !== "") {
+        if (typeof newVal === "number") {
+          ws[cellRef] = { t: "n", v: newVal };
+        } else if (typeof newVal === "boolean") {
+          ws[cellRef] = { t: "b", v: newVal };
+        } else {
+          ws[cellRef] = { t: "s", v: String(newVal) };
+        }
+      }
+    }
+  }
+
+  ws["!ref"] = XLSX.utils.encode_range({
+    s: { r: 0, c: 0 },
+    e: { r: Math.max(0, maxRow), c: Math.max(0, maxCol) },
+  });
+
+  return ws;
+}
 
   const handleSheetSwitch = (sheet: string) => {
     if (!workbook) return;
-    // Persist edits on the outgoing active worksheet
+    // Persist edits on the outgoing active worksheet via targeted cell encoding
     if (activeSheet && rawData.length > 0) {
-      workbook.Sheets[activeSheet] = XLSX.utils.aoa_to_sheet(rawData);
+      workbook.Sheets[activeSheet] = syncDataToWorksheet(workbook.Sheets[activeSheet], rawData);
     }
     setActiveSheet(sheet);
     const targetWs = workbook.Sheets[sheet];
@@ -97,9 +162,21 @@ export default function ExcelStudioTool() {
     setRawData(sheetData);
   };
 
+  const sheetHasFormulas = (ws?: XLSX.WorkSheet): boolean => {
+    if (!ws) return false;
+    return Object.keys(ws).some((key) => !key.startsWith("!") && Boolean(ws[key]?.f));
+  };
+
   // Cleaning Actions
   const removeDuplicateRows = () => {
     if (rawData.length <= 1) return;
+    const curSheet = workbook?.Sheets[activeSheet];
+    if (curSheet && sheetHasFormulas(curSheet)) {
+      const ok = window.confirm(
+        "Warning: This worksheet contains Excel formulas. Deleting rows can corrupt formula references (e.g. #REF!). Do you want to proceed?"
+      );
+      if (!ok) return;
+    }
     const header = rawData[0];
     const rows = rawData.slice(1);
     const seen = new Set<string>();
@@ -115,6 +192,7 @@ export default function ExcelStudioTool() {
 
     const cleaned = [header, ...uniqueRows];
     setRawData(cleaned);
+    setHasUserEdits(true);
     const removedCount = rows.length - uniqueRows.length;
     alert(`Removed ${removedCount} duplicate ${removedCount === 1 ? "row" : "rows"}.`);
   };
@@ -124,14 +202,23 @@ export default function ExcelStudioTool() {
       row.map((cell) => (typeof cell === "string" ? cell.trim() : cell))
     );
     setRawData(cleaned);
+    setHasUserEdits(true);
     alert("Trimmed extra spaces from all cells.");
   };
 
   const removeEmptyRows = () => {
+    const curSheet = workbook?.Sheets[activeSheet];
+    if (curSheet && sheetHasFormulas(curSheet)) {
+      const ok = window.confirm(
+        "Warning: This worksheet contains Excel formulas. Removing blank rows can corrupt formula ranges. Do you want to proceed?"
+      );
+      if (!ok) return;
+    }
     const cleaned = rawData.filter((row) =>
       row.some((cell) => cell !== null && cell !== undefined && String(cell).trim() !== "")
     );
     setRawData(cleaned);
+    setHasUserEdits(true);
   };
 
   // Filtered rows for viewing
@@ -149,13 +236,30 @@ export default function ExcelStudioTool() {
   // Export handlers
   const exportToExcel = () => {
     try {
+      if (!hasUserEdits && originalRawBytes) {
+        // Exact original preservation: export byte-for-byte unmodified workbook
+        const blob = new Blob([originalRawBytes], {
+          type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = fileName;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        return;
+      }
+
       let wbToExport = workbook;
       if (wbToExport && wbToExport.SheetNames.length > 0) {
-        // Save current sheet changes into the workbook
-        wbToExport.Sheets[activeSheet || wbToExport.SheetNames[0]] = XLSX.utils.aoa_to_sheet(rawData);
+        // Save current sheet changes preserving formulas and metadata
+        const targetSheet = activeSheet || wbToExport.SheetNames[0];
+        wbToExport.Sheets[targetSheet] = syncDataToWorksheet(wbToExport.Sheets[targetSheet], rawData);
       } else {
         wbToExport = XLSX.utils.book_new();
-        const ws = XLSX.utils.aoa_to_sheet(rawData);
+        const ws = syncDataToWorksheet(undefined, rawData);
         XLSX.utils.book_append_sheet(wbToExport, ws, activeSheet || "Sheet1");
       }
       XLSX.writeFile(wbToExport, fileName.replace(/\.[^/.]+$/, "") + "_cleaned.xlsx");

@@ -11,6 +11,240 @@ function DataActions({ value, filename, toolSlug, onReset, onApply, applyLabel =
 function DataResult({ label, value, error }: { label: string; value: string; error?: string }) { return <div className={`result-block ${error ? "result-block--error" : ""}`}><div className="telemetry-strip"><span>{label}</span><span>{error ? "CHECK INPUT" : "LOCAL OUTPUT"}</span></div><pre data-tool-output aria-live="polite">{error || value || "Your converted data will appear here."}</pre></div>; }
 function TablePreview({ table }: { table?: CsvTable }) { if (!table) return null; const preview = previewCsvTable(table); return <div className="table-preview" data-csv-preview><div className="table-preview__head"><span>TABLE PREVIEW / {table.rows.length} ROWS · {table.headers.length} FIELDS</span><small>LOCAL VIEWPORT ONLY</small></div><div className="table-preview__scroll"><table><caption>Current browser table preview</caption><thead><tr>{preview.headers.map((header) => <th key={header} scope="col">{header}</th>)}</tr></thead><tbody>{preview.rows.map((row, rowIndex) => <tr key={`${rowIndex}-${row.join("|")}`}>{preview.headers.map((_, index) => <td key={index}>{row[index] || <span className="table-empty">—</span>}</td>)}</tr>)}</tbody></table></div>{preview.truncated ? <p>Preview shows the first 12 rows and 12 fields. Export retains the valid local table.</p> : null}</div>; }
 
-export function JsonCsvConverterTool() { const [direction, setDirection] = useState<"jsonToCsv" | "csvToJson">("jsonToCsv"); const [input, setInput] = useState(jsonExample); const result = useMemo((): { value?: { output: string; table: CsvTable }; error?: string } => { if (direction === "jsonToCsv") { const converted = jsonToCsv(input); return converted.value ? { value: { output: converted.value.csv, table: converted.value.table } } : { error: converted.error ?? "JSON could not be converted." }; } const converted = csvToJson(input); return converted.value ? { value: { output: converted.value.json, table: converted.value.table } } : { error: converted.error ?? "CSV could not be converted." }; }, [direction, input]); const output = result.value?.output ?? ""; const table = result.value?.table; const switchDirection = (next: "jsonToCsv" | "csvToJson") => { setDirection(next); setInput(next === "jsonToCsv" ? jsonExample : csvExample); trackPageView(undefined, undefined, "data-converted", { tool_slug: "json-csv", format: next }); }; return <div className="runner-stack structured-runner" data-daily-tool="json-csv"><div className="instrument-signature instrument-signature--data"><span>SCHEMA BRIDGE / LOCAL</span><b>{direction === "jsonToCsv" ? "JSON → CSV" : "CSV → JSON"}</b><i aria-hidden="true"><em /><em /><em /><em /></i></div><div className="toggle-row" role="group" aria-label="Conversion direction"><button type="button" data-json-to-csv className={direction === "jsonToCsv" ? "toggle-button toggle-button--active" : "toggle-button"} onClick={() => switchDirection("jsonToCsv")}>JSON → CSV</button><button type="button" data-csv-to-json className={direction === "csvToJson" ? "toggle-button toggle-button--active" : "toggle-button"} onClick={() => switchDirection("csvToJson")}>CSV → JSON</button></div><label className="wide-field">{direction === "jsonToCsv" ? "Flat JSON array" : "CSV table with a header row"}<textarea data-field="structured-input" value={input} onChange={(event) => setInput(event.target.value)} rows={11} spellCheck="false" /></label><p className="tool-disclaimer">Pasted data stays in this tab. JSON accepts a non-empty array of flat objects; CSV requires unique headers and a rectangular table. No upload or server conversion occurs.</p><DataActions value={output} toolSlug="json-csv" filename={direction === "jsonToCsv" ? "toolboxgalaxy-table.csv" : "toolboxgalaxy-table.json"} onReset={() => setInput(direction === "jsonToCsv" ? jsonExample : csvExample)} /><DataResult label={direction === "jsonToCsv" ? "CSV EXPORT" : "JSON EXPORT"} value={output} error={result.error} /><TablePreview table={table} /></div>; }
+export function JsonCsvConverterTool() {
+  const [direction, setDirection] = useState<"jsonToCsv" | "csvToJson">("jsonToCsv");
+  const [csvMode, setCsvMode] = useState<"raw" | "spreadsheet">("raw");
+  const [input, setInput] = useState(jsonExample);
 
-export function CsvViewerCleanerTool() { const [input, setInput] = useState(csvExample); const [trimCells, setTrimCells] = useState(true); const [removeEmptyRows, setRemoveEmptyRows] = useState(true); const [applied, setApplied] = useState(false); const result = useMemo(() => cleanCsvTable(input, { trimCells, removeEmptyRows }), [input, trimCells, removeEmptyRows]); const output = result.value?.csv ?? ""; const applyClean = () => { if (!result.value) return; setInput(result.value.csv); setApplied(true); trackPageView(undefined, undefined, "csv-cleaned", { tool_slug: "csv-viewer" }); }; return <div className="runner-stack structured-runner" data-daily-tool="csv-viewer"><div className="instrument-signature instrument-signature--data"><span>TABLE SANITIZER / LOCAL</span><b>{result.value ? `${result.value.table.rows.length} VISIBLE ROWS` : "INPUT CHECK REQUIRED"}</b><i aria-hidden="true"><em /><em /><em /><em /></i></div><label className="wide-field">CSV table with a header row<textarea data-field="csv-input" value={input} onChange={(event) => { setInput(event.target.value); setApplied(false); }} rows={10} spellCheck="false" /></label><div className="check-cluster" aria-label="CSV cleaning actions"><label className="check-field"><input data-field="csv-trim" type="checkbox" checked={trimCells} onChange={(event) => { setTrimCells(event.target.checked); setApplied(false); }} /> Trim cell edges</label><label className="check-field"><input data-field="csv-remove-empty" type="checkbox" checked={removeEmptyRows} onChange={(event) => { setRemoveEmptyRows(event.target.checked); setApplied(false); }} /> Remove blank rows</label></div><p className="tool-disclaimer">This preview accepts pasted CSV only. Clean actions update the current tab’s text; they do not upload, store, or modify a source file.</p><DataActions value={output} toolSlug="csv-viewer" filename="toolboxgalaxy-clean.csv" onApply={applyClean} onReset={() => { setInput(csvExample); setTrimCells(true); setRemoveEmptyRows(true); setApplied(false); }} /><div className="stats-grid" aria-label="CSV cleaning result"><div className="stat-tile"><span>Rows</span><strong>{result.value?.table.rows.length ?? "—"}</strong></div><div className="stat-tile"><span>Trimmed cells</span><strong>{result.value?.trimmedCells ?? "—"}</strong></div><div className="stat-tile"><span>Blank rows removed</span><strong>{result.value?.removedRows ?? "—"}</strong></div></div>{applied ? <p className="tool-status" data-clean-status>Clean copy placed in the current workspace.</p> : null}<DataResult label="CLEAN CSV EXPORT" value={output} error={result.error} /><TablePreview table={result.value?.table} /></div>; }
+  const result = useMemo((): { value?: { output: string; table: CsvTable }; error?: string } => {
+    if (direction === "jsonToCsv") {
+      const converted = jsonToCsv(input, { spreadsheetSafe: csvMode === "spreadsheet" });
+      return converted.value
+        ? { value: { output: converted.value.csv, table: converted.value.table } }
+        : { error: converted.error ?? "JSON could not be converted." };
+    }
+    const converted = csvToJson(input);
+    return converted.value
+      ? { value: { output: converted.value.json, table: converted.value.table } }
+      : { error: converted.error ?? "CSV could not be converted." };
+  }, [direction, input, csvMode]);
+
+  const output = result.value?.output ?? "";
+  const table = result.value?.table;
+
+  const switchDirection = (next: "jsonToCsv" | "csvToJson") => {
+    setDirection(next);
+    setInput(next === "jsonToCsv" ? jsonExample : csvExample);
+    trackPageView(undefined, undefined, "data-converted", { tool_slug: "json-csv", format: next });
+  };
+
+  return (
+    <div className="runner-stack structured-runner" data-daily-tool="json-csv">
+      <div className="instrument-signature instrument-signature--data">
+        <span>SCHEMA BRIDGE / LOCAL</span>
+        <b>{direction === "jsonToCsv" ? "JSON → CSV" : "CSV → JSON"}</b>
+        <i aria-hidden="true"><em /><em /><em /><em /></i>
+      </div>
+      <div className="toggle-row" role="group" aria-label="Conversion direction">
+        <button
+          type="button"
+          data-json-to-csv
+          className={direction === "jsonToCsv" ? "toggle-button toggle-button--active" : "toggle-button"}
+          onClick={() => switchDirection("jsonToCsv")}
+        >
+          JSON → CSV
+        </button>
+        <button
+          type="button"
+          data-csv-to-json
+          className={direction === "csvToJson" ? "toggle-button toggle-button--active" : "toggle-button"}
+          onClick={() => switchDirection("csvToJson")}
+        >
+          CSV → JSON
+        </button>
+      </div>
+
+      {direction === "jsonToCsv" ? (
+        <div className="check-cluster" aria-label="CSV format safety mode">
+          <label className="check-field">
+            <input
+              type="radio"
+              name="csvMode"
+              checked={csvMode === "raw"}
+              onChange={() => setCsvMode("raw")}
+            />
+            Raw CSV (Exact Values — no apostrophe escaping)
+          </label>
+          <label className="check-field">
+            <input
+              type="radio"
+              name="csvMode"
+              checked={csvMode === "spreadsheet"}
+              onChange={() => setCsvMode("spreadsheet")}
+            />
+            Spreadsheet-Safe CSV (Escapes =, +, -, @ to prevent formula injection)
+          </label>
+        </div>
+      ) : null}
+
+      <label className="wide-field">
+        {direction === "jsonToCsv" ? "Flat JSON array" : "CSV table with a header row"}
+        <textarea
+          data-field="structured-input"
+          value={input}
+          onChange={(event) => setInput(event.target.value)}
+          rows={11}
+          spellCheck="false"
+        />
+      </label>
+      <p className="tool-disclaimer">
+        Pasted data stays in this tab. JSON accepts a non-empty array of flat objects; CSV requires unique headers and a rectangular table.
+        {direction === "jsonToCsv" && csvMode === "spreadsheet"
+          ? " Spreadsheet-safe mode protects against formula execution by prefixing formula characters with an apostrophe."
+          : " Raw mode retains exact characters without modification."}
+      </p>
+      <DataActions
+        value={output}
+        toolSlug="json-csv"
+        filename={direction === "jsonToCsv" ? "toolboxgalaxy-table.csv" : "toolboxgalaxy-table.json"}
+        onReset={() => setInput(direction === "jsonToCsv" ? jsonExample : csvExample)}
+      />
+      <DataResult
+        label={direction === "jsonToCsv" ? (csvMode === "spreadsheet" ? "SPREADSHEET-SAFE CSV" : "RAW CSV EXPORT") : "JSON EXPORT"}
+        value={output}
+        error={result.error}
+      />
+      <TablePreview table={table} />
+    </div>
+  );
+}
+
+export function CsvViewerCleanerTool() {
+  const [input, setInput] = useState(csvExample);
+  const [trimCells, setTrimCells] = useState(true);
+  const [removeEmptyRows, setRemoveEmptyRows] = useState(true);
+  const [csvMode, setCsvMode] = useState<"raw" | "spreadsheet">("raw");
+  const [applied, setApplied] = useState(false);
+
+  const result = useMemo(
+    () => cleanCsvTable(input, { trimCells, removeEmptyRows, spreadsheetSafe: csvMode === "spreadsheet" }),
+    [input, trimCells, removeEmptyRows, csvMode]
+  );
+  const output = result.value?.csv ?? "";
+
+  const applyClean = () => {
+    if (!result.value) return;
+    setInput(result.value.csv);
+    setApplied(true);
+    trackPageView(undefined, undefined, "csv-cleaned", { tool_slug: "csv-viewer" });
+  };
+
+  return (
+    <div className="runner-stack structured-runner" data-daily-tool="csv-viewer">
+      <div className="instrument-signature instrument-signature--data">
+        <span>TABLE SANITIZER / LOCAL</span>
+        <b>{result.value ? `${result.value.table.rows.length} VISIBLE ROWS` : "INPUT CHECK REQUIRED"}</b>
+        <i aria-hidden="true"><em /><em /><em /><em /></i>
+      </div>
+      <label className="wide-field">
+        CSV table with a header row
+        <textarea
+          data-field="csv-input"
+          value={input}
+          onChange={(event) => {
+            setInput(event.target.value);
+            setApplied(false);
+          }}
+          rows={10}
+          spellCheck="false"
+        />
+      </label>
+      <div className="check-cluster" aria-label="CSV cleaning actions">
+        <label className="check-field">
+          <input
+            data-field="csv-trim"
+            type="checkbox"
+            checked={trimCells}
+            onChange={(event) => {
+              setTrimCells(event.target.checked);
+              setApplied(false);
+            }}
+          />
+          Trim cell edges
+        </label>
+        <label className="check-field">
+          <input
+            data-field="csv-remove-empty"
+            type="checkbox"
+            checked={removeEmptyRows}
+            onChange={(event) => {
+              setRemoveEmptyRows(event.target.checked);
+              setApplied(false);
+            }}
+          />
+          Remove blank rows
+        </label>
+      </div>
+      <div className="check-cluster" aria-label="CSV output mode">
+        <label className="check-field">
+          <input
+            type="radio"
+            name="cleanCsvMode"
+            checked={csvMode === "raw"}
+            onChange={() => {
+              setCsvMode("raw");
+              setApplied(false);
+            }}
+          />
+          Raw CSV (Exact Values)
+        </label>
+        <label className="check-field">
+          <input
+            type="radio"
+            name="cleanCsvMode"
+            checked={csvMode === "spreadsheet"}
+            onChange={() => {
+              setCsvMode("spreadsheet");
+              setApplied(false);
+            }}
+          />
+          Spreadsheet-Safe CSV (Prefixes =, +, -, @ with ')
+        </label>
+      </div>
+      <p className="tool-disclaimer">
+        This preview accepts pasted CSV only. Clean actions update the current tab’s text; they do not upload, store, or modify a source file.
+      </p>
+      <DataActions
+        value={output}
+        toolSlug="csv-viewer"
+        filename="toolboxgalaxy-clean.csv"
+        onApply={applyClean}
+        onReset={() => {
+          setInput(csvExample);
+          setTrimCells(true);
+          setRemoveEmptyRows(true);
+          setCsvMode("raw");
+          setApplied(false);
+        }}
+      />
+      <div className="stats-grid" aria-label="CSV cleaning result">
+        <div className="stat-tile">
+          <span>Rows</span>
+          <strong>{result.value?.table.rows.length ?? "—"}</strong>
+        </div>
+        <div className="stat-tile">
+          <span>Trimmed cells</span>
+          <strong>{result.value?.trimmedCells ?? "—"}</strong>
+        </div>
+        <div className="stat-tile">
+          <span>Blank rows removed</span>
+          <strong>{result.value?.removedRows ?? "—"}</strong>
+        </div>
+      </div>
+      {applied ? <p className="tool-status" data-clean-status>Clean copy placed in the current workspace.</p> : null}
+      <DataResult label={csvMode === "spreadsheet" ? "CLEAN SPREADSHEET-SAFE CSV" : "CLEAN RAW CSV EXPORT"} value={output} error={result.error} />
+      <TablePreview table={result.value?.table} />
+    </div>
+  );
+}
+

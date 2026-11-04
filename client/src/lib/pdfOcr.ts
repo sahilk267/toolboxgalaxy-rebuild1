@@ -2,6 +2,7 @@ import { createWorker } from "tesseract.js";
 import * as pdfjsLib from "pdfjs-dist";
 import { ensurePdfWorkerConfigured } from "./pdfWorkerSetup";
 import { PDFDocument, StandardFonts } from "pdf-lib";
+import { sanitizeWinAnsiText } from "./pdfTextSanitizer";
 
 ensurePdfWorkerConfigured();
 
@@ -171,8 +172,9 @@ export async function exportSearchablePdf(
         const fontSize = Math.max(6, Math.min(22, boxHeight * 0.82));
 
         try {
-          // Clean WinAnsi incompatible characters to prevent font rendering errors
-          const safeText = cleanLineText.replace(/[^\x20-\x7E]/g, " ");
+          // Map Unicode symbols and typography to standard PDF WinAnsi equivalents
+          const safeText = sanitizeWinAnsiText(cleanLineText);
+          if (!safeText.trim()) continue;
           pdfPage.drawText(safeText, {
             x: Math.max(0, pdfX),
             y: Math.max(0, pdfY),

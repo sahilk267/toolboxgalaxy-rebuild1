@@ -35,40 +35,40 @@ interface CompressionConfig {
 const COMPRESSION_PROFILES: CompressionConfig[] = [
   {
     id: "extreme",
-    title: "Extreme Compression",
-    badge: "Maximum Reduction",
-    ratio: "~65% - 80% Smaller",
-    description: "Lowest file size. Downscaled to 72 DPI with aggressive optimization. Ideal for strict portal upload limits (under 1MB/2MB).",
+    title: "Extreme Compression (Image-Based)",
+    badge: "72 DPI Rasterization",
+    ratio: "Target: 72 DPI JPEG",
+    description: "Lowest file size. Rasterizes pages to 72 DPI JPEG images. Flattens selectable text and vectors for meeting strict upload caps.",
     scale: 1.0,
     quality: 0.52,
     color: "#f59e0b",
   },
   {
     id: "recommended",
-    title: "Recommended Compression",
-    badge: "Most Popular",
-    ratio: "~45% - 65% Smaller",
-    description: "Good quality, high compression. Re-encoded at 144 DPI with balanced JPEG stream packing. Sharp text and clear graphics.",
+    title: "Recommended Compression (Image-Based)",
+    badge: "144 DPI Rasterization",
+    ratio: "Target: 144 DPI JPEG",
+    description: "Balanced size and clarity. Rasterizes pages to 144 DPI JPEG images. Clear graphics; converts text to image.",
     scale: 1.4,
     quality: 0.72,
     color: "#c7f36b",
   },
   {
     id: "low",
-    title: "Less Compression",
-    badge: "High Quality",
-    ratio: "~20% - 35% Smaller",
-    description: "High quality preservation. 200 DPI resolution with light compression. Retains high fidelity for presentations and print.",
+    title: "High Fidelity (Image-Based)",
+    badge: "200 DPI Rasterization",
+    ratio: "Target: 200 DPI JPEG",
+    description: "High resolution rasterization at 200 DPI with light compression. Retains high graphic fidelity while flattening text to images.",
     scale: 1.8,
     quality: 0.86,
     color: "#38bdf8",
   },
   {
     id: "lossless",
-    title: "Lossless Stream Purge",
+    title: "Lossless Stream Purge (Vector Intact)",
     badge: "100% Vector Intact",
-    ratio: "~10% - 25% Smaller",
-    description: "Strips unreferenced objects, dead metadata, and repacks object streams without rasterizing text or vectors.",
+    ratio: "Structure Cleanup",
+    description: "Preserves 100% of selectable text, vectors, and hyperlinks. Strips unreferenced objects and repacks object streams without rasterization.",
     scale: 1.0,
     quality: 1.0,
     color: "#a855f7",
@@ -470,7 +470,24 @@ export default function PdfCompressTool({
                   </p>
                 </div>
               </div>
-              <span className="text-xs font-mono text-purple-300 font-semibold shrink-0 ml-2">~10% - 25%</span>
+              <span className="text-xs font-mono text-purple-300 font-semibold shrink-0 ml-2">Vector Intact</span>
+            </div>
+
+            {/* Image-Based vs Vector Transparency Notice */}
+            <div className="rounded-xl border border-white/10 bg-[#090d18] p-4 text-xs space-y-1.5">
+              <div className="flex items-center gap-2 font-mono font-bold text-white/90">
+                <AlertCircle size={14} className={selectedProfile === "lossless" ? "text-purple-400" : "text-amber-400"} />
+                <span>
+                  {selectedProfile === "lossless"
+                    ? "Vector Preservation Mode Active"
+                    : "Image-Based Compression Disclosure"}
+                </span>
+              </div>
+              <p className="text-white/60 leading-relaxed">
+                {selectedProfile === "lossless"
+                  ? "Selectable text, searchability, and vector curves remain 100% intact. File size reduction depends on internal document structure."
+                  : "This preset re-encodes pages into optimized JPEG images. Selectable/searchable text, vector outlines, and embedded hyperlinks are flattened into page images. Ideal for meeting strict email or portal upload limits."}
+              </p>
             </div>
           </div>
 
@@ -520,11 +537,23 @@ export default function PdfCompressTool({
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-white/10 pb-4">
                 <div className="flex items-center gap-2">
                   <CheckCircle2 size={20} className="text-[#c7f36b]" />
-                  <h3 className="text-lg font-bold text-white">PDF Compressed Successfully!</h3>
+                  <h3 className="text-lg font-bold text-white">PDF Processing Complete</h3>
                 </div>
-                {savingsPercent > 0 && (
-                  <span className="inline-flex items-center gap-1.5 rounded-full bg-[#c7f36b]/20 border border-[#c7f36b]/40 px-3 py-1 text-xs font-mono font-bold text-[#c7f36b]">
-                    📉 -{savingsPercent}% REDUCTION ({formatBytes(savingsBytes)} saved)
+                {originalSize > 0 && compressedSize > 0 && (
+                  <span
+                    className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-mono font-bold border ${
+                      compressedSize < originalSize
+                        ? "bg-[#c7f36b]/20 border-[#c7f36b]/40 text-[#c7f36b]"
+                        : compressedSize > originalSize
+                        ? "bg-amber-400/20 border-amber-400/40 text-amber-300"
+                        : "bg-white/10 border-white/20 text-white/80"
+                    }`}
+                  >
+                    {compressedSize < originalSize
+                      ? `📉 -${Math.round(((originalSize - compressedSize) / originalSize) * 100)}% (${formatBytes(originalSize - compressedSize)} saved)`
+                      : compressedSize > originalSize
+                      ? `⚠️ +${Math.round(((compressedSize - originalSize) / originalSize) * 100)}% (${formatBytes(compressedSize - originalSize)} larger)`
+                      : "⚖️ Exact Match (0% difference)"}
                   </span>
                 )}
               </div>
@@ -534,14 +563,18 @@ export default function PdfCompressTool({
                 <div className="rounded-xl border border-white/10 bg-black/40 p-4">
                   <span className="text-xs font-mono uppercase text-white/50 block mb-1">ORIGINAL SIZE</span>
                   <p className="text-2xl font-bold font-mono text-white/80">{formatBytes(originalSize)}</p>
-                  <p className="text-xs text-white/40 mt-1">{pageCount} Pages · Uncompressed Streams</p>
+                  <p className="text-xs text-white/40 mt-1">{pageCount} Pages · Original Structure</p>
                 </div>
 
                 <div className="rounded-xl border border-[#c7f36b]/40 bg-[#c7f36b]/[0.06] p-4 relative overflow-hidden">
-                  <span className="text-xs font-mono uppercase text-[#c7f36b] block mb-1 font-semibold">OPTIMIZED SIZE</span>
+                  <span className="text-xs font-mono uppercase text-[#c7f36b] block mb-1 font-semibold">OUTPUT SIZE</span>
                   <p className="text-2xl font-bold font-mono text-[#c7f36b]">{formatBytes(compressedSize)}</p>
                   <p className="text-xs text-white/60 mt-1">
-                    {savingsPercent > 0 ? `${savingsPercent}% smaller than original` : "Optimized stream packing applied"}
+                    {compressedSize < originalSize
+                      ? `${Math.round(((originalSize - compressedSize) / originalSize) * 100)}% smaller than original`
+                      : compressedSize > originalSize
+                      ? "This compression setting increased file size. Try another setting or keep the original."
+                      : "Output matches original size"}
                   </p>
                 </div>
               </div>

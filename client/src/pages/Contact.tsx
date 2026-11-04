@@ -3,11 +3,15 @@ import AppShell from "@/components/AppShell";
 import { contactApiConfigured, submitContact } from "@/lib/contactApi";
 import { sendContactNotification } from "@/lib/telegramAlerts";
 import { useState } from "react";
-import { Linkedin, Send, MessageSquare, ShieldCheck, Mail, ArrowUpRight, CheckCircle2 } from "lucide-react";
+import { Linkedin, Send, MessageSquare, ShieldCheck, Mail, ArrowUpRight, CheckCircle2, AlertCircle, RotateCcw } from "lucide-react";
 
 export default function Contact() {
   const [form, setForm] = useState({ name: "", email: "", subject: "Tool feedback", message: "" });
-  const [status, setStatus] = useState("");
+  const [status, setStatus] = useState<{
+    type: "success" | "error" | "unconfigured";
+    message: string;
+    requestId?: string;
+  } | null>(null);
   const [sending, setSending] = useState(false);
 
   const update = (field: keyof typeof form, value: string) =>
@@ -16,9 +20,9 @@ export default function Contact() {
   const send = async (event: React.FormEvent) => {
     event.preventDefault();
     setSending(true);
-    setStatus("");
+    setStatus(null);
 
-    // Dispatch directly to Telegram Bot if configured
+    // Relay notification if server relay is configured
     sendContactNotification({
       name: form.name,
       email: form.email,
@@ -29,16 +33,26 @@ export default function Contact() {
 
     if (!contactApiConfigured) {
       setSending(false);
-      setStatus("Message dispatched! For guaranteed direct response, feel free to also reach out on LinkedIn.");
+      setStatus({
+        type: "unconfigured",
+        message: "Direct web form endpoint is not configured in this environment. Please click 'Email App' below or connect on LinkedIn to send your message directly.",
+      });
       return;
     }
 
     try {
       const response = await submitContact(form);
-      setStatus(`Feedback received${response.requestId ? ` · ref ${response.requestId}` : ""}.`);
+      setStatus({
+        type: "success",
+        message: `Feedback received${response.requestId ? ` · ref ${response.requestId}` : ""}. Thank you!`,
+        requestId: response.requestId,
+      });
       setForm({ name: "", email: "", subject: "Tool feedback", message: "" });
     } catch (error) {
-      setStatus(error instanceof Error ? error.message : "The feedback request could not be sent.");
+      setStatus({
+        type: "error",
+        message: error instanceof Error ? `${error.message} Please retry or reach out via Email / LinkedIn.` : "The feedback request could not be sent. Please retry or use LinkedIn.",
+      });
     } finally {
       setSending(false);
     }
@@ -190,9 +204,44 @@ export default function Contact() {
               </div>
 
               {status && (
-                <div className="mt-3 flex items-center gap-2 rounded-xl border border-[#c7f36b]/30 bg-[#c7f36b]/10 p-3 text-xs text-[#c7f36b]" aria-live="polite">
-                  <CheckCircle2 size={16} className="flex-shrink-0" />
-                  <span>{status}</span>
+                <div
+                  className={`mt-3 flex items-start gap-2.5 rounded-xl border p-3.5 text-xs ${
+                    status.type === "success"
+                      ? "border-[#c7f36b]/40 bg-[#c7f36b]/10 text-[#c7f36b]"
+                      : status.type === "error"
+                      ? "border-rose-500/40 bg-rose-500/10 text-rose-300"
+                      : "border-amber-400/40 bg-amber-400/10 text-amber-200"
+                  }`}
+                  aria-live="polite"
+                >
+                  {status.type === "success" ? (
+                    <CheckCircle2 size={16} className="flex-shrink-0 mt-0.5 text-[#c7f36b]" />
+                  ) : (
+                    <AlertCircle size={16} className="flex-shrink-0 mt-0.5" />
+                  )}
+                  <div className="space-y-1">
+                    <p className="font-medium leading-relaxed">{status.message}</p>
+                    {status.type !== "success" && (
+                      <div className="pt-1 flex items-center gap-3">
+                        <a
+                          href={relayHref}
+                          className="inline-flex items-center gap-1 font-semibold underline hover:text-white"
+                        >
+                          <Mail size={12} />
+                          <span>Open in Email App</span>
+                        </a>
+                        <a
+                          href="https://www.linkedin.com/in/mohdazizshaikh"
+                          target="_blank"
+                          rel="noreferrer"
+                          className="inline-flex items-center gap-1 font-semibold underline hover:text-white"
+                        >
+                          <Linkedin size={12} />
+                          <span>LinkedIn</span>
+                        </a>
+                      </div>
+                    )}
+                  </div>
                 </div>
               )}
             </form>

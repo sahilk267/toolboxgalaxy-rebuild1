@@ -15,53 +15,48 @@ interface DailyPulseLedger {
 const STORAGE_KEY = "tg_telemetry_pulse";
 const COHORT_STORAGE_KEY = "tg_visitor_cohort";
 
-function getTelegramEnv() {
-  let botToken = "";
-  let chatId = "";
+function getTelegramRelayEndpoint(): string {
   try {
     if (typeof import.meta !== "undefined" && import.meta.env) {
-      botToken = (import.meta.env.VITE_TELEGRAM_BOT_TOKEN || "").trim();
-      chatId = (import.meta.env.VITE_TELEGRAM_CHAT_ID || "").trim();
+      const customRelay = import.meta.env.VITE_TELEGRAM_RELAY_ENDPOINT?.trim();
+      if (customRelay) return customRelay;
     }
   } catch {
     // env access fallback
   }
-  return { botToken, chatId, configured: Boolean(botToken && chatId) };
+  return "";
 }
 
 export function isTelegramAlertsConfigured(): boolean {
-  return getTelegramEnv().configured;
+  return Boolean(getTelegramRelayEndpoint());
 }
 
 /**
- * Dispatches an HTML formatted message directly to the developer's Telegram Bot.
- * Completely non-blocking and silent on failure (e.g. adblocker / offline).
+ * Dispatches an HTML formatted message via secure server relay.
+ * No bot credentials or secrets are ever exposed in client-side code or browser network requests.
+ * Completely non-blocking and silent on failure.
  */
 export async function sendTelegramMessage(htmlText: string): Promise<boolean> {
-  const { botToken, chatId, configured } = getTelegramEnv();
-  if (!configured || typeof window === "undefined") return false;
+  const relayUrl = getTelegramRelayEndpoint();
+  if (!relayUrl || typeof window === "undefined") return false;
 
   try {
-    const url = `https://api.telegram.org/bot${botToken}/sendMessage`;
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 4000);
-    const response = await fetch(url, {
+    const response = await fetch(relayUrl, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        chat_id: chatId,
         text: htmlText,
-        parse_mode: "HTML",
-        disable_web_page_preview: true,
       }),
       signal: controller.signal,
     });
     clearTimeout(timeout);
     return response.ok;
   } catch {
-    // Telegram dispatch failures (e.g. adblocker, ISP block, offline) must never disrupt client application logic
+    // Failures must never disrupt client application logic
     return false;
   }
 }

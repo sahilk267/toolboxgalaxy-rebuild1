@@ -249,40 +249,25 @@ export async function exportPdfToPresentationPpt(bytes: Uint8Array, filename: st
   pptx.author = "Toolbox Galaxy";
   pptx.title = filename.replace(/\.pdf$/i, "");
 
+  const LINES_PER_SLIDE = 12;
+
   for (const page of pages) {
-    const slide = pptx.addSlide();
-
-    // Slide Header
-    slide.addText(`Slide ${page.pageNumber}: ${filename.replace(/\.pdf$/i, "")}`, {
-      x: 0.8,
-      y: 0.5,
-      w: 8.4,
-      h: 0.6,
-      fontSize: 18,
-      bold: true,
-      color: "0f172a",
-    });
-
     const lines = page.text
       .split("\n")
       .map((l) => l.trim())
       .filter(Boolean);
 
-    if (lines.length > 0) {
-      const bullets = lines.slice(0, 12).map((line) => ({
-        text: line,
-        options: { fontSize: 13, color: "334155", bullet: true, breakLine: true },
-      }));
-
-      slide.addText(bullets, {
+    if (lines.length === 0) {
+      const slide = pptx.addSlide();
+      slide.addText(`Slide ${page.pageNumber}: ${filename.replace(/\.pdf$/i, "")}`, {
         x: 0.8,
-        y: 1.3,
+        y: 0.5,
         w: 8.4,
-        h: 4.8,
-        align: "left",
-        valign: "top",
+        h: 0.6,
+        fontSize: 18,
+        bold: true,
+        color: "0f172a",
       });
-    } else {
       slide.addText("(Empty or graphical page)", {
         x: 0.8,
         y: 2.0,
@@ -292,6 +277,39 @@ export async function exportPdfToPresentationPpt(bytes: Uint8Array, filename: st
         italic: true,
         color: "94a3b8",
       });
+    } else {
+      // Chunk lines across continuation slides preserving 100% of text
+      const totalParts = Math.ceil(lines.length / LINES_PER_SLIDE);
+      for (let partIdx = 0; partIdx < totalParts; partIdx++) {
+        const slide = pptx.addSlide();
+        const partLabel = totalParts > 1 ? ` (Part ${partIdx + 1} of ${totalParts})` : "";
+
+        // Slide Header
+        slide.addText(`Slide ${page.pageNumber}${partLabel}: ${filename.replace(/\.pdf$/i, "")}`, {
+          x: 0.8,
+          y: 0.5,
+          w: 8.4,
+          h: 0.6,
+          fontSize: 18,
+          bold: true,
+          color: "0f172a",
+        });
+
+        const chunk = lines.slice(partIdx * LINES_PER_SLIDE, (partIdx + 1) * LINES_PER_SLIDE);
+        const bullets = chunk.map((line) => ({
+          text: line,
+          options: { fontSize: 13, color: "334155", bullet: true, breakLine: true },
+        }));
+
+        slide.addText(bullets, {
+          x: 0.8,
+          y: 1.3,
+          w: 8.4,
+          h: 4.8,
+          align: "left",
+          valign: "top",
+        });
+      }
     }
   }
 
