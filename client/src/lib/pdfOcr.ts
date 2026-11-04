@@ -2,7 +2,7 @@ import { createWorker } from "tesseract.js";
 import * as pdfjsLib from "pdfjs-dist";
 import { ensurePdfWorkerConfigured } from "./pdfWorkerSetup";
 import { PDFDocument, StandardFonts } from "pdf-lib";
-import { sanitizeWinAnsiText } from "./pdfTextSanitizer";
+import { sanitizeWinAnsiText, detectUnsupportedWinAnsi } from "./pdfTextSanitizer";
 
 ensurePdfWorkerConfigured();
 
@@ -11,6 +11,13 @@ export interface OcrPageProgress {
   totalPages: number;
   status: string;
   progressPercent: number;
+}
+
+export interface SearchablePdfResult {
+  unsupportedDetected: boolean;
+  unsupportedCharacters: string[];
+  totalPages: number;
+  pdfBytes: Uint8Array;
 }
 
 export interface OcrPageResult {
@@ -117,7 +124,7 @@ export async function exportSearchablePdf(
   pdfBytes: Uint8Array,
   filename: string = "document.pdf",
   onProgress?: (progress: OcrPageProgress) => void
-): Promise<void> {
+): Promise<SearchablePdfResult> {
   const loadingTask = pdfjsLib.getDocument({ data: pdfBytes.slice() });
   const pdf = await loadingTask.promise;
   const totalPages = pdf.numPages;
@@ -125,13 +132,14 @@ export async function exportSearchablePdf(
   onProgress?.({
     currentPage: 0,
     totalPages,
-    status: "Initializing OCR Engine for Searchable PDF...",
+    status: "Initializing English OCR Engine for Searchable PDF...",
     progressPercent: 5,
   });
 
   const pdfDoc = await PDFDocument.load(pdfBytes.slice());
   const helvetica = await pdfDoc.embedFont(StandardFonts.Helvetica);
   const worker = await createWorker("eng");
+  const allUnsupportedChars = new Set<string>();
 
   try {
     for (let i = 1; i <= totalPages; i++) {
@@ -166,6 +174,12 @@ export async function exportSearchablePdf(
         const cleanLineText = line.text.replace(/[\r\n]+/g, " ").trim();
         if (!cleanLineText) continue;
 
+        // Detect non-WinAnsi characters (e.g. Hindi, CJK, unmapped Unicode) before writing
+        const unsupportedInLine = detectUnsupportedWinAnsi(cleanLineText);
+        for (const ch of unsupportedInLine) {
+          allUnsupportedChars.add(ch);
+        }
+
         const pdfX = line.bbox.x0 / scale;
         const boxHeight = (line.bbox.y1 - line.bbox.y0) / scale;
         const pdfY = pageHeight - (line.bbox.y1 / scale);
@@ -186,6 +200,16 @@ export async function exportSearchablePdf(
           // Skip any non-standard glyph errors
         }
       }
+
+      if (allUnsupportedChars.size > 0) {
+        const sampleChars = Array.from(allUnsupportedChars).slice(0, 4).join(" ");
+        onProgress?.({
+          currentPage: i,
+          totalPages,
+          status: `Notice: Unsupported characters detected (${sampleChars}). English text layer preserved.`,
+          progressPercent: Math.round((i / totalPages) * 100),
+        });
+      }
     }
 
     await worker.terminate();
@@ -198,24 +222,36 @@ export async function exportSearchablePdf(
     });
 
     const modifiedPdfBytes = await pdfDoc.save();
-    const blob = new Blob([modifiedPdfBytes], { type: "application/pdf" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = filename.replace(/\.pdf$/i, "") + "_searchable.pdf";
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    setTimeout(() => URL.revokeObjectURL(url), 2000);
+    if (typeof document !== "undefined" && document.createElement) {
+      const blob = new Blob([modifiedPdfBytes], { type: "application/pdf" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename.replace(/\.pdf$/i, "") + "_searchable.pdf";
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(url), 2000);
+    }
 
     onProgress?.({
       currentPage: totalPages,
       totalPages,
-      status: "Download initiated successfully!",
+      status: allUnsupportedChars.size > 0
+        ? `Download complete. Notice: ${allUnsupportedChars.size} non-WinAnsi character(s) could not be embedded into the invisible layer.`
+        : "Download initiated successfully!",
       progressPercent: 100,
     });
+
+    return {
+      unsupportedDetected: allUnsupportedChars.size > 0,
+      unsupportedCharacters: Array.from(allUnsupportedChars),
+      totalPages,
+      pdfBytes: modifiedPdfBytes,
+    };
   } catch (err) {
     await worker.terminate();
     throw err;
   }
 }
+

@@ -123,9 +123,20 @@ export function DiscountTool() {
   );
 }
 
-const formatDate = (date: Date) => date.toISOString().slice(0, 10);
+export function formatLocalDate(date: Date): string {
+  const yyyy = date.getFullYear();
+  const mm = String(date.getMonth() + 1).padStart(2, "0");
+  const dd = String(date.getDate()).padStart(2, "0");
+  return `${yyyy}-${mm}-${dd}`;
+}
 
-function ageParts(start: Date, end: Date) {
+export function calendarDaysDifference(d1: Date, d2: Date): number {
+  const utc1 = Date.UTC(d1.getFullYear(), d1.getMonth(), d1.getDate());
+  const utc2 = Date.UTC(d2.getFullYear(), d2.getMonth(), d2.getDate());
+  return Math.round((utc2 - utc1) / 86400000);
+}
+
+export function ageParts(start: Date, end: Date) {
   let years = end.getFullYear() - start.getFullYear();
   let months = end.getMonth() - start.getMonth();
   let days = end.getDate() - start.getDate();
@@ -148,15 +159,14 @@ function ageParts(start: Date, end: Date) {
   const anchorDay = Math.min(start.getDate(), maxDaysInAnchorMonth);
   const anchor = new Date(finalYear, finalMonth, anchorDay);
 
-  const diffMs = end.getTime() - anchor.getTime();
-  days = Math.max(0, Math.round(diffMs / 86400000));
+  days = Math.max(0, calendarDaysDifference(anchor, end));
 
   return { years, months, days };
 }
 
 export function AgeTool() {
   const [birth, setBirth] = useState("1998-06-15");
-  const [onDate, setOnDate] = useState(formatDate(new Date()));
+  const [onDate, setOnDate] = useState(formatLocalDate(new Date()));
 
   const output = useMemo(() => {
     const from = new Date(`${birth}T00:00:00`);
@@ -165,7 +175,7 @@ export function AgeTool() {
       return "Choose a valid date on or after the date of birth.";
     }
     const age = ageParts(from, to);
-    const totalDays = Math.floor((to.getTime() - from.getTime()) / 86400000);
+    const totalDays = calendarDaysDifference(from, to);
     return `${age.years} years, ${age.months} months, ${age.days} days\n${totalDays.toLocaleString()} days elapsed`;
   }, [birth, onDate]);
 
@@ -204,7 +214,7 @@ export function DateDifferenceTool() {
     if (Number.isNaN(from.getTime()) || Number.isNaN(to.getTime())) {
       return "Choose two valid dates.";
     }
-    const days = Math.abs(Math.round((to.getTime() - from.getTime()) / 86400000));
+    const days = Math.abs(calendarDaysDifference(from, to));
     return `${days.toLocaleString()} days\n${(days / 7).toFixed(2)} weeks`;
   }, [start, end]);
 

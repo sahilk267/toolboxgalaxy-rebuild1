@@ -237,19 +237,56 @@ export async function exportPdfToWordDocx(bytes: Uint8Array, filename: string): 
 
 /**
  * Converts PDF extracted pages into a genuine PowerPoint presentation (.pptx).
+/**
+ * Estimates visual line count for a line of text based on character length and wrapping in standard slide width.
  */
-export async function exportPdfToPresentationPpt(bytes: Uint8Array, filename: string): Promise<void> {
-  const { pages } = await extractPdfText(bytes);
-  if (pages.length === 0) {
-    throw new Error("No readable text found in document.");
+export function estimateVisualLines(text: string, charsPerLine: number = 70): number {
+  if (!text) return 1;
+  return Math.max(1, Math.ceil(text.length / charsPerLine));
+}
+
+/**
+ * Chunks lines into slides ensuring long lines that wrap do not overflow the 4.8" slide text box.
+ * Instead of rigid 12 source lines, calculates total visual weight per slide (default max 10 visual lines).
+ */
+export function chunkLinesForSlides(lines: string[], maxVisualLines: number = 10): string[][] {
+  const chunks: string[][] = [];
+  let currentChunk: string[] = [];
+  let currentWeight = 0;
+
+  for (const line of lines) {
+    const weight = estimateVisualLines(line, 70);
+    // If adding this line exceeds capacity and we already have lines, flush to a new slide
+    if (currentWeight + weight > maxVisualLines && currentChunk.length > 0) {
+      chunks.push(currentChunk);
+      currentChunk = [];
+      currentWeight = 0;
+    }
+    currentChunk.push(line);
+    currentWeight += weight;
   }
 
+  if (currentChunk.length > 0) {
+    chunks.push(currentChunk);
+  }
+
+  return chunks;
+}
+
+/**
+ * Builds a genuine PowerPoint presentation (.pptx) binary from pages and lines,
+ * splitting content across continuation slides based on estimated visual line wrapping.
+ */
+export async function buildPresentationPptx(
+  pages: { pageNumber: number; text: string }[],
+  title: string = "Presentation"
+): Promise<{ bytes: Uint8Array; slideCount: number }> {
   const pptx = new pptxgen();
   pptx.layout = "LAYOUT_16x9";
   pptx.author = "Toolbox Galaxy";
-  pptx.title = filename.replace(/\.pdf$/i, "");
+  pptx.title = title;
 
-  const LINES_PER_SLIDE = 12;
+  let slideCount = 0;
 
   for (const page of pages) {
     const lines = page.text
@@ -259,7 +296,8 @@ export async function exportPdfToPresentationPpt(bytes: Uint8Array, filename: st
 
     if (lines.length === 0) {
       const slide = pptx.addSlide();
-      slide.addText(`Slide ${page.pageNumber}: ${filename.replace(/\.pdf$/i, "")}`, {
+      slideCount++;
+      slide.addText(`Slide ${page.pageNumber}: ${title}`, {
         x: 0.8,
         y: 0.5,
         w: 8.4,
@@ -278,14 +316,17 @@ export async function exportPdfToPresentationPpt(bytes: Uint8Array, filename: st
         color: "94a3b8",
       });
     } else {
-      // Chunk lines across continuation slides preserving 100% of text
-      const totalParts = Math.ceil(lines.length / LINES_PER_SLIDE);
+      // Chunk lines safely according to visual line estimation
+      const slideChunks = chunkLinesForSlides(lines, 10);
+      const totalParts = slideChunks.length;
+
       for (let partIdx = 0; partIdx < totalParts; partIdx++) {
         const slide = pptx.addSlide();
+        slideCount++;
         const partLabel = totalParts > 1 ? ` (Part ${partIdx + 1} of ${totalParts})` : "";
 
         // Slide Header
-        slide.addText(`Slide ${page.pageNumber}${partLabel}: ${filename.replace(/\.pdf$/i, "")}`, {
+        slide.addText(`Slide ${page.pageNumber}${partLabel}: ${title}`, {
           x: 0.8,
           y: 0.5,
           w: 8.4,
@@ -295,7 +336,7 @@ export async function exportPdfToPresentationPpt(bytes: Uint8Array, filename: st
           color: "0f172a",
         });
 
-        const chunk = lines.slice(partIdx * LINES_PER_SLIDE, (partIdx + 1) * LINES_PER_SLIDE);
+        const chunk = slideChunks[partIdx];
         const bullets = chunk.map((line) => ({
           text: line,
           options: { fontSize: 13, color: "334155", bullet: true, breakLine: true },
@@ -308,13 +349,34 @@ export async function exportPdfToPresentationPpt(bytes: Uint8Array, filename: st
           h: 4.8,
           align: "left",
           valign: "top",
+          wrap: true,
         });
       }
     }
   }
 
-  const baseName = filename.replace(/\.pdf$/i, "");
-  await pptx.writeFile({ fileName: `${baseName}_presentation.pptx` });
+  const out = await pptx.write({ outputType: "uint8array" });
+  return { bytes: out as Uint8Array, slideCount };
+}
+
+/**
+ * Converts PDF extracted pages into a genuine PowerPoint presentation (.pptx) download.
+ */
+export async function exportPdfToPresentationPpt(bytes: Uint8Array, filename: string): Promise<{ slideCount: number }> {
+  const { pages } = await extractPdfText(bytes);
+  if (pages.length === 0) {
+    throw new Error("No readable text found in document.");
+  }
+
+  const title = filename.replace(/\.pdf$/i, "");
+  const { bytes: pptxBytes, slideCount } = await buildPresentationPptx(pages, title);
+
+  const blob = new Blob([pptxBytes], {
+    type: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+  });
+  triggerBrowserDownload(blob, `${title}_presentation.pptx`);
+
+  return { slideCount };
 }
 
 function escapeHtml(str: string): string {

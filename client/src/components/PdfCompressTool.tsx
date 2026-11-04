@@ -32,48 +32,49 @@ interface CompressionConfig {
   color: string;
 }
 
-const COMPRESSION_PROFILES: CompressionConfig[] = [
+export const COMPRESSION_PROFILES: CompressionConfig[] = [
   {
     id: "extreme",
     title: "Extreme Compression (Image-Based)",
-    badge: "72 DPI Rasterization",
+    badge: "72 DPI (1.0x Scale)",
     ratio: "Target: 72 DPI JPEG",
-    description: "Lowest file size. Rasterizes pages to 72 DPI JPEG images. Flattens selectable text and vectors for meeting strict upload caps.",
+    description: "Lowest file size. Rasterizes pages to 72 DPI JPEG images (scale 1.0). Flattens selectable text and vectors for meeting strict upload caps.",
     scale: 1.0,
     quality: 0.52,
     color: "#f59e0b",
   },
   {
     id: "recommended",
-    title: "Recommended Compression (Image-Based)",
-    badge: "144 DPI Rasterization",
-    ratio: "Target: 144 DPI JPEG",
-    description: "Balanced size and clarity. Rasterizes pages to 144 DPI JPEG images. Clear graphics; converts text to image.",
-    scale: 1.4,
+    title: "Balanced Compression (Image-Based)",
+    badge: "108 DPI (1.5x Scale)",
+    ratio: "Target: 108 DPI JPEG",
+    description: "Balanced size and clarity. Rasterizes pages to 108 DPI JPEG images (scale 1.5). Clear graphics; flattens selectable text to images.",
+    scale: 1.5,
     quality: 0.72,
     color: "#c7f36b",
   },
   {
     id: "low",
     title: "High Fidelity (Image-Based)",
-    badge: "200 DPI Rasterization",
-    ratio: "Target: 200 DPI JPEG",
-    description: "High resolution rasterization at 200 DPI with light compression. Retains high graphic fidelity while flattening text to images.",
-    scale: 1.8,
+    badge: "144 DPI (2.0x Scale)",
+    ratio: "Target: 144 DPI JPEG",
+    description: "High resolution rasterization at 144 DPI (scale 2.0) with light compression. Retains high graphic fidelity while flattening text to images.",
+    scale: 2.0,
     quality: 0.86,
     color: "#38bdf8",
   },
   {
     id: "lossless",
-    title: "Lossless Stream Purge (Vector Intact)",
-    badge: "100% Vector Intact",
-    ratio: "Structure Cleanup",
-    description: "Preserves 100% of selectable text, vectors, and hyperlinks. Strips unreferenced objects and repacks object streams without rasterization.",
+    title: "Structure & Stream Optimization (Vector-Preserving)",
+    badge: "Structure Optimization",
+    ratio: "Stream Packing",
+    description: "Preserves vector geometry, selectable text, and hyperlinks. Repacks uncompressed object streams without rasterization. Reduction depends on whether redundant internal streams exist.",
     scale: 1.0,
     quality: 1.0,
     color: "#a855f7",
   },
 ];
+
 
 function formatBytes(bytes: number): string {
   if (bytes === 0) return "0 Bytes";
@@ -148,28 +149,31 @@ export default function PdfCompressTool({
 
       if (profile.id === "lossless") {
         // Pure vector & object stream packing
-        setCurrentStep("Purging redundant metadata & packing object streams...");
+        setCurrentStep("Repacking uncompressed object streams & optimizing cross-references...");
         setProgressPercent(40);
 
-        const pdfDoc = await PDFDocument.load(pdfBytes.slice(), { ignoreEncryption: true });
-        
-        // Strip XML metadata and dead xref entries
-        pdfDoc.setTitle("");
-        pdfDoc.setAuthor("");
-        pdfDoc.setSubject("");
-        pdfDoc.setKeywords([]);
-        pdfDoc.setProducer("ToolboxGalaxy PDF Optimizer");
-        pdfDoc.setCreator("ToolboxGalaxy Engine");
+        const pdfDoc = await PDFDocument.load(pdfBytes.slice());
+        if (pdfDoc.isEncrypted) {
+          throw new Error("Password-protected or encrypted PDFs cannot be re-serialized without decryption credentials.");
+        }
 
+        // Preserve original title, author, subject, and keywords without overwriting
         setProgressPercent(80);
         setCurrentStep("Re-serializing compressed object tables...");
 
         const resultBytes = await pdfDoc.save({ useObjectStreams: true, addDefaultPage: false });
+
+        // Verify output PDF reopens and has valid pages
+        const verifyDoc = await PDFDocument.load(resultBytes);
+        if (verifyDoc.getPageCount() === 0) {
+          throw new Error("Verification failed: Compressed document has 0 pages.");
+        }
+
         setCompressedBytes(resultBytes);
         setCompressedSize(resultBytes.length);
         setProgressPercent(100);
       } else {
-        // iLovePDF Intelligent Page Stream Recompression
+        // Intelligent Page Stream Recompression
         const loadingTask = pdfjsLib.getDocument({ data: pdfBytes.slice() });
         const pdf = await loadingTask.promise;
         const totalPages = pdf.numPages;
@@ -207,7 +211,7 @@ export default function PdfCompressTool({
           const imgBuffer = await blob.arrayBuffer();
           const embeddedImg = await newDoc.embedJpg(new Uint8Array(imgBuffer));
 
-          // Get original PDF point dimensions so page layout is 100% preserved
+          // Get original PDF point dimensions so page layout is preserved
           const origViewport = page.getViewport({ scale: 1.0 });
           const newPage = newDoc.addPage([origViewport.width, origViewport.height]);
 
@@ -226,6 +230,12 @@ export default function PdfCompressTool({
           useObjectStreams: true,
           addDefaultPage: false,
         });
+
+        // Verify output PDF reopens and matches page count
+        const verifyDoc = await PDFDocument.load(resultBytes);
+        if (verifyDoc.getPageCount() !== totalPages) {
+          throw new Error("Verification failed: Output page count mismatch.");
+        }
 
         setCompressedBytes(resultBytes);
         setCompressedSize(resultBytes.length);
@@ -460,17 +470,17 @@ export default function PdfCompressTool({
                 </div>
                 <div>
                   <div className="flex items-center gap-2">
-                    <span className="text-xs font-bold text-white">Lossless Vector & Object Stream Purge</span>
+                    <span className="text-xs font-bold text-white">Lossless Structure & Stream Optimization</span>
                     <span className="rounded bg-purple-500/20 px-2 py-0.5 text-[9px] font-mono text-purple-300 border border-purple-500/30">
-                      100% Vector Intact
+                      Vector-Preserving
                     </span>
                   </div>
                   <p className="text-[11px] text-white/60">
-                    Preserves original vector text and font curves while stripping dead metadata and compressing PDF object stream dictionaries.
+                    Preserves original vector text, font curves, and document metadata while optimizing and packing uncompressed object streams.
                   </p>
                 </div>
               </div>
-              <span className="text-xs font-mono text-purple-300 font-semibold shrink-0 ml-2">Vector Intact</span>
+              <span className="text-xs font-mono text-purple-300 font-semibold shrink-0 ml-2">Vector Preserved</span>
             </div>
 
             {/* Image-Based vs Vector Transparency Notice */}

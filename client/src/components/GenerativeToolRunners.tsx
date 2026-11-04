@@ -18,8 +18,10 @@ import {
   Hash,
   Coins,
   RefreshCw,
-  ShieldCheck
+  ShieldCheck,
+  AlertCircle
 } from "lucide-react";
+import { secureRandomInt, generateUniqueRandomInts, generateUniqueDecimals } from "@/lib/secureRandom";
 
 // ==========================================
 // 1. LOREM IPSUM GENERATOR
@@ -267,6 +269,7 @@ export function RandomNumberTool() {
   const [precision, setPrecision] = useState(2);
   const [results, setResults] = useState<number[]>([]);
   const [copied, setCopied] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   // Dice State
   const [diceSides, setDiceSides] = useState<number>(6);
@@ -277,102 +280,79 @@ export function RandomNumberTool() {
   const [coinHistory, setCoinHistory] = useState<("HEADS" | "TAILS")[]>([]);
   const [lastCoin, setLastCoin] = useState<"HEADS" | "TAILS" | null>(null);
 
-  // Cryptographically secure random integer using rejection sampling to eliminate modulo bias
-  const generateSecureRandomInt = (minVal: number, maxVal: number): number => {
-    const lower = Math.min(minVal, maxVal);
-    const upper = Math.max(minVal, maxVal);
-    const range = upper - lower + 1;
-    if (range <= 1) return lower;
-
-    if (typeof window === "undefined" || !window.crypto || !window.crypto.getRandomValues) {
-      throw new Error("Cryptographically secure RNG (window.crypto.getRandomValues) is required.");
-    }
-
-    // Rejection sampling: reject values above largest multiple of range to eliminate modulo bias
-    const maxUint32 = 0xffffffff;
-    const limit = maxUint32 - (maxUint32 % range);
-    const buffer = new Uint32Array(1);
-
-    while (true) {
-      window.crypto.getRandomValues(buffer);
-      if (buffer[0] < limit) {
-        return lower + (buffer[0] % range);
-      }
-    }
-  };
-
   const generateNumbers = useCallback(() => {
-    const lower = Math.min(min, max);
-    const upper = Math.max(min, max);
-    const rangeSize = upper - lower + 1;
+    setError(null);
+    try {
+      const lower = Math.min(min, max);
+      const upper = Math.max(min, max);
+      const rangeSize = upper - lower + 1;
 
-    if (!isDecimal && !allowDuplicates && count > rangeSize) {
-      // Cannot generate more unique numbers than range
-      const capped = rangeSize;
-      const set = new Set<number>();
-      while (set.size < capped) {
-        set.add(generateSecureRandomInt(lower, upper));
-      }
-      let arr = Array.from(set);
-      if (sortOrder === "asc") arr.sort((a, b) => a - b);
-      if (sortOrder === "desc") arr.sort((a, b) => b - a);
-      setResults(arr);
-      return;
-    }
-
-    const output: number[] = [];
-    const used = new Set<number>();
-
-    for (let i = 0; i < count; i++) {
-      if (isDecimal) {
-        const array = new Uint32Array(1);
-        let candidate = 0;
-        let attempts = 0;
-        do {
-          window.crypto.getRandomValues(array);
-          const factor = array[0] / (0xffffffff + 1);
-          const val = lower + factor * (upper - lower);
-          candidate = Number(val.toFixed(precision));
-          attempts++;
-        } while (!allowDuplicates && used.has(candidate) && attempts < 1000);
-        if (!allowDuplicates) used.add(candidate);
-        output.push(candidate);
-      } else {
-        if (!allowDuplicates) {
-          let attempts = 0;
-          let candidate = generateSecureRandomInt(lower, upper);
-          while (used.has(candidate) && attempts < 1000) {
-            candidate = generateSecureRandomInt(lower, upper);
-            attempts++;
-          }
-          used.add(candidate);
-          output.push(candidate);
-        } else {
-          output.push(generateSecureRandomInt(lower, upper));
+      if (!isDecimal) {
+        if (!allowDuplicates && count > rangeSize) {
+          setError(`Cannot generate ${count} unique numbers from a range of ${rangeSize}.`);
+          return;
         }
+        let arr: number[];
+        if (!allowDuplicates) {
+          arr = generateUniqueRandomInts(lower, upper, count);
+        } else {
+          arr = Array.from({ length: count }, () => secureRandomInt(lower, upper));
+        }
+        if (sortOrder === "asc") arr.sort((a, b) => a - b);
+        if (sortOrder === "desc") arr.sort((a, b) => b - a);
+        setResults(arr);
+      } else {
+        const factor = Math.pow(10, precision);
+        const totalDomain = Math.round((upper - lower) * factor) + 1;
+        if (!allowDuplicates && count > totalDomain) {
+          setError(
+            `Requested ${count} unique decimals, but only ${totalDomain} discrete values exist at precision ${precision}.`
+          );
+          return;
+        }
+        let arr: number[];
+        if (!allowDuplicates) {
+          arr = generateUniqueDecimals(lower, upper, count, precision);
+        } else {
+          arr = Array.from({ length: count }, () => {
+            const buf = new Uint32Array(1);
+            crypto.getRandomValues(buf);
+            const val = lower + (buf[0] / 0x100000000) * (upper - lower);
+            return Number(val.toFixed(precision));
+          });
+        }
+        if (sortOrder === "asc") arr.sort((a, b) => a - b);
+        if (sortOrder === "desc") arr.sort((a, b) => b - a);
+        setResults(arr);
       }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Error generating random numbers.");
     }
-
-    if (sortOrder === "asc") output.sort((a, b) => a - b);
-    if (sortOrder === "desc") output.sort((a, b) => b - a);
-    setResults(output);
   }, [min, max, count, allowDuplicates, sortOrder, isDecimal, precision]);
 
   // Roll Dice
   const handleRollDice = () => {
-    const rolls: number[] = [];
-    for (let i = 0; i < diceCount; i++) {
-      rolls.push(generateSecureRandomInt(1, diceSides));
+    try {
+      const rolls: number[] = [];
+      for (let i = 0; i < diceCount; i++) {
+        rolls.push(secureRandomInt(1, diceSides));
+      }
+      setDiceRolls(rolls);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Error rolling dice.");
     }
-    setDiceRolls(rolls);
   };
 
   // Flip Coin
   const handleFlipCoin = () => {
-    const isHeads = generateSecureRandomInt(0, 1) === 0;
-    const flip = isHeads ? "HEADS" : "TAILS";
-    setLastCoin(flip);
-    setCoinHistory((prev) => [flip, ...prev.slice(0, 19)]);
+    try {
+      const isHeads = secureRandomInt(0, 1) === 0;
+      const flip = isHeads ? "HEADS" : "TAILS";
+      setLastCoin(flip);
+      setCoinHistory((prev) => [flip, ...prev.slice(0, 19)]);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Error flipping coin.");
+    }
   };
 
   // Stats for numbers
@@ -507,6 +487,13 @@ export function RandomNumberTool() {
               </button>
             )}
           </div>
+
+          {error && (
+            <div className="flex items-center gap-2 rounded-xl border border-red-500/30 bg-red-500/10 p-3.5 text-xs text-red-300">
+              <AlertCircle size={16} className="shrink-0" />
+              <span>{error}</span>
+            </div>
+          )}
 
           {/* Results Block */}
           {results.length > 0 && (

@@ -47,9 +47,28 @@ import { markDailyToolVisited } from "@/lib/dailyHabitTracker";
 import { unlockBadge, checkTimeBasedBadges } from "@/lib/achievementBadges";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { Check, Clipboard, RotateCcw, ShieldCheck, X } from "lucide-react";
-import { Link, useRoute } from "wouter";
 import { useEffect, useMemo, useState } from "react";
+import { Link, useRoute } from "wouter";
 import { cleanUserName } from "@shared/userParam";
+import { secureRandomInt } from "@/lib/secureRandom";
+
+export function countWordsUnicode(text: string): number {
+  if (!text || !text.trim()) return 0;
+  if (typeof Intl !== "undefined" && "Segmenter" in Intl) {
+    try {
+      const segmenter = new (Intl as any).Segmenter(undefined, { granularity: "word" });
+      let count = 0;
+      for (const segment of segmenter.segment(text)) {
+        if (segment.isWordLike) count++;
+      }
+      return count;
+    } catch {
+      // Fallback below
+    }
+  }
+  const words = text.trim().split(/\s+/).filter(Boolean);
+  return words.length;
+}
 
 const toolTelemetry = {
   splitBill: ["ALLOCATION MATRIX", "GROUP INPUT / LIVE"], loanEmi: ["PAYMENT PROJECTION", "FIXED-RATE ESTIMATE"], workShift: ["TIME LEDGER", "SHIFT WINDOW / LIVE"], imageTransform: ["FRAME CUTTER", "PIXELS / LOCAL"], lineSorter: ["SEQUENCE CLEANUP", "TEXT / LOCAL"], imageMetadata: ["PRIVACY RELAY", "PIXELS / LOCAL"],
@@ -118,9 +137,76 @@ function Base64() { const [mode, setMode] = useState("encode"); const [input, se
 
 function JsonStation() { const [input, setInput] = useState('{"mission":"tools","status":"verified"}'); const [minify, setMinify] = useState(false); const { output, error } = useMemo(() => { try { return { output: JSON.stringify(JSON.parse(input), null, minify ? 0 : 2), error: "" }; } catch (e) { return { output: "", error: e instanceof Error ? e.message : "Invalid JSON." }; } }, [input, minify]); return <div className="runner-stack"><div className="toggle-row"><button className={!minify ? "toggle-button toggle-button--active" : "toggle-button"} onClick={() => { setMinify(false); trackPageView(undefined, undefined, "text-formatted", { format: "json-beautify", tool_slug: "json" }); }}>Format</button><button className={minify ? "toggle-button toggle-button--active" : "toggle-button"} onClick={() => { setMinify(true); trackPageView(undefined, undefined, "text-formatted", { format: "json-minify", tool_slug: "json" }); }}>Minify</button></div><label className="wide-field">JSON input<textarea value={input} onChange={(e) => setInput(e.target.value)} rows={9} spellCheck="false" /></label><Result value={output} error={error} /></div>; }
 
-function Password() { const [length, setLength] = useState(18); const [value, setValue] = useState(""); const generate = () => { const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%&*?"; const bytes = crypto.getRandomValues(new Uint32Array(length)); setValue(Array.from(bytes, (byte) => alphabet[byte % alphabet.length]).join("")); }; return <div className="runner-stack"><label className="range-field">Length <strong>{length}</strong><input type="range" min="12" max="48" value={length} onChange={(e) => setLength(Number(e.target.value))} /></label><div className="flex gap-3"><button className="signal-button" onClick={generate}>Generate password</button><button className="reset-button" onClick={() => setValue("")}><RotateCcw size={15} /> Clear</button></div><Result value={value} /></div>; }
+function Password() {
+  const [length, setLength] = useState(18);
+  const [value, setValue] = useState("");
+  const generate = () => {
+    try {
+      const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%&*?";
+      const chars: string[] = [];
+      for (let i = 0; i < length; i++) {
+        const idx = secureRandomInt(0, alphabet.length - 1);
+        chars.push(alphabet[idx]);
+      }
+      setValue(chars.join(""));
+    } catch {
+      setValue("");
+    }
+  };
+  return (
+    <div className="runner-stack">
+      <label className="range-field">
+        Length <strong>{length}</strong>
+        <input
+          type="range"
+          min="12"
+          max="48"
+          value={length}
+          onChange={(e) => setLength(Number(e.target.value))}
+        />
+      </label>
+      <div className="flex gap-3">
+        <button className="signal-button" onClick={generate}>
+          Generate password
+        </button>
+        <button className="reset-button" onClick={() => setValue("")}>
+          <RotateCcw size={15} /> Clear
+        </button>
+      </div>
+      <Result value={value} />
+    </div>
+  );
+}
 
-function TextStats() { const [input, setInput] = useState("Write something useful. Then take a quick break."); const stats = useMemo(() => { const trimmed = input.trim(); const words = trimmed ? trimmed.split(/\s+/).length : 0; return [["Words", words], ["Characters", input.length], ["Lines", input ? input.split(/\r?\n/).length : 0], ["Read", `${Math.max(1, Math.ceil(words / 200))} min`]]; }, [input]); return <div className="runner-stack"><label className="wide-field">Text<input className="hidden" /><textarea value={input} onChange={(e) => setInput(e.target.value)} rows={9} /></label><div className="stats-grid">{stats.map(([label, value]) => <div className="stat-tile" key={String(label)}><span>{label}</span><strong>{value}</strong></div>)}</div></div>; }
+function TextStats() {
+  const [input, setInput] = useState("Write something useful. Then take a quick break.");
+  const stats = useMemo(() => {
+    const trimmed = input.trim();
+    const words = countWordsUnicode(trimmed);
+    return [
+      ["Words", words],
+      ["Characters", input.length],
+      ["Lines", input ? input.split(/\r?\n/).length : 0],
+      ["Read", `${Math.max(1, Math.ceil(words / 200))} min`],
+    ] as [string, number | string][];
+  }, [input]);
+  return (
+    <div className="runner-stack">
+      <label className="wide-field">
+        Text<input className="hidden" />
+        <textarea value={input} onChange={(e) => setInput(e.target.value)} rows={9} />
+      </label>
+      <div className="stats-grid">
+        {stats.map(([label, value]: [string, number | string]) => (
+          <div className="stat-tile" key={String(label)}>
+            <span>{label}</span>
+            <strong>{value}</strong>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 function ColorSignal() { const [value, setValue] = useState("#c7f36b"); const parsed = useMemo(() => /^#?[0-9a-fA-F]{6}$/.test(value) ? `#${value.replace("#", "").toUpperCase()}` : "", [value]); const rgb = parsed ? `${parseInt(parsed.slice(1, 3), 16)}, ${parseInt(parsed.slice(3, 5), 16)}, ${parseInt(parsed.slice(5, 7), 16)}` : ""; return <div className="runner-stack"><div className="color-layout"><div className="color-preview" style={{ background: parsed || "#1f2937" }} /><label>HEX color<input value={value} onChange={(e) => setValue(e.target.value)} /></label></div><Result value={parsed ? `HEX ${parsed}\nRGB ${rgb}` : "Use a six-digit HEX colour, e.g. #C7F36B."} /></div>; }
 

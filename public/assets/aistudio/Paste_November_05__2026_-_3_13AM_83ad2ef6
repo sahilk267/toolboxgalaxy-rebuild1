@@ -1,0 +1,948 @@
+# TOOLBOXGALAXY — FINAL PRECISION REPAIR & COMPLETE VERIFICATION
+
+## MISSION
+
+You are a senior TypeScript, React, browser-security, document-processing, and QA engineer.
+
+**Repository:** `sahilk267/toolboxgalaxy-rebuild1`  
+**Branch:** `main`  
+**Baseline reviewed commit:** `7b26b344e6f0d87f4dae213bf556f8ecccc50c36`
+
+Your objective is to repair the remaining confirmed defects, eliminate inaccurate test claims, and systematically verify all registered utilities and games.
+
+**IMPLEMENT CODE. DO NOT PROVIDE ONLY ADVICE.**
+
+The application already contains substantial repairs. Preserve those repairs.
+
+### Mandatory rules
+
+1. Read the latest file before editing. If a reported issue has already been corrected, skip it and record evidence.
+2. Do not rebuild the application, redesign the interface, change routing, or regenerate valid game banks.
+3. Do not modify unrelated files. Prefer small, targeted patches.
+4. Do not introduce mock results, fake successful exports, or test-only implementations.
+5. Do not delete failing tests, suppress errors, or claim tests passed without executing them.
+6. Do not silently modify user files, formulas, passwords, or private data.
+7. Do not add unnecessary dependencies or regenerate lockfiles without cause.
+8. Do not deploy, publish, rotate secrets, or modify production configuration automatically.
+9. Preserve uncommitted changes and modifications from any commit newer than the baseline.
+10. Work in small completed batches. Do not leave half-written files.
+
+**Token efficiency:** Do not repeat these instructions in your responses. Inspect only files relevant to the current batch, write code, test, and summarize briefly.
+
+---
+
+# PHASE 0 — BASELINE
+
+Run:
+
+```bash
+git rev-parse --short HEAD
+git status --short
+npm run check
+npm run build
+```
+
+Inspect `package.json` before running commands. Use the repository's actual package manager.
+
+If a command fails, record its real error. Distinguish existing failures from regressions.
+
+Read:
+
+- `shared/toolsData.ts`
+- `shared/gamesData.ts`
+- `client/src/pages/ToolWorkspace.tsx`
+- `scripts/verify-precision-repairs.ts`
+- `scripts/verify-logic-puzzles.ts`
+- `TOOLBOXGALAXY_REPAIR_PROGRESS.md`
+
+Confirm the tool registry has 61 mapped runners and the game catalog has 18 entries. Do not assume any item is fully tested merely because it is registered.
+
+---
+
+# PHASE 1 — CRITICAL REMAINING DEFECTS
+
+## P0-01 — EXCEL STRUCTURAL DATA LOSS
+
+**File:** `client/src/components/ExcelStudioTool.tsx`
+
+**Confirmed problem:** `syncDataToWorksheet()` updates cells present in the cleaned array but does not reliably remove stale cells belonging to deleted rows.
+
+Example:
+
+Original worksheet:
+
+```text
+Item,Amount
+A,100
+B,200
+B,200
+C,300
+```
+
+After Remove Duplicates, expected:
+
+```text
+Item,Amount
+A,100
+B,200
+C,300
+```
+
+Current synchronization can leave old cells from the removed row in the exported worksheet.
+
+Additionally, formula cached values can be overwritten without formula recalculation.
+
+### Required implementation
+
+- Preserve the original workbook and uploaded file bytes.
+- Do not synchronize merely because the user switches worksheets.
+- Track actual modifications explicitly.
+- Preserve untouched formulas, hyperlinks, cell types, and supported worksheet metadata.
+- Never update a formula's cached value as though it were an ordinary editable cell.
+- Properly delete removed rows from exported data.
+- Recalculate worksheet ranges after supported structural changes.
+- Never leave stale cells beyond the new logical data boundary.
+- Do not allow unsafe cleaning operations to silently corrupt formulas or references.
+- For formula-bearing workbooks, block unsupported structural modifications or offer an explicitly labeled values-only export.
+- Keep a way to download the untouched original workbook.
+- Never claim full Excel formatting preservation unless independently verified.
+
+**Avoid:** Reconstructing every worksheet with `aoa_to_sheet()` as a universal fix.
+
+### Tests
+
+Create a real XLSX fixture with two worksheets, duplicate rows, formulas, merged cells, a hyperlink, and styled cells.
+
+Verify:
+
+1. Switching sheets does not modify original data.
+2. Unchanged export preserves both sheets and formulas.
+3. Remove Duplicates actually removes rows from the reopened output.
+4. Remove Empty Rows does not leave stale rows.
+5. Formulas and metadata remain intact for supported nonstructural edits.
+6. Unsafe structural operations are blocked or clearly exported as values-only.
+
+Reopen the generated XLSX with an independent parser or the appropriate XLSX reader. Do not test only an in-memory array.
+
+---
+
+## P0-02 — RANDOM NUMBER GENERATOR CAN HANG
+
+**File:** `client/src/components/GenerativeToolRunners.tsx`
+
+**Confirmed problem:**
+
+Current rejection sampling uses:
+
+```ts
+const maxUint32 = 0xffffffff;
+const limit = maxUint32 - (maxUint32 % range);
+```
+
+For some permitted numeric inputs, especially a range of \(2^{32}\), the limit can become zero and the loop cannot finish.
+
+Also, uniqueness retries stop after 1,000 attempts but may still append a duplicate.
+
+### Replace the secure integer algorithm
+
+Extract into a testable utility, for example:
+
+`client/src/lib/secureRandom.ts`
+
+Use:
+
+```ts
+export function secureRandomInt(
+  min: number,
+  max: number
+): number {
+  if (
+    !Number.isSafeInteger(min) ||
+    !Number.isSafeInteger(max) ||
+    min > max
+  ) {
+    throw new Error("Invalid integer bounds.");
+  }
+
+  const range = max - min + 1;
+  const space = 0x100000000;
+
+  if (!Number.isSafeInteger(range) || range < 1 || range > space) {
+    throw new Error("Unsupported range size.");
+  }
+
+  if (!globalThis.crypto?.getRandomValues) {
+    throw new Error("Secure randomness is unavailable.");
+  }
+
+  const limit = Math.floor(space / range) * range;
+  const buffer = new Uint32Array(1);
+
+  let sample: number;
+
+  do {
+    globalThis.crypto.getRandomValues(buffer);
+    sample = buffer[0];
+  } while (sample >= limit);
+
+  return min + (sample % range);
+}
+```
+
+Do not silently swap invalid bounds.
+
+Use appropriate user-facing error handling.
+
+### Additional corrections
+
+- Reject impossible unique-number counts.
+- Never append duplicates when uniqueness is selected.
+- For decimal generation, validate possible unique values after rounding.
+- Use a bounded non-replacement selection algorithm where appropriate.
+- Avoid potentially unbounded collision-retry loops.
+- Keep dice, coin toss, sorting, and copy features working.
+- Avoid `Math.random()` when claiming cryptographic security.
+
+### Tests
+
+Test:
+
+```text
+[0,0] → 0
+[1,6] → always 1 through 6
+[-10,-5] → always -10 through -5
+[0,4294967295] → must terminate and remain in range
+[5,1] → validation error
+NaN → validation error
+3 unique numbers from [1,2] → validation error
+```
+
+Test decimal uniqueness with precision 0 and 2.
+
+The UI must display errors without freezing.
+
+---
+
+## P0-03 — SEARCHABLE PDF UNICODE LOSS
+
+**Files:**
+
+- `client/src/lib/pdfOcr.ts`
+- `client/src/lib/pdfTextSanitizer.ts`
+
+**Confirmed problem:**
+
+OCR uses English Tesseract recognition and PDF standard Helvetica fonts.
+
+The sanitizer removes unsupported Unicode characters by replacing them with spaces.
+
+This can silently destroy Hindi or other unsupported text in searchable PDF output.
+
+### Required fix
+
+Choose the least risky honest implementation.
+
+**Option A:** Implement genuine multilingual searchable PDF support only if correct recognition models, Unicode font embedding, positioning, and output extraction can be tested.
+
+**Option B:** Explicitly limit searchable PDF export to supported languages.
+
+If using Option B:
+
+- Clearly label the searchable-PDF feature English-only.
+- Do not advertise Hindi searchable PDF support.
+- Detect unsupported characters before writing them.
+- Show a warning or error rather than silently dropping them.
+- Preserve the extracted text separately wherever possible.
+- Never claim that missing characters were successfully embedded.
+
+Do not download large font or language packages unnecessarily.
+
+### Test
+
+Create English and Hindi sample documents.
+
+Verify extracted text from the exported PDF, not just successful file creation.
+
+If Hindi output is unsupported, the UI must state that limitation clearly.
+
+---
+
+## P0-04 — AGE AND DATE CALCULATOR TIMEZONE ISSUES
+
+**File:** `client/src/components/AdvancedToolRunners.tsx`
+
+**Confirmed problems:**
+
+The current date formatter uses:
+
+```ts
+date.toISOString().slice(0, 10)
+```
+
+This converts the local date into UTC before choosing its calendar date.
+
+For users in India between midnight and 5:30 AM, it can show yesterday instead of today.
+
+Use local calendar formatting:
+
+```ts
+function formatLocalDate(date: Date): string {
+  const yyyy = date.getFullYear();
+  const mm = String(date.getMonth() + 1).padStart(2, "0");
+  const dd = String(date.getDate()).padStart(2, "0");
+
+  return `${yyyy}-${mm}-${dd}`;
+}
+```
+
+For calendar-day differences, avoid dividing local-midnight timestamp differences directly by 86,400,000 across daylight-saving transitions.
+
+Use UTC calendar-date ordinals for calendar-day calculations, with correct date validation.
+
+### Test
+
+Run date tests in:
+
+```text
+Asia/Kolkata
+America/New_York
+UTC
+```
+
+Include:
+
+- Local date shortly after midnight
+- Leap day
+- January 31 → March 1
+- Daylight-saving transition
+- Same date
+- Adjacent dates
+
+Do not change the existing age-calculation convention without documenting it.
+
+---
+
+# PHASE 2 — SECURITY AND PRIVACY
+
+## P1-01 — TELEGRAM RELAY IS NOT IMPLEMENTED
+
+**Files:**
+
+- `client/src/lib/telegramAlerts.ts`
+- `client/src/pages/Contact.tsx`
+- `server/index.ts`
+- `.env.example`
+
+The previous agent removed public Telegram bot credentials. Preserve that fix.
+
+However, the frontend now supports `VITE_TELEGRAM_RELAY_ENDPOINT`, while the reviewed Express server does not implement `/api/telegram-relay`.
+
+Do not assume the relay works.
+
+### Required behavior
+
+If a secure backend relay is unavailable:
+
+- Disable Telegram dispatch.
+- Do not call a nonexistent endpoint.
+- Do not show delivery success.
+- Continue providing contact API, email, and LinkedIn options.
+
+If implementing a backend:
+
+- Store Telegram credentials only on the server.
+- Add request-body validation.
+- Limit message length and payload size.
+- Rate-limit public requests.
+- Prevent the relay from becoming an unrestricted message-sending service.
+- Validate the destination and permitted message types.
+- Never expose a bot token in client code.
+- Never log credentials or submitted private messages.
+- Do not rely on a public client-side shared secret for authentication.
+
+The Contact form currently attempts a Telegram notification independently of its main API submission. Prevent accidental duplicate submissions or delivery claims.
+
+The contact API response must remain the source of truth for its delivery status.
+
+### Test
+
+Unconfigured relay, server error, offline browser, valid contact API response, duplicate submission, and abuse-prevention behavior.
+
+Do not claim Telegram delivery works without a real backend test.
+
+---
+
+## P1-02 — ANALYTICS PRIVACY LEAKAGE
+
+**Files:**
+
+- `client/index.html`
+- `client/src/lib/analytics.ts`
+- `client/src/pages/Tools.tsx`
+- `client/src/pages/ToolWorkspace.tsx`
+- `client/src/pages/Privacy.tsx`
+
+**Confirmed issues:**
+
+1. Google Tag Manager can load before explicit consent when DNT/GPC is not enabled.
+2. The `<noscript>` GTM iframe is unconditional.
+3. Free-form `search_term` is sent as analytics metadata.
+4. User-controlled referral text can appear in `document.title`, which may be sent as analytics page title.
+5. Public text claims “no tracking” despite optional tracking integrations.
+
+### Required fixes
+
+Implement privacy-consistent analytics behavior.
+
+- Respect DNT and GPC.
+- Do not initialize optional analytics before required user consent.
+- Remove unconditional tracking that bypasses the intended consent behavior.
+- Remove the unconditional GTM noscript fallback if it cannot honor equivalent privacy controls.
+- Do not send raw search queries.
+- Do not send free-form user input.
+- Do not send user-controlled referral names as analytics titles.
+- Restrict event metadata to explicitly allowed non-sensitive properties.
+- Retain useful anonymous event counts where permitted.
+- Keep real analytics functionality available when validly configured and consented to.
+- Update privacy disclosures to accurately describe actual behavior.
+
+Use an explicit allowlist for analytics fields rather than relying solely on regex filtering of possible personal information.
+
+### Tests
+
+Verify no optional analytics requests before consent and when DNT/GPC is enabled.
+
+Verify no private strings appear in tracking payloads.
+
+Verify approved analytics still functions after consent.
+
+Do not claim zero tracking while optional tracking executes.
+
+---
+
+## P1-03 — SERVICE WORKER CACHE SCOPE
+
+**File:** `client/public/service-worker.js`
+
+Current cache logic handles broadly scoped same-origin GET requests.
+
+This could cache future API responses containing sensitive or user-specific data.
+
+### Required fix
+
+Cache static assets only.
+
+Never cache:
+
+```text
+/api/*
+/contact/*
+Authenticated responses
+User-specific API responses
+Requests with authorization credentials
+Responses marked no-store/private
+```
+
+Use a narrow cache allowlist.
+
+Preserve PWA offline behavior and PDF worker availability.
+
+Bump the service-worker cache version only if needed.
+
+Test online, offline, update, and cache cleanup behavior.
+
+---
+
+# PHASE 3 — DOCUMENT CORRECTNESS
+
+## P1-04 — PDF COMPRESSION CLAIMS
+
+**File:** `client/src/components/PdfCompressTool.tsx`
+
+The previous agent added image-based warnings. Preserve them.
+
+Remaining issues:
+
+- “100% Vector Intact” is still an absolute claim.
+- Lossless mode modifies title, author, subject, and other metadata.
+- Rendering-scale descriptions do not accurately match all advertised DPI values.
+- Rasterized modes still destroy selectable content by design.
+
+### Required changes
+
+- Correct DPI labels using the actual PDF.js rendering scale or adjust scale to match the intended DPI.
+- Do not claim 100% preservation without verification.
+- Preserve metadata in structure-preserving mode wherever possible.
+- Do not use `ignoreEncryption: true` as a promise of successful encrypted-document processing.
+- Clearly identify rasterized output as lossy.
+- Show actual size change, including when the result is larger.
+- Verify exported PDFs reopen with the expected number of pages.
+- Warn when selectable text, forms, hyperlinks, or vector information may be lost.
+- Do not overwrite original PDFs.
+
+Do not attempt to invent a fully lossless compression engine.
+
+If supported optimizations cannot reduce file size, honestly explain that no reduction was achieved.
+
+---
+
+## P1-05 — PPTX TEXT OVERFLOW
+
+**File:** `client/src/lib/pdfExtraction.ts`
+
+The previous agent added continuation slides, removing the old 12-line truncation.
+
+Keep that improvement.
+
+However, each group still contains up to 12 source lines regardless of visual wrapping. Very long lines may overflow the text box.
+
+### Required changes
+
+- Preserve every source text line.
+- Wrap long text safely.
+- Split content into additional slides based on actual or conservatively estimated text layout.
+- Keep readable font sizes.
+- Preserve text order.
+- Do not truncate, clip, or omit text silently.
+- Keep generated files in genuine `.pptx` format.
+
+### Test
+
+Create a PDF with:
+
+- 40 numbered lines
+- Several extremely long lines
+- Unicode punctuation
+- Multiple pages
+
+Convert to PPTX.
+
+Reopen the PPTX and inspect text content and slide boundaries.
+
+Verify all 40 markers and all other expected text are present.
+
+Use visual inspection for overflow verification.
+
+Do not claim pixel-perfect PDF-to-PPTX conversion.
+
+---
+
+## P1-06 — WORD AND PDF EXPORT VERIFICATION
+
+Review without unnecessarily rewriting:
+
+- `client/src/components/WordDocxTool.tsx`
+- `client/src/components/PdfToolsRunner.tsx`
+- `client/src/components/PdfEditorTool.tsx`
+- `client/src/lib/pdfRedaction.ts`
+- `client/src/lib/enterprisePdf.ts`
+
+Verify real output rather than source-code presence.
+
+Tests must include:
+
+- DOCX opens successfully.
+- Headings and basic lists survive conversion.
+- WebP/PNG/JPEG-to-PDF exports reopen.
+- PDF merge maintains requested page order.
+- Invalid PDF ranges are rejected.
+- Password-protected PDF behavior is honest.
+- Permanent redaction actually removes targeted underlying information.
+- OCR errors do not silently produce falsely complete output.
+
+Use actual generated files.
+
+Do not change existing working export logic without a reproducible defect.
+
+---
+
+# PHASE 4 — UTILITY CORRECTNESS
+
+## P1-07 — PASSWORD GENERATOR BIAS
+
+**File:** `client/src/pages/ToolWorkspace.tsx`
+
+Current password generator selects characters using modulo arithmetic.
+
+Reuse a corrected rejection-sampling helper for selecting character indexes.
+
+Ensure:
+
+- Cryptographic randomness
+- Valid output length
+- Correct alphabet
+- No predictable fallback
+- Graceful error when secure randomness is unavailable
+
+Do not force character-category guarantees unless the UI advertises them.
+
+Test output length, alphabet membership, and error handling.
+
+---
+
+## P1-08 — TEXT STATISTICS
+
+**File:** `client/src/pages/ToolWorkspace.tsx`
+
+The current word count still relies on whitespace splitting.
+
+The progress report claims Unicode-aware counting.
+
+Use `Intl.Segmenter` with `granularity: "word"` where supported, and a documented fallback.
+
+Test:
+
+```text
+Hello world
+नमस्ते दुनिया
+你好世界
+café résumé
+```
+
+Preserve existing character, line, and reading-time functionality.
+
+Do not make false claims about language coverage.
+
+---
+
+## P1-09 — RANDOM DECIMAL UNIQUENESS
+
+**File:** `client/src/components/GenerativeToolRunners.tsx`
+
+Decimal outputs are rounded after generation.
+
+Duplicate prevention can still fail after the retry threshold.
+
+Do not output duplicates while the user selected unique values.
+
+Calculate the supported discrete precision domain before generating.
+
+If the requested unique count exceeds available values, show an explicit validation error.
+
+Test small ranges, precision zero, and maximum quantity.
+
+---
+
+## P1-10 — JSON, CSV, AND CODE GENERATORS
+
+Review:
+
+- `client/src/components/JsonToZodTool.tsx`
+- `client/src/lib/structuredDataEngines.ts`
+- `client/src/components/StructuredDataRunners.tsx`
+- `client/src/components/GenerativeToolRunners.tsx`
+- `client/src/components/CurlToCodeTool.tsx`
+
+Preserve existing fixes.
+
+Verify:
+
+- Root arrays of objects produce valid TypeScript.
+- Generated TypeScript compiles.
+- Generated Zod validates representative JSON.
+- Raw CSV preserves original field values.
+- Spreadsheet-safe CSV explicitly applies formula-injection protection.
+- Generated Next.js metadata correctly escapes all string literals.
+- Generated cURL conversions remain syntactically valid.
+
+Do not rewrite working implementations to make test descriptions shorter.
+
+---
+
+# PHASE 5 — CORRECT FALSE FEATURE CLAIMS
+
+Review:
+
+- `client/index.html`
+- `shared/toolsData.ts`
+- `shared/gamesData.ts`
+- `client/src/lib/webMcp.ts`
+- `server/index.ts`
+- `client/public/.well-known/mcp/server-card.json`
+- `TOOLBOXGALAXY_REPAIR_PROGRESS.md`
+
+## Catalog mismatch
+
+The registered tool catalog currently has 61 entries.
+
+Several public metadata strings still advertise “120+ utilities.”
+
+Correct inaccurate counts.
+
+Prefer generated catalog metadata rather than duplicated hardcoded totals.
+
+## MCP mismatch
+
+The published MCP server card advertises `/api/mcp`, but the reviewed Express server does not implement a corresponding endpoint.
+
+Do not advertise remote MCP functionality that is not available.
+
+Either implement and test a real service or correct the published capability description.
+
+Do not add a fake endpoint that returns success without implementing the advertised protocol.
+
+## Progress report mismatch
+
+Some progress entries claim:
+
+- Full browser verification
+- Proven 60 FPS
+- Complete data preservation
+- 61/61 tool success
+- 18/18 game success
+
+These claims require real evidence.
+
+Correct unsupported statements.
+
+---
+
+# PHASE 6 — AUTOMATED VERIFICATION THAT TESTS REAL CODE
+
+**Primary file:** `scripts/verify-precision-repairs.ts`
+
+Current script contains assertions that duplicate production algorithms and check whether certain strings appear in source files.
+
+These do not reliably verify application behavior.
+
+### Required improvement
+
+Test actual exported production functions.
+
+Extract small pure helpers where necessary.
+
+Do not copy entire algorithms into tests.
+
+Use Vitest or existing test infrastructure.
+
+### Required categories
+
+**Unit tests:** Calculations, random generation, string conversion, date handling, CSV serialization.
+
+**Document tests:** Generated XLSX, PDF, DOCX, and PPTX files, reopened and inspected.
+
+**Security tests:** Regex worker timeout, Telegram configuration, analytics filtering, service worker cache eligibility.
+
+**Puzzle tests:** Authored puzzle bank correctness and game-rule validation.
+
+**Browser tests:** Important tools actually load, accept input, produce output, and handle errors.
+
+### Anti-fake-test rule
+
+The following is NOT sufficient:
+
+```ts
+assert(source.includes("safe"));
+```
+
+The following is also NOT sufficient:
+
+```ts
+function copiedProductionAlgorithm() {
+  // Duplicated logic
+}
+```
+
+Instead:
+
+```ts
+import { actualProductionFunction } from "../client/src/lib/actualModule";
+
+expect(actualProductionFunction(testInput)).toEqual(expectedOutput);
+```
+
+For worker behavior, use a real browser Worker test where possible.
+
+For documents, inspect generated files.
+
+For games, test their actual rule engines.
+
+Never add a passing assertion that contains no meaningful verification.
+
+---
+
+# PHASE 7 — COMPLETE TOOL AND GAME COVERAGE
+
+The project contains 61 registered tools and 18 game catalog entries.
+
+Do not manually hardcode their names into another divergent registry.
+
+Build the verification inventory dynamically from:
+
+```text
+shared/toolsData.ts
+shared/gamesData.ts
+```
+
+## Every registered tool must receive
+
+1. Source file review.
+2. Normal-input test.
+3. Invalid or boundary-input test.
+4. Expected-output verification.
+5. Error-handling check.
+6. Copy/download check where applicable.
+7. Mobile/browser check where possible.
+8. Privacy/network behavior check.
+9. Actual verification status.
+
+## Every game must receive
+
+1. Entry route check.
+2. Initial game-state validation.
+3. Rule correctness check.
+4. Win/loss or completion check.
+5. Reset/restart check.
+6. Keyboard/pointer/touch check as applicable.
+7. Persistence check.
+8. Error/crash check.
+9. Performance measurement where feasible.
+
+For authored puzzle banks, validate every edition.
+
+For procedural 2D/3D games, distinguish engine unit tests from real gameplay tests.
+
+Do not claim 60 FPS unless FPS was measured.
+
+Do not regenerate already-valid Wordle, Chess, Mini Crossword, Sudoku, Queens, Tango, Patches, Zip, Wend, or other puzzle content without a confirmed defect.
+
+Keep Logic Lab classified correctly as a hub/integration entry where applicable.
+
+### Coverage status
+
+Use:
+
+```text
+NOT REVIEWED
+SOURCE REVIEWED
+TESTED — PASS
+TESTED — FAIL
+BROWSER VERIFIED
+BLOCKED
+```
+
+A tool is not fully verified solely because its registry mapping exists.
+
+---
+
+# PHASE 8 — CI AND FINAL VALIDATION
+
+The repository currently has no GitHub Actions workflow in `.github/workflows/`.
+
+If compatible with the current project, add a minimal quality workflow.
+
+Use the existing `package-lock.json` and Node.js version compatible with the project.
+
+Run:
+
+```bash
+npm ci
+npm run check
+npm run verify:logic
+npm run verify:repairs
+npm run build
+```
+
+Avoid duplicating unnecessary checks in CI if `npm run check` already includes them.
+
+Add focused tests for the newly repaired functions.
+
+If Playwright or another browser runner is available, test high-risk workflows.
+
+If browser testing is unavailable, report that clearly.
+
+### Mandatory final regression checklist
+
+- All 61 registry mappings exist.
+- All 18 game routes resolve correctly.
+- Important document tools open and process test fixtures.
+- No known silent XLSX row-loss regression.
+- No RNG infinite loop for permitted ranges.
+- No misleading OCR language claim.
+- No public Telegram secret.
+- No false contact-form success message.
+- No raw search-term analytics leakage.
+- No unsafe API-response caching.
+- No invalid known puzzle answers.
+- Production build completes.
+- New tests execute against production code.
+
+---
+
+# EXECUTION STRATEGY — MINIMUM TOKENS
+
+Work in this order:
+
+**Batch 1:** Excel, RNG, Age/Date, Password Generator.
+
+**Batch 2:** OCR, PDF Compression, PPTX export.
+
+**Batch 3:** Telegram, Contact, Analytics, Service Worker.
+
+**Batch 4:** Text Statistics, JSON/CSV/Code Generators, MCP/SEO claims.
+
+**Batch 5:** Real test coverage, complete tool/game inventory, CI.
+
+Finish each batch before moving to the next.
+
+Do not perform an unrelated full-repository rewrite.
+
+Reuse existing helpers and libraries.
+
+Do not repeatedly search files already inspected unless they changed.
+
+If execution limits prevent completing all batches in one session:
+
+1. Complete and test the current batch.
+2. Save source changes.
+3. Update the progress ledger accurately.
+4. Report remaining batches.
+5. Stop without claiming overall completion.
+
+Continue from the ledger in the next session.
+
+---
+
+# FINAL RESPONSE FORMAT
+
+Keep your final answer under 250 words.
+
+Use this exact structure:
+
+```text
+HEAD: <commit SHA>
+
+BATCHES COMPLETED:
+<batch identifiers>
+
+FILES MODIFIED:
+<paths only>
+
+TEST RESULTS:
+TypeScript: PASS / FAIL / NOT RUN
+Logic: PASS / FAIL / NOT RUN
+Repairs: PASS / FAIL / NOT RUN
+Build: PASS / FAIL / NOT RUN
+Browser: PASS / FAIL / NOT RUN
+
+COVERAGE:
+Tools tested: X/61
+Games tested: Y/18
+Files actually generated and reopened: N
+Open P0 defects: N
+Open P1 defects: N
+
+BLOCKERS:
+<specific blockers>
+
+NEXT:
+<one exact next action>
+```
+
+Do not output full source files.
+
+Do not report “everything fixed” unless the acceptance criteria were genuinely verified.
+
+Do not invent test logs or build results.
+
+**START WITH THE ACTUAL CURRENT SOURCE CODE AND IMPLEMENT BATCH 1 NOW.**

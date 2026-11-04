@@ -1646,11 +1646,17 @@ export default function PdfEditorTool({
     setOcrStatus("Initializing Searchable PDF OCR pipeline...");
     setOcrProgressPercent(5);
     try {
-      await exportSearchablePdf(pdfBytes, fileName, (p: OcrPageProgress) => {
+      const res = await exportSearchablePdf(pdfBytes, fileName, (p: OcrPageProgress) => {
         setOcrStatus(p.status);
         setOcrProgressPercent(p.progressPercent);
       });
-      showToast("Searchable PDF downloaded successfully!");
+      if (res?.unsupportedDetected) {
+        showToast(
+          `Searchable PDF exported with English text layer. ${res.unsupportedCharacters.length} unsupported characters omitted from searchable layer.`
+        );
+      } else {
+        showToast("Searchable PDF downloaded successfully!");
+      }
     } catch (err) {
       showToast("Searchable PDF Error: " + (err instanceof Error ? err.message : "Error"));
     } finally {
@@ -2432,7 +2438,7 @@ export default function PdfEditorTool({
                     disabled={isOcrRunning}
                     className="flex items-center gap-2 rounded-lg px-2.5 py-2 text-[#c7f36b] hover:bg-[#c7f36b]/10 text-left"
                   >
-                    <Sparkles size={13} /> Export Searchable PDF (OCR)
+                    <Sparkles size={13} /> Export Searchable PDF (English OCR)
                   </button>
                 </div>
               </div>
@@ -4926,9 +4932,9 @@ export default function PdfEditorTool({
                     className="flex flex-col items-start gap-1 p-2 rounded-lg border border-[#c7f36b]/30 bg-[#c7f36b]/10 hover:bg-[#c7f36b]/20 text-left cursor-pointer transition-all disabled:opacity-40"
                   >
                     <div className="flex items-center gap-1.5 font-semibold text-xs text-[#c7f36b]">
-                      <Sparkles size={14} /> Searchable PDF
+                      <Sparkles size={14} /> Searchable PDF (English)
                     </div>
-                    <span className="text-[10px] text-white/50 leading-tight">100% visual fidelity + selectable text</span>
+                    <span className="text-[10px] text-white/50 leading-tight">Visual fidelity + selectable English text</span>
                   </button>
 
                   <button

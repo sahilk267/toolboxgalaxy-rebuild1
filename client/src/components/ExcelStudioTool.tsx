@@ -17,6 +17,70 @@ import {
   Layers
 } from "lucide-react";
 
+export function syncDataToWorksheet(ws: XLSX.WorkSheet | undefined, data: any[][]): XLSX.WorkSheet {
+  if (!ws) {
+    return XLSX.utils.aoa_to_sheet(data);
+  }
+
+  // 1. Remove all stale cell entries in ws that exceed the new data rows or columns
+  const cellKeys = Object.keys(ws).filter((k) => !k.startsWith("!"));
+  for (const cellKey of cellKeys) {
+    const decoded = XLSX.utils.decode_cell(cellKey);
+    if (decoded.r >= data.length || decoded.c >= (data[decoded.r]?.length ?? 0)) {
+      delete ws[cellKey];
+    }
+  }
+
+  // 2. Update existing cells and add new cells from data
+  let maxCol = 0;
+  for (let r = 0; r < data.length; r++) {
+    const row = data[r];
+    if (!row) continue;
+    if (row.length > maxCol) maxCol = row.length;
+    for (let c = 0; c < row.length; c++) {
+      const cellRef = XLSX.utils.encode_cell({ r, c });
+      const currentCell = ws[cellRef];
+      const newVal = row[c];
+
+      if (currentCell) {
+        if (currentCell.f) {
+          // Untouched formula: preserve structure without overwriting cached value as ordinary text
+          continue;
+        }
+        if (typeof newVal === "number") {
+          ws[cellRef] = { ...currentCell, t: "n", v: newVal };
+        } else if (typeof newVal === "boolean") {
+          ws[cellRef] = { ...currentCell, t: "b", v: newVal };
+        } else if (newVal === null || newVal === undefined || newVal === "") {
+          delete ws[cellRef];
+        } else {
+          ws[cellRef] = { ...currentCell, t: "s", v: String(newVal) };
+        }
+      } else if (newVal !== null && newVal !== undefined && newVal !== "") {
+        if (typeof newVal === "number") {
+          ws[cellRef] = { t: "n", v: newVal };
+        } else if (typeof newVal === "boolean") {
+          ws[cellRef] = { t: "b", v: newVal };
+        } else {
+          ws[cellRef] = { t: "s", v: String(newVal) };
+        }
+      }
+    }
+  }
+
+  // 3. Recalculate range accurately to match new boundaries
+  if (data.length > 0 && maxCol > 0) {
+    ws["!ref"] = XLSX.utils.encode_range({
+      s: { r: 0, c: 0 },
+      e: { r: data.length - 1, c: maxCol - 1 },
+    });
+  } else {
+    ws["!ref"] = "A1:A1";
+  }
+
+  return ws;
+}
+
 export default function ExcelStudioTool() {
   const [workbook, setWorkbook] = useState<XLSX.WorkBook | null>(null);
   const [sheetNames, setSheetNames] = useState<string[]>([]);
@@ -92,68 +156,10 @@ export default function ExcelStudioTool() {
     reader.readAsArrayBuffer(file);
   };
 
-function syncDataToWorksheet(ws: XLSX.WorkSheet | undefined, data: any[][]): XLSX.WorkSheet {
-  if (!ws) {
-    return XLSX.utils.aoa_to_sheet(data);
-  }
-
-  // Preserve all existing sheet properties (!merges, !cols, !margins, etc.)
-  // Update cells individually using encode_cell to preserve untouched formulas and types
-  const existingRange = ws["!ref"] ? XLSX.utils.decode_range(ws["!ref"]) : { s: { r: 0, c: 0 }, e: { r: 0, c: 0 } };
-  let maxCol = existingRange.e.c;
-  const maxRow = Math.max(existingRange.e.r, data.length - 1);
-
-  for (let r = 0; r < data.length; r++) {
-    const row = data[r];
-    if (!row) continue;
-    if (row.length - 1 > maxCol) maxCol = row.length - 1;
-    for (let c = 0; c < row.length; c++) {
-      const cellRef = XLSX.utils.encode_cell({ r, c });
-      const currentCell = ws[cellRef];
-      const newVal = row[c];
-
-      if (currentCell) {
-        // If the cell contains an existing formula, keep formula intact and update cached value
-        if (currentCell.f) {
-          if (newVal !== undefined && newVal !== null && newVal !== currentCell.v) {
-            currentCell.v = newVal;
-          }
-        } else {
-          // Update value preserving appropriate type
-          if (typeof newVal === "number") {
-            ws[cellRef] = { ...currentCell, t: "n", v: newVal };
-          } else if (typeof newVal === "boolean") {
-            ws[cellRef] = { ...currentCell, t: "b", v: newVal };
-          } else if (newVal === null || newVal === undefined || newVal === "") {
-            delete ws[cellRef];
-          } else {
-            ws[cellRef] = { ...currentCell, t: "s", v: String(newVal) };
-          }
-        }
-      } else if (newVal !== null && newVal !== undefined && newVal !== "") {
-        if (typeof newVal === "number") {
-          ws[cellRef] = { t: "n", v: newVal };
-        } else if (typeof newVal === "boolean") {
-          ws[cellRef] = { t: "b", v: newVal };
-        } else {
-          ws[cellRef] = { t: "s", v: String(newVal) };
-        }
-      }
-    }
-  }
-
-  ws["!ref"] = XLSX.utils.encode_range({
-    s: { r: 0, c: 0 },
-    e: { r: Math.max(0, maxRow), c: Math.max(0, maxCol) },
-  });
-
-  return ws;
-}
-
   const handleSheetSwitch = (sheet: string) => {
     if (!workbook) return;
-    // Persist edits on the outgoing active worksheet via targeted cell encoding
-    if (activeSheet && rawData.length > 0) {
+    // Persist edits on the outgoing active worksheet ONLY if user actually edited the sheet
+    if (hasUserEdits && activeSheet && rawData.length > 0) {
       workbook.Sheets[activeSheet] = syncDataToWorksheet(workbook.Sheets[activeSheet], rawData);
     }
     setActiveSheet(sheet);
@@ -173,9 +179,15 @@ function syncDataToWorksheet(ws: XLSX.WorkSheet | undefined, data: any[][]): XLS
     const curSheet = workbook?.Sheets[activeSheet];
     if (curSheet && sheetHasFormulas(curSheet)) {
       const ok = window.confirm(
-        "Warning: This worksheet contains Excel formulas. Deleting rows can corrupt formula references (e.g. #REF!). Do you want to proceed?"
+        "Warning: This worksheet contains Excel formulas. Deleting rows can corrupt formula references (e.g. #REF!). Do you want to proceed and convert formulas to values?"
       );
       if (!ok) return;
+      const cellKeys = Object.keys(curSheet).filter((k) => !k.startsWith("!"));
+      for (const k of cellKeys) {
+        if (curSheet[k]?.f) {
+          delete curSheet[k].f;
+        }
+      }
     }
     const header = rawData[0];
     const rows = rawData.slice(1);
@@ -193,6 +205,9 @@ function syncDataToWorksheet(ws: XLSX.WorkSheet | undefined, data: any[][]): XLS
     const cleaned = [header, ...uniqueRows];
     setRawData(cleaned);
     setHasUserEdits(true);
+    if (curSheet) {
+      workbook!.Sheets[activeSheet] = syncDataToWorksheet(curSheet, cleaned);
+    }
     const removedCount = rows.length - uniqueRows.length;
     alert(`Removed ${removedCount} duplicate ${removedCount === 1 ? "row" : "rows"}.`);
   };
@@ -210,15 +225,24 @@ function syncDataToWorksheet(ws: XLSX.WorkSheet | undefined, data: any[][]): XLS
     const curSheet = workbook?.Sheets[activeSheet];
     if (curSheet && sheetHasFormulas(curSheet)) {
       const ok = window.confirm(
-        "Warning: This worksheet contains Excel formulas. Removing blank rows can corrupt formula ranges. Do you want to proceed?"
+        "Warning: This worksheet contains Excel formulas. Removing blank rows can corrupt formula ranges. Do you want to proceed and convert formulas to values?"
       );
       if (!ok) return;
+      const cellKeys = Object.keys(curSheet).filter((k) => !k.startsWith("!"));
+      for (const k of cellKeys) {
+        if (curSheet[k]?.f) {
+          delete curSheet[k].f;
+        }
+      }
     }
     const cleaned = rawData.filter((row) =>
       row.some((cell) => cell !== null && cell !== undefined && String(cell).trim() !== "")
     );
     setRawData(cleaned);
     setHasUserEdits(true);
+    if (curSheet) {
+      workbook!.Sheets[activeSheet] = syncDataToWorksheet(curSheet, cleaned);
+    }
   };
 
   // Filtered rows for viewing

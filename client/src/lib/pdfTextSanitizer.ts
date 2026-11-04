@@ -50,3 +50,48 @@ export function sanitizeWinAnsiText(str: string | null | undefined): string {
   // Retain only valid ASCII characters (0x20 through 0x7E, plus tab and newline) to prevent WinAnsi throw
   return unaccented.replace(/[^\x20-\x7E\t\n]/g, " ");
 }
+
+/**
+ * Detects characters in a string that cannot be mapped to WinAnsi standard PDF fonts.
+ * Detects non-Latin scripts (Devanagari/Hindi, CJK, Arabic, etc.) and unmapped symbols.
+ */
+export function detectUnsupportedWinAnsi(str: string | null | undefined): string[] {
+  if (!str) return [];
+  const unsupported = new Set<string>();
+
+  // Check original characters: if normalizing and stripping combining marks leaves non-ASCII
+  // outside the standard mapped symbols
+  for (const char of str) {
+    if (char === "\n" || char === "\r" || char === "\t") continue;
+    const code = char.charCodeAt(0);
+    // Standard ASCII printable
+    if (code >= 0x20 && code <= 0x7e) continue;
+
+    // Check if it is a handled accent or symbol
+    const sanitized = sanitizeWinAnsiText(char).trim();
+    if (sanitized.length === 0) {
+      unsupported.add(char);
+    }
+  }
+
+  return Array.from(unsupported);
+}
+
+export interface SanitizationAuditResult {
+  sanitized: string;
+  hasUnsupported: boolean;
+  unsupportedCharacters: string[];
+}
+
+export function sanitizeWinAnsiTextWithAudit(str: string | null | undefined): SanitizationAuditResult {
+  if (!str) {
+    return { sanitized: "", hasUnsupported: false, unsupportedCharacters: [] };
+  }
+  const unsupported = detectUnsupportedWinAnsi(str);
+  const sanitized = sanitizeWinAnsiText(str);
+  return {
+    sanitized,
+    hasUnsupported: unsupported.length > 0,
+    unsupportedCharacters: unsupported,
+  };
+}
