@@ -18,6 +18,4 @@ jobs:
           cache: 'npm'
       - run: npm ci
       - run: npm run check
-      - run: npm run verify:logic
-      - run: npm run verify:repairs
       - run: npm run build

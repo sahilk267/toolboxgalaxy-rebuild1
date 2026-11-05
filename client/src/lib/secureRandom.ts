@@ -65,26 +65,55 @@ export function generateUniqueRandomInts(
   return Array.from(set);
 }
 
+export function generateRandomDecimals(
+  min: number,
+  max: number,
+  count: number,
+  precision: number,
+  unique: boolean = false
+): number[] {
+  if (count <= 0) return [];
+  if (!Number.isFinite(min) || !Number.isFinite(max)) {
+    throw new Error("Invalid decimal bounds.");
+  }
+  if (!Number.isInteger(precision) || precision < 0 || precision > 10) {
+    throw new Error("Precision must be an integer between 0 and 10.");
+  }
+  const lower = Math.min(min, max);
+  const upper = Math.max(min, max);
+  const factor = 10 ** precision;
+
+  const minStep = Math.ceil(lower * factor - 1e-9);
+  const maxStep = Math.floor(upper * factor + 1e-9);
+
+  if (
+    !Number.isSafeInteger(minStep) ||
+    !Number.isSafeInteger(maxStep) ||
+    minStep > maxStep
+  ) {
+    throw new Error("No valid values exist at this precision.");
+  }
+
+  const totalDomain = maxStep - minStep + 1;
+  if (unique && count > totalDomain) {
+    throw new Error(
+      `Requested ${count} unique decimals, but only ${totalDomain} discrete values exist at precision ${precision}.`
+    );
+  }
+
+  const steps = unique
+    ? generateUniqueRandomInts(minStep, maxStep, count)
+    : Array.from({ length: count }, () => secureRandomInt(minStep, maxStep));
+
+  return steps.map((n) => Number((n / factor).toFixed(precision)));
+}
+
 export function generateUniqueDecimals(
   min: number,
   max: number,
   count: number,
   precision: number
 ): number[] {
-  if (count <= 0) return [];
-  const lower = Math.min(min, max);
-  const upper = Math.max(min, max);
-  const factor = Math.pow(10, precision);
-  const minSteps = Math.round(lower * factor);
-  const maxSteps = Math.round(upper * factor);
-  const totalDomain = maxSteps - minSteps + 1;
-
-  if (count > totalDomain) {
-    throw new Error(
-      `Requested ${count} unique decimals, but only ${totalDomain} discrete values exist at precision ${precision}.`
-    );
-  }
-
-  const uniqueInts = generateUniqueRandomInts(minSteps, maxSteps, count);
-  return uniqueInts.map((n) => Number((n / factor).toFixed(precision)));
+  return generateRandomDecimals(min, max, count, precision, true);
 }
+

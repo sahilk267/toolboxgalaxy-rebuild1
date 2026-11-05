@@ -172,7 +172,7 @@ export function initAnalytics(): void {
 /**
  * Blocklist of property keys that could contain personally identifiable information (PII).
  */
-const PII_KEY_REGEX = /^(email|user|username|name|token|key|password|secret|auth|phone|ip|address|ssn|content|text|input|raw|prompt|query|href|url)$/i;
+const PII_KEY_REGEX = /^(email|user|username|name|token|key|password|secret|auth|phone|ip|address|ssn|content|text|input|raw|prompt|query|search_term|href|url)$/i;
 
 const EMAIL_PATTERN = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/;
 const JWT_PATTERN = /ey[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}/;
@@ -268,7 +268,9 @@ export function trackPageView(
   const rawPath = path || (window.location && window.location.pathname ? window.location.pathname : "/");
   // Ensure query strings and hashes containing user names or referral tokens are stripped
   const pagePath = rawPath.split(/[?#]/)[0] || "/";
-  const pageTitle = title || (typeof document !== "undefined" && document.title ? document.title : "Toolbox Galaxy");
+  const rawTitle = title || (typeof document !== "undefined" && document.title ? document.title : "Toolbox Galaxy");
+  // Strip any referral recipient or sender names embedded dynamically in title
+  const pageTitle = rawTitle.replace(/^[^\w\s]*[\w\s.-]+ thinks you'll find this useful:\s*/i, "").replace(/[?&]by=[^&]+/i, "");
 
   try {
     if (typeof window.gtag === "function") {

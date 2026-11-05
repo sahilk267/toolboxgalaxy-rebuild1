@@ -42,7 +42,7 @@ export default function Tools() {
 
     const timer = setTimeout(() => {
       trackEvent("search", {
-        search_term: trimmed,
+        query_length: trimmed.length,
         category: activeCategory,
         results_count: visibleTools.length,
         has_results: visibleTools.length > 0,

@@ -1,4 +1,5 @@
 import { useState, useMemo } from "react";
+import { toast } from "sonner";
 import * as XLSX from "xlsx";
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
 import { sanitizeWinAnsiText } from "../lib/pdfTextSanitizer";
@@ -81,6 +82,33 @@ export function syncDataToWorksheet(ws: XLSX.WorkSheet | undefined, data: any[][
   return ws;
 }
 
+/**
+ * Detects if a workbook contains formulas in any worksheet
+ */
+export function workbookHasFormulas(wb?: XLSX.WorkBook | null): boolean {
+  if (!wb || !wb.SheetNames) return false;
+  return wb.SheetNames.some((name) => {
+    const ws = wb.Sheets[name];
+    if (!ws) return false;
+    return Object.keys(ws).some((key) => !key.startsWith("!") && Boolean(ws[key]?.f));
+  });
+}
+
+/**
+ * Creates a values-only duplicate of a workbook preserving layout without formula references
+ */
+export function createValuesOnlyWorkbook(wb: XLSX.WorkBook): XLSX.WorkBook {
+  const newWb = XLSX.utils.book_new();
+  for (const name of wb.SheetNames) {
+    const ws = wb.Sheets[name];
+    if (!ws) continue;
+    const aoa = XLSX.utils.sheet_to_json<any[]>(ws, { header: 1 });
+    const cleanWs = XLSX.utils.aoa_to_sheet(aoa);
+    XLSX.utils.book_append_sheet(newWb, cleanWs, name);
+  }
+  return newWb;
+}
+
 export default function ExcelStudioTool() {
   const [workbook, setWorkbook] = useState<XLSX.WorkBook | null>(null);
   const [sheetNames, setSheetNames] = useState<string[]>([]);
@@ -90,6 +118,7 @@ export default function ExcelStudioTool() {
   const [searchTerm, setSearchTerm] = useState<string>("");
   const [copied, setCopied] = useState<string | null>(null);
   const [hasUserEdits, setHasUserEdits] = useState<boolean>(false);
+  const [editedSheets, setEditedSheets] = useState<Set<string>>(new Set());
   const [originalRawBytes, setOriginalRawBytes] = useState<Uint8Array | null>(null);
 
   // Load sample dataset
@@ -150,7 +179,7 @@ export default function ExcelStudioTool() {
         setOriginalRawBytes(bytes);
         setHasUserEdits(false);
       } catch (err) {
-        alert("Failed to parse Excel/CSV file. Please check file format.");
+        toast.error("Failed to parse Excel/CSV file. Please check file format.");
       }
     };
     reader.readAsArrayBuffer(file);
@@ -158,8 +187,8 @@ export default function ExcelStudioTool() {
 
   const handleSheetSwitch = (sheet: string) => {
     if (!workbook) return;
-    // Persist edits on the outgoing active worksheet ONLY if user actually edited the sheet
-    if (hasUserEdits && activeSheet && rawData.length > 0) {
+    // Persist edits on the outgoing active worksheet ONLY if user actually edited that sheet
+    if (editedSheets.has(activeSheet) && activeSheet && rawData.length > 0) {
       workbook.Sheets[activeSheet] = syncDataToWorksheet(workbook.Sheets[activeSheet], rawData);
     }
     setActiveSheet(sheet);
@@ -168,26 +197,14 @@ export default function ExcelStudioTool() {
     setRawData(sheetData);
   };
 
-  const sheetHasFormulas = (ws?: XLSX.WorkSheet): boolean => {
-    if (!ws) return false;
-    return Object.keys(ws).some((key) => !key.startsWith("!") && Boolean(ws[key]?.f));
-  };
-
   // Cleaning Actions
   const removeDuplicateRows = () => {
     if (rawData.length <= 1) return;
-    const curSheet = workbook?.Sheets[activeSheet];
-    if (curSheet && sheetHasFormulas(curSheet)) {
-      const ok = window.confirm(
-        "Warning: This worksheet contains Excel formulas. Deleting rows can corrupt formula references (e.g. #REF!). Do you want to proceed and convert formulas to values?"
+    if (workbook && workbookHasFormulas(workbook)) {
+      toast.error(
+        "Structural deduplication is blocked on workbooks with active Excel formulas to prevent formula reference corruption (#REF!). Please use plain-data worksheets or export as values-only."
       );
-      if (!ok) return;
-      const cellKeys = Object.keys(curSheet).filter((k) => !k.startsWith("!"));
-      for (const k of cellKeys) {
-        if (curSheet[k]?.f) {
-          delete curSheet[k].f;
-        }
-      }
+      return;
     }
     const header = rawData[0];
     const rows = rawData.slice(1);
@@ -205,11 +222,13 @@ export default function ExcelStudioTool() {
     const cleaned = [header, ...uniqueRows];
     setRawData(cleaned);
     setHasUserEdits(true);
+    setEditedSheets((prev) => new Set(prev).add(activeSheet));
+    const curSheet = workbook?.Sheets[activeSheet];
     if (curSheet) {
       workbook!.Sheets[activeSheet] = syncDataToWorksheet(curSheet, cleaned);
     }
     const removedCount = rows.length - uniqueRows.length;
-    alert(`Removed ${removedCount} duplicate ${removedCount === 1 ? "row" : "rows"}.`);
+    toast.success(`Removed ${removedCount} duplicate ${removedCount === 1 ? "row" : "rows"}.`);
   };
 
   const trimAllSpaces = () => {
@@ -218,28 +237,24 @@ export default function ExcelStudioTool() {
     );
     setRawData(cleaned);
     setHasUserEdits(true);
-    alert("Trimmed extra spaces from all cells.");
+    setEditedSheets((prev) => new Set(prev).add(activeSheet));
+    toast.success("Trimmed extra spaces from all cells.");
   };
 
   const removeEmptyRows = () => {
-    const curSheet = workbook?.Sheets[activeSheet];
-    if (curSheet && sheetHasFormulas(curSheet)) {
-      const ok = window.confirm(
-        "Warning: This worksheet contains Excel formulas. Removing blank rows can corrupt formula ranges. Do you want to proceed and convert formulas to values?"
+    if (workbook && workbookHasFormulas(workbook)) {
+      toast.error(
+        "Removing blank rows is blocked on workbooks with active Excel formulas to preserve formula coordinate ranges. Please use plain-data worksheets or export as values-only."
       );
-      if (!ok) return;
-      const cellKeys = Object.keys(curSheet).filter((k) => !k.startsWith("!"));
-      for (const k of cellKeys) {
-        if (curSheet[k]?.f) {
-          delete curSheet[k].f;
-        }
-      }
+      return;
     }
     const cleaned = rawData.filter((row) =>
       row.some((cell) => cell !== null && cell !== undefined && String(cell).trim() !== "")
     );
     setRawData(cleaned);
     setHasUserEdits(true);
+    setEditedSheets((prev) => new Set(prev).add(activeSheet));
+    const curSheet = workbook?.Sheets[activeSheet];
     if (curSheet) {
       workbook!.Sheets[activeSheet] = syncDataToWorksheet(curSheet, cleaned);
     }
@@ -278,9 +293,11 @@ export default function ExcelStudioTool() {
 
       let wbToExport = workbook;
       if (wbToExport && wbToExport.SheetNames.length > 0) {
-        // Save current sheet changes preserving formulas and metadata
-        const targetSheet = activeSheet || wbToExport.SheetNames[0];
-        wbToExport.Sheets[targetSheet] = syncDataToWorksheet(wbToExport.Sheets[targetSheet], rawData);
+        // Save current sheet changes preserving formulas only if activeSheet was actually edited
+        if (editedSheets.has(activeSheet)) {
+          const targetSheet = activeSheet || wbToExport.SheetNames[0];
+          wbToExport.Sheets[targetSheet] = syncDataToWorksheet(wbToExport.Sheets[targetSheet], rawData);
+        }
       } else {
         wbToExport = XLSX.utils.book_new();
         const ws = syncDataToWorksheet(undefined, rawData);
@@ -289,7 +306,18 @@ export default function ExcelStudioTool() {
       XLSX.writeFile(wbToExport, fileName.replace(/\.[^/.]+$/, "") + "_cleaned.xlsx");
     } catch (err) {
       console.error("Failed to export Excel file:", err);
-      alert("Unable to generate Excel export. The sheet may be too large or contain invalid cell formats.");
+      toast.error("Unable to generate Excel export. The sheet may be too large or contain invalid cell formats.");
+    }
+  };
+
+  const exportToExcelValuesOnly = () => {
+    try {
+      if (!workbook) return;
+      const valuesOnlyWb = createValuesOnlyWorkbook(workbook);
+      XLSX.writeFile(valuesOnlyWb, fileName.replace(/\.[^/.]+$/, "") + "_values_only.xlsx");
+    } catch (err) {
+      console.error("Failed to export values-only Excel:", err);
+      toast.error("Unable to generate values-only export.");
     }
   };
 
@@ -308,7 +336,7 @@ export default function ExcelStudioTool() {
       URL.revokeObjectURL(url);
     } catch (err) {
       console.error("Failed to export CSV file:", err);
-      alert("Unable to generate CSV export. Please try again.");
+      toast.error("Unable to generate CSV export. Please try again.");
     }
   };
 
@@ -337,7 +365,7 @@ export default function ExcelStudioTool() {
       URL.revokeObjectURL(url);
     } catch (err) {
       console.error("Failed to export JSON:", err);
-      alert("Unable to export JSON data. Please try again.");
+      toast.error("Unable to export JSON data. Please try again.");
     }
   };
 
@@ -458,7 +486,7 @@ export default function ExcelStudioTool() {
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
     } catch (err) {
-      alert("Failed to export PDF Table: " + (err instanceof Error ? err.message : "Error"));
+      toast.error("Failed to export PDF Table: " + (err instanceof Error ? err.message : "Error"));
     }
   };
 
@@ -626,13 +654,22 @@ export default function ExcelStudioTool() {
             </div>
 
             {/* Download dropdown / buttons */}
-            <div className="flex gap-2">
+            <div className="flex flex-wrap gap-2">
               <button
                 onClick={exportToExcel}
-                className="flex-1 flex items-center justify-center gap-1 rounded-lg bg-[#c7f36b] py-1.5 text-xs font-semibold text-[#0b1020] hover:bg-[#b8eb55]"
+                className="flex-1 min-w-[70px] flex items-center justify-center gap-1 rounded-lg bg-[#c7f36b] py-1.5 text-xs font-semibold text-[#0b1020] hover:bg-[#b8eb55]"
               >
                 <Download size={13} /> .xlsx
               </button>
+              {workbookHasFormulas(workbook) && (
+                <button
+                  onClick={exportToExcelValuesOnly}
+                  className="flex-1 min-w-[110px] flex items-center justify-center gap-1 rounded-lg border border-purple-400/40 bg-purple-500/10 py-1.5 text-xs font-semibold text-purple-300 hover:bg-purple-500/20"
+                  title="Export clean values-only workbook without formula dependencies"
+                >
+                  <Download size={13} /> .xlsx (Values Only)
+                </button>
+              )}
               <button
                 onClick={exportToCsv}
                 className="flex-1 flex items-center justify-center gap-1 rounded-lg border border-white/20 bg-white/10 py-1.5 text-xs text-white hover:bg-white/20"

@@ -45,7 +45,7 @@ export function registerBrowserTools(): void {
   // 1. Tool: search_tools
   nav.modelContext.registerTool({
     name: "search_tools",
-    description: "Search 120+ privacy-first in-browser developer utilities and daily logic puzzles by query or category.",
+    description: "Search 61 privacy-first in-browser developer utilities and daily logic puzzles by query or category.",
     inputSchema: {
       type: "object",
       properties: {

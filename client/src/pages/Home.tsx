@@ -51,7 +51,7 @@ export default function Home() {
           method="GET"
           role="search"
           data-toolname="search_toolbox"
-          {...{ toolname: "search_toolbox", tooldescription: "Search through 120+ privacy-first in-browser developer utilities and daily logic puzzles on Toolbox Galaxy" }}
+          {...{ toolname: "search_toolbox", tooldescription: "Search through 61 privacy-first in-browser developer utilities and daily logic puzzles on Toolbox Galaxy" }}
           className="mt-6 flex max-w-lg items-center gap-2 rounded-xl border border-white/15 bg-white/5 p-1.5 focus-within:border-[#6fd5ff]/60 transition-all"
         >
           <Search size={18} className="ml-2.5 text-white/50 shrink-0" />
@@ -59,7 +59,7 @@ export default function Home() {
             type="search"
             name="q"
             aria-label="Search tools and games"
-            placeholder="Search 120+ offline tools (PDF, JSON, Regex, Wordle)..."
+            placeholder="Search 61 offline tools (PDF, JSON, Regex, Wordle)..."
             className="w-full bg-transparent px-2 py-1.5 text-sm text-white placeholder-white/40 outline-none"
           />
           <button
@@ -154,7 +154,7 @@ export default function Home() {
             <span className="text-xs font-mono px-2 py-0.5 rounded bg-[#c7f36b]/15 text-[#c7f36b] border border-[#c7f36b]/30">Verified Local Workbench</span>
           </div>
           <p className="text-sm text-white/70 max-w-md leading-relaxed mb-4">
-            A 100% client-side workbench providing private PDF tools, 120+ developer utilities, and daily logic puzzles. Everything executes directly in your browser memory with zero cloud file storage.
+            A 100% client-side workbench providing private PDF tools, 61 developer utilities, and daily logic puzzles. Everything executes directly in your browser memory with zero cloud file storage.
           </p>
           <div className="text-xs text-white/60 space-y-1">
             <p>Developed &amp; Maintained by <strong className="text-white">Aaditech Solution</strong></p>

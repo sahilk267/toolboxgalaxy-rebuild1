@@ -4,8 +4,8 @@
  */
 
 import * as XLSX from "xlsx";
-import { syncDataToWorksheet } from "../client/src/components/ExcelStudioTool";
-import { secureRandomInt, generateUniqueRandomInts, generateUniqueDecimals } from "../client/src/lib/secureRandom";
+import { syncDataToWorksheet, workbookHasFormulas, createValuesOnlyWorkbook } from "../client/src/components/ExcelStudioTool";
+import { secureRandomInt, generateUniqueRandomInts, generateUniqueDecimals, generateRandomDecimals } from "../client/src/lib/secureRandom";
 import { formatLocalDate, calendarDaysDifference, ageParts } from "../client/src/components/AdvancedToolRunners";
 import { countWordsUnicode } from "../client/src/pages/ToolWorkspace";
 import { tableToRawCsv, tableToSpreadsheetCsv } from "../client/src/lib/structuredDataEngines";
@@ -77,12 +77,35 @@ console.log("\n[P0-01] Testing Excel Structural Row Deletion & Stale Cell Prunin
   const reopenedRows = XLSX.utils.sheet_to_json<any[]>(reopenedWb.Sheets["Sheet1"], { header: 1 });
   assert(reopenedRows.length === 4, `Reopened XLSX has exactly 4 rows (expected 4, found: ${reopenedRows.length})`);
   assert(reopenedRows[3][0] === "C" && reopenedRows[3][1] === 300, "Reopened XLSX last row is ['C', 300]");
+
+  // Formula workbook safety and detection tests
+  const formulaWb = XLSX.utils.book_new();
+  const salesWs = XLSX.utils.aoa_to_sheet([["Item", "Price"], ["A", 10], ["B", 20]]);
+  salesWs["B4"] = { t: "n", f: "SUM(B2:B3)", v: 30 };
+  salesWs["!ref"] = "A1:B4";
+  XLSX.utils.book_append_sheet(formulaWb, salesWs, "Sales");
+
+  const summaryWs = XLSX.utils.aoa_to_sheet([["Total", 30]]);
+  summaryWs["B1"] = { t: "n", f: "Sales!B4", v: 30 };
+  XLSX.utils.book_append_sheet(formulaWb, summaryWs, "Summary");
+
+  assert(workbookHasFormulas(formulaWb), "workbookHasFormulas correctly detects formulas in multi-sheet workbook");
+
+  const plainWb = XLSX.utils.book_new();
+  const plainWs = XLSX.utils.aoa_to_sheet([["Name", "Age"], ["John", 30]]);
+  XLSX.utils.book_append_sheet(plainWb, plainWs, "Data");
+  assert(!workbookHasFormulas(plainWb), "workbookHasFormulas returns false for plain data workbook");
+
+  const valuesOnlyWb = createValuesOnlyWorkbook(formulaWb);
+  assert(!workbookHasFormulas(valuesOnlyWb), "createValuesOnlyWorkbook strips formulas for safe static export");
+  assert(valuesOnlyWb.Sheets["Sales"]["B4"].v === 30, "createValuesOnlyWorkbook preserves cell value 30");
+  assert(Boolean(formulaWb.Sheets["Sales"]["B4"].f), "Original formula workbook remains 100% intact with formulas");
 }
 
 // -------------------------------------------------------------
 // P0-02: Cryptographically Secure RNG & Rejection Sampling
 // -------------------------------------------------------------
-console.log("\n[P0-02] Testing Cryptographically Secure RNG (secureRandom.ts)...");
+console.log("\n[P0-02 / Section D] Testing Cryptographically Secure RNG (secureRandom.ts)...");
 {
   // 1. [0, 0] -> 0
   assert(secureRandomInt(0, 0) === 0, "secureRandomInt(0, 0) returns 0");
@@ -136,7 +159,25 @@ console.log("\n[P0-02] Testing Cryptographically Secure RNG (secureRandom.ts)...
   const uniqueArr = generateUniqueRandomInts(1, 10, 5);
   assert(new Set(uniqueArr).size === 5, "generateUniqueRandomInts generates strictly unique integers");
 
-  // 7. Unique decimals domain validation
+  // 7. Section D: Decimal Grid Boundaries & Precision Tolerances
+  // 1.234 to 1.245, precision 2 => only 1.24
+  const decSample = generateRandomDecimals(1.234, 1.245, 1, 2);
+  assert(decSample[0] === 1.24, `generateRandomDecimals(1.234, 1.245, precision: 2) = 1.24 (got: ${decSample[0]})`);
+
+  // 1.001 to 1.009, precision 2 => no valid value
+  let threwNoDecValues = false;
+  try {
+    generateRandomDecimals(1.001, 1.009, 1, 2);
+  } catch {
+    threwNoDecValues = true;
+  }
+  assert(threwNoDecValues, "generateRandomDecimals(1.001, 1.009, precision: 2) throws validation error");
+
+  // 0 to 0, precision 0 => 0
+  const zeroDec = generateRandomDecimals(0, 0, 1, 0);
+  assert(zeroDec[0] === 0, "generateRandomDecimals(0, 0, precision: 0) = 0");
+
+  // Unique decimals domain validation
   let threwDecimals = false;
   try {
     generateUniqueDecimals(0, 1, 5, 0); // only 2 discrete values (0, 1)
@@ -391,6 +432,102 @@ console.log("\n[P1-05] Testing PPTX Text Layout & Continuation Slides (pdfExtrac
   assert(allSlideXml.includes("Marker 6:"), "PPTX slide XML contains long line Marker 6");
   assert(allSlideXml.includes("Marker 20:"), "PPTX slide XML contains Marker 20");
   assert(allSlideXml.includes("Marker 40:"), "PPTX slide XML contains Marker 40");
+}
+
+// -------------------------------------------------------------
+// TASK M: Analytics Privacy & PII Filter (ISS-044)
+// -------------------------------------------------------------
+console.log("\n[TASK M] Verifying Analytics Privacy & PII Sanitization...");
+{
+  const fs = await import("fs");
+  const { sanitizeTelemetryProps } = await import("../client/src/lib/analytics");
+
+  // 1. Verify PII filter drops sensitive keys
+  const testPayload = {
+    search_term: "super confidential query",
+    email: "user@domain.com",
+    token: "jwt.token.here",
+    password: "secretpassword123",
+    query_length: 24,
+    category: "Developer",
+    results_count: 5,
+    has_results: true,
+  };
+  const sanitized = sanitizeTelemetryProps(testPayload);
+  assert(sanitized !== undefined, "Sanitized telemetry object returned");
+  assert(!("search_term" in (sanitized || {})), "search_term is strictly stripped from telemetry");
+  assert(!("email" in (sanitized || {})), "email is strictly stripped");
+  assert(!("token" in (sanitized || {})), "token is strictly stripped");
+  assert(!("password" in (sanitized || {})), "password is strictly stripped");
+  assert(sanitized?.query_length === 24, "Safe numerical metric query_length is preserved");
+  assert(sanitized?.category === "Developer", "Safe category string is preserved");
+  assert(sanitized?.results_count === 5, "Safe results_count is preserved");
+  assert(sanitized?.has_results === true, "Safe has_results boolean is preserved");
+
+  // 2. Verify Tools.tsx does not emit search_term
+  const toolsSource = fs.readFileSync("client/src/pages/Tools.tsx", "utf-8");
+  assert(!toolsSource.includes("search_term:"), "Tools.tsx does not emit raw search_term in telemetry");
+  assert(toolsSource.includes("query_length:"), "Tools.tsx emits privacy-safe query_length");
+
+  // 3. Verify index.html does not contain unconditional GTM noscript iframe
+  const indexHtml = fs.readFileSync("client/index.html", "utf-8");
+  assert(!indexHtml.includes("googletagmanager.com/ns.html"), "index.html has zero unconditional GTM noscript iframe tags");
+}
+
+// -------------------------------------------------------------
+// TASK N: Telegram Relay Gating (ISS-045)
+// -------------------------------------------------------------
+console.log("\n[TASK N] Verifying Telegram Relay Gating & Absence of Deceptive Claims...");
+{
+  const fs = await import("fs");
+  const contactSource = fs.readFileSync("client/src/pages/Contact.tsx", "utf-8");
+  assert(contactSource.includes("isTelegramAlertsConfigured()"), "Contact.tsx gates Telegram notification behind configuration check");
+  assert(contactSource.includes('type: "unconfigured"'), "Contact.tsx explicitly distinguishes unconfigured state from delivery");
+
+  const telegramLib = fs.readFileSync("client/src/lib/telegramAlerts.ts", "utf-8");
+  assert(telegramLib.includes("if (!relayUrl || typeof window === \"undefined\") return false;"), "sendTelegramMessage returns false when unconfigured");
+}
+
+// -------------------------------------------------------------
+// TASK O: Service Worker Cache Allowlist (ISS-046)
+// -------------------------------------------------------------
+console.log("\n[TASK O] Verifying Service Worker Caching Allowlist & Bypass...");
+{
+  const fs = await import("fs");
+  const swSource = fs.readFileSync("client/public/service-worker.js", "utf-8");
+  assert(swSource.includes("isStaticAssetRequest"), "Service worker defines static asset request validator");
+  assert(swSource.includes("STATIC_EXT_REGEX"), "Service worker enforces static file extension allowlist");
+  assert(swSource.includes('/api/'), "Service worker explicitly skips /api/ routes");
+  assert(swSource.includes('/contact/'), "Service worker explicitly skips /contact/ routes");
+  assert(swSource.includes("Authorization"), "Service worker explicitly bypasses caching on authenticated requests");
+  assert(swSource.includes("no-store") && swSource.includes("private"), "Service worker respects Cache-Control no-store and private headers");
+}
+
+// -------------------------------------------------------------
+// TASK P: Accurate 61 Utility Count & MCP Catalog Integrity (ISS-047)
+// -------------------------------------------------------------
+console.log("\n[TASK P] Verifying Accurate 61 Tool Count & MCP Server Card...");
+{
+  const fs = await import("fs");
+  const { tools } = await import("../shared/toolsData");
+  assert(tools.length === 61, `toolsData.ts contains exactly 61 verified tools (actual: ${tools.length})`);
+
+  const indexHtml = fs.readFileSync("client/index.html", "utf-8");
+  assert(!indexHtml.includes("120+"), "index.html does not claim 120+ utilities");
+  assert(indexHtml.includes("61 developer utilities") || indexHtml.includes("61 utilities"), "index.html accurately claims 61 utilities");
+
+  const homeSource = fs.readFileSync("client/src/pages/Home.tsx", "utf-8");
+  assert(!homeSource.includes("120+"), "Home.tsx does not claim 120+ utilities");
+  assert(homeSource.includes("61 offline tools"), "Home.tsx accurately references 61 offline tools");
+
+  const serverCard = JSON.parse(fs.readFileSync("client/public/.well-known/mcp/server-card.json", "utf-8"));
+  assert(serverCard.tools.length >= 4, "MCP server-card.json defines at least 4 registered agent tools");
+  assert(serverCard.tools.some((t: { name: string }) => t.name === "search_tools"), "MCP defines search_tools");
+  assert(!JSON.stringify(serverCard).includes("120+"), "MCP server card does not claim 120+ tools");
+  assert(JSON.stringify(serverCard).includes("61"), "MCP server card references 61 tools");
+
+  const serverIndex = fs.readFileSync("server/index.ts", "utf-8");
+  assert(serverIndex.includes('app.post("/api/mcp"'), "server/index.ts exposes real /api/mcp JSON-RPC endpoint");
 }
 
 console.log(`\n=== RESULTS: ${passedTests}/${totalTests} TESTS PASSED ===\n`);

@@ -1,7 +1,7 @@
 // Orbital Workbench: explicit feedback delivery console with direct LinkedIn connection, same-origin endpoint, and Telegram alert relay.
 import AppShell from "@/components/AppShell";
 import { contactApiConfigured, submitContact } from "@/lib/contactApi";
-import { sendContactNotification } from "@/lib/telegramAlerts";
+import { isTelegramAlertsConfigured, sendContactNotification } from "@/lib/telegramAlerts";
 import { useState } from "react";
 import { Linkedin, Send, MessageSquare, ShieldCheck, Mail, ArrowUpRight, CheckCircle2, AlertCircle, RotateCcw } from "lucide-react";
 
@@ -22,14 +22,16 @@ export default function Contact() {
     setSending(true);
     setStatus(null);
 
-    // Relay notification if server relay is configured
-    sendContactNotification({
-      name: form.name,
-      email: form.email,
-      subject: form.subject,
-      message: form.message,
-      source: contactApiConfigured ? "Hostinger API + Web Form" : "Local Web Form",
-    });
+    // Relay notification only when secure server relay is explicitly configured
+    if (isTelegramAlertsConfigured()) {
+      sendContactNotification({
+        name: form.name,
+        email: form.email,
+        subject: form.subject,
+        message: form.message,
+        source: contactApiConfigured ? "Hostinger API + Web Form" : "Local Web Form",
+      });
+    }
 
     if (!contactApiConfigured) {
       setSending(false);

@@ -4,6 +4,7 @@ import path from "path";
 import fs from "fs";
 import { fileURLToPath } from "url";
 import {
+  tools,
   findToolBySlug,
   findGameBySlug,
   findGuideBySlug,
@@ -258,6 +259,75 @@ async function startServer() {
       endpoint: "https://toolboxgalaxy.com/api/mcp",
       capabilities: { tools: { listChanged: false } }
     });
+  });
+
+  // Goal 15b: MCP JSON-RPC 2.0 Endpoint for AI agent interoperability
+  app.post("/api/mcp", express.json(), (req, res) => {
+    res.setHeader("Content-Type", "application/json; charset=utf-8");
+    res.setHeader("Access-Control-Allow-Origin", "*");
+
+    const { jsonrpc, id, method, params } = req.body || {};
+    if (jsonrpc !== "2.0") {
+      return res.status(400).json({ jsonrpc: "2.0", id: id ?? null, error: { code: -32600, message: "Invalid Request: jsonrpc must be '2.0'" } });
+    }
+
+    if (method === "tools/list") {
+      const cardPath = path.resolve(process.cwd(), "client", "public", ".well-known", "mcp", "server-card.json");
+      try {
+        if (fs.existsSync(cardPath)) {
+          const card = JSON.parse(fs.readFileSync(cardPath, "utf-8"));
+          return res.json({ jsonrpc: "2.0", id, result: { tools: card.tools || [] } });
+        }
+      } catch {}
+      return res.json({ jsonrpc: "2.0", id, result: { tools: [] } });
+    }
+
+    if (method === "tools/call") {
+      const { name, arguments: args = {} } = params || {};
+      if (name === "search_tools") {
+        const q = String(args.query || "").toLowerCase().trim();
+        const matches = tools
+          .filter((t) => t.name.toLowerCase().includes(q) || t.description.toLowerCase().includes(q) || t.tags.some((tag) => tag.toLowerCase().includes(q)))
+          .slice(0, 10)
+          .map((t) => ({ name: t.name, slug: t.slug, category: t.category, url: `https://toolboxgalaxy.com/tools/${t.slug}` }));
+        return res.json({ jsonrpc: "2.0", id, result: { content: [{ type: "text", text: JSON.stringify(matches, null, 2) }] } });
+      }
+
+      if (name === "get_tool_info") {
+        const slug = String(args.slug || "").trim();
+        const tool = findToolBySlug(slug);
+        if (tool) {
+          return res.json({ jsonrpc: "2.0", id, result: { content: [{ type: "text", text: JSON.stringify(tool, null, 2) }] } });
+        }
+        return res.status(404).json({ jsonrpc: "2.0", id, error: { code: -32602, message: `Tool '${slug}' not found` } });
+      }
+
+      if (name === "clean_tracking_url") {
+        try {
+          const parsed = new URL(String(args.url || ""));
+          const stripKeys = ["utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content", "fbclid", "gclid", "msclkid", "mc_eid", "by"];
+          stripKeys.forEach((k) => parsed.searchParams.delete(k));
+          return res.json({ jsonrpc: "2.0", id, result: { content: [{ type: "text", text: parsed.toString() }] } });
+        } catch {
+          return res.status(400).json({ jsonrpc: "2.0", id, error: { code: -32602, message: "Invalid URL provided" } });
+        }
+      }
+
+      if (name === "format_json") {
+        try {
+          const obj = JSON.parse(String(args.input || ""));
+          const indent = typeof args.indent === "number" ? args.indent : 2;
+          return res.json({ jsonrpc: "2.0", id, result: { content: [{ type: "text", text: JSON.stringify(obj, null, indent) }] } });
+        } catch (err: unknown) {
+          const msg = err instanceof Error ? err.message : "Invalid JSON";
+          return res.json({ jsonrpc: "2.0", id, result: { isError: true, content: [{ type: "text", text: `JSON Parse Error: ${msg}` }] } });
+        }
+      }
+
+      return res.status(404).json({ jsonrpc: "2.0", id, error: { code: -32601, message: `Tool '${name}' not found` } });
+    }
+
+    return res.status(404).json({ jsonrpc: "2.0", id, error: { code: -32601, message: `Method '${method}' not found` } });
   });
 
   // Goal 12: Markdown representation generator for AI agents

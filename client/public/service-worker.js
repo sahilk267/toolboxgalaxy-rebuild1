@@ -1,6 +1,16 @@
 /* Toolbox Galaxy static PWA cache: app shell first, same-origin runtime assets opportunistically. */
-const CACHE_NAME = "toolbox-galaxy-static-v4";
+const CACHE_NAME = "toolbox-galaxy-static-v5";
 const APP_SHELL = ["/", "/offline.html", "/manifest.webmanifest", "/pdf.worker.min.js"];
+
+// Static asset extension allowlist (prevent caching dynamic endpoints, APIs, or user data)
+const STATIC_EXT_REGEX = /\.(?:js|mjs|css|png|jpg|jpeg|svg|webp|ico|woff2|woff|wasm|webmanifest)$/i;
+
+function isStaticAssetRequest(url) {
+  if (url.pathname.startsWith("/api/") || url.pathname.startsWith("/contact/")) {
+    return false;
+  }
+  return STATIC_EXT_REGEX.test(url.pathname) || APP_SHELL.includes(url.pathname);
+}
 
 self.addEventListener("install", (event) => {
   event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.addAll(APP_SHELL)));
@@ -17,16 +27,44 @@ self.addEventListener("activate", (event) => {
 self.addEventListener("fetch", (event) => {
   const request = event.request;
   const url = new URL(request.url);
+
+  // Strictly skip non-GET, cross-origin, and private/API endpoints
   if (request.method !== "GET" || url.origin !== self.location.origin) return;
+  if (url.pathname.startsWith("/api/") || url.pathname.startsWith("/contact/")) return;
+
+  // Bypass cache if request contains Authorization or cookie header
+  if (request.headers.get("Authorization") || request.headers.get("Cookie")) return;
+
   if (request.mode === "navigate") {
-    event.respondWith(fetch(request).then((response) => { const copy = response.clone(); caches.open(CACHE_NAME).then((cache) => cache.put(request, copy)); return response; }).catch(async () => (await caches.match(request)) || (await caches.match("/")) || (await caches.match("/offline.html"))));
+    event.respondWith(
+      fetch(request)
+        .then((response) => {
+          const copy = response.clone();
+          caches.open(CACHE_NAME).then((cache) => cache.put(request, copy));
+          return response;
+        })
+        .catch(async () => (await caches.match(request)) || (await caches.match("/")) || (await caches.match("/offline.html")))
+    );
     return;
   }
+
+  // Only intercept static assets that match the allowlist
+  if (!isStaticAssetRequest(url)) {
+    return;
+  }
+
   event.respondWith(
     caches.match(request).then((cached) => {
       if (cached) return cached;
       return fetch(request).then((response) => {
         if (!response || response.status !== 200) return response;
+
+        // Skip responses with Cache-Control no-store or private
+        const cacheControl = response.headers.get("Cache-Control") || "";
+        if (cacheControl.includes("no-store") || cacheControl.includes("private")) {
+          return response;
+        }
+
         // If Hostinger served a worker script with text/plain, wrap it with standard application/javascript
         if (url.pathname.endsWith("/pdf.worker.min.js") || url.pathname.endsWith("/pdf.worker.min.mjs")) {
           const jsHeaders = new Headers(response.headers);
@@ -40,6 +78,7 @@ self.addEventListener("fetch", (event) => {
           caches.open(CACHE_NAME).then((cache) => cache.put(request, copy));
           return corrected;
         }
+
         const copy = response.clone();
         caches.open(CACHE_NAME).then((cache) => cache.put(request, copy));
         return response;

@@ -21,7 +21,7 @@ import {
   ShieldCheck,
   AlertCircle
 } from "lucide-react";
-import { secureRandomInt, generateUniqueRandomInts, generateUniqueDecimals } from "@/lib/secureRandom";
+import { secureRandomInt, generateUniqueRandomInts, generateUniqueDecimals, generateRandomDecimals } from "@/lib/secureRandom";
 
 // ==========================================
 // 1. LOREM IPSUM GENERATOR
@@ -302,25 +302,7 @@ export function RandomNumberTool() {
         if (sortOrder === "desc") arr.sort((a, b) => b - a);
         setResults(arr);
       } else {
-        const factor = Math.pow(10, precision);
-        const totalDomain = Math.round((upper - lower) * factor) + 1;
-        if (!allowDuplicates && count > totalDomain) {
-          setError(
-            `Requested ${count} unique decimals, but only ${totalDomain} discrete values exist at precision ${precision}.`
-          );
-          return;
-        }
-        let arr: number[];
-        if (!allowDuplicates) {
-          arr = generateUniqueDecimals(lower, upper, count, precision);
-        } else {
-          arr = Array.from({ length: count }, () => {
-            const buf = new Uint32Array(1);
-            crypto.getRandomValues(buf);
-            const val = lower + (buf[0] / 0x100000000) * (upper - lower);
-            return Number(val.toFixed(precision));
-          });
-        }
+        const arr = generateRandomDecimals(lower, upper, count, precision, !allowDuplicates);
         if (sortOrder === "asc") arr.sort((a, b) => a - b);
         if (sortOrder === "desc") arr.sort((a, b) => b - a);
         setResults(arr);
