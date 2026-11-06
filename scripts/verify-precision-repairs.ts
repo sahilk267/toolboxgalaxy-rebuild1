@@ -25,6 +25,7 @@ import { parsePageRange, applyBatesStamping } from "../client/src/lib/enterprise
 import { assertCanvasImageEncoding } from "../client/src/lib/imageExportValidation";
 import { imagesPdfFileError, imagesPdfDimensionError, imagesPdfPlacement } from "../client/src/lib/imagesToPdfLayout";
 import { KRUNKER_MATCH_DURATION_SECONDS, freshKrunkerMatchStats, resetKrunkerBotForMatch } from "../client/src/game/krunker/matchReset";
+import { rayAabbDistance } from "../client/src/game/krunker/rayAabb";
 import type { BotEntity } from "../client/src/game/krunker/types";
 import * as THREE from "three";
 import { StandardFonts } from "pdf-lib";
@@ -812,6 +813,48 @@ console.log("\n[TOOLS/GAMES] Verifying image output formats, PDF geometry and Kr
   assert(mockBot.position.x === 10 && mockBot.position.z === 20 && mockBot.velocity.length() === 0, "Krunker replay restores spawn position and clears velocity");
   assert(mockBot.kills === 0 && mockBot.deaths === 0 && mockBot.score === 0, "Krunker replay clears bot scoreboard");
   assert(mockBot.targetId === null && mockBot.state === "patrol" && mockBot.respawnTimer === 0, "Krunker replay clears combat AI state");
+}
+
+
+// -------------------------------------------------------------
+// GAME QA BATCH 7: actual Krunker hitscan collision geometry
+// -------------------------------------------------------------
+console.log("\n[GAMES] Verifying Krunker ray-box hits across collision edge cases...");
+{
+  const boxMin = { x: 5, y: -1, z: -1 };
+  const boxMax = { x: 6, y: 1, z: 1 };
+  const ray = (origin: { x: number; y: number; z: number },
+               direction: { x: number; y: number; z: number }) =>
+    rayAabbDistance(origin, direction, boxMin, boxMax);
+
+  assert(ray({ x: 0, y: 0, z: 0 }, { x: 1, y: 0, z: 0 }) === 5,
+    "Krunker hits the nearest wall at correct ray distance");
+  assert(ray({ x: 0, y: 2, z: 0 }, { x: 1, y: 0, z: 0 }) === null,
+    "Krunker parallel ray outside box does not hit");
+  assert(ray({ x: 5.5, y: 0, z: 0 }, { x: 1, y: 0, z: 0 }) === 0.5,
+    "Krunker ray starting INSIDE the collider hits the exit face");
+  assert(ray({ x: 10, y: 0, z: 0 }, { x: -1, y: 0, z: 0 }) === 4,
+    "Krunker reverse-direction ray hits the correct face");
+  assert(ray({ x: 10, y: 0, z: 0 }, { x: 1, y: 0, z: 0 }) === null,
+    "Krunker ray facing away from a collider does not hit");
+  assert(ray({ x: 0, y: 1, z: 0 }, { x: 1, y: 0, z: 0 }) === 5,
+    "Krunker grazing ray on a box face is a collision");
+  assert(ray({ x: 0, y: 2, z: 0 }, { x: 1, y: -0.1, z: 0 }) === null,
+    "Krunker diagonal ray that misses the vertical slab does not hit");
+  assert(ray({ x: 0, y: 0, z: 0 }, { x: 0, y: 0, z: 0 }) === null,
+    "Krunker zero direction vector is not a projectile collision");
+  assert(ray({ x: Number.NaN, y: 0, z: 0 }, { x: 1, y: 0, z: 0 }) === null,
+    "Krunker rejects non-finite collision input");
+  assert(rayAabbDistance(
+    { x: 0, y: 0, z: 0 }, { x: 1, y: 0, z: 0 },
+    { x: 6, y: 1, z: 1 }, { x: 5, y: -1, z: -1 }) === null,
+    "Krunker rejects inverted collider bounds");
+  assert(rayAabbDistance(
+    { x: 0, y: 0, z: 0 }, { x: 1, y: 0, z: 0 },
+    { x: 1, y: -1, z: -1 }, { x: 2, y: 1, z: 1 }) === 1,
+    "Krunker chooses nearer collider for hitscan");
+  assert(ray({ x: 5.5, y: 0, z: 0 }, { x: 0, y: 1, z: 0 }) === 1,
+    "Krunker inside-box ray parallel to horizontal axes exits vertically");
 }
 
 console.log(`\n=== RESULTS: ${passedTests}/${totalTests} TESTS PASSED ===\n`);

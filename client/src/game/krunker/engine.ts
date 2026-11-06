@@ -21,6 +21,7 @@ import { buildKrunkerArena } from "./mapBuilder";
 import { buildBotCharacter, buildFPSViewmodel } from "./characterBuilder";
 import { krunkerAudio } from "./audio";
 import { freshKrunkerMatchStats, KRUNKER_MATCH_DURATION_SECONDS, resetKrunkerBotForMatch } from "./matchReset";
+import { rayAabbDistance } from "./rayAabb";
 
 export class KrunkerEngine {
   // Three.js Core
@@ -1122,33 +1123,14 @@ export class KrunkerEngine {
     }, 800);
   }
 
-  // Ray-AABB intersection algorithm
+  // Hitscan collisions use exact slab math, including parallel and inside-box rays.
   private intersectRayAABB(
     origin: THREE.Vector3,
     dir: THREE.Vector3,
     min: THREE.Vector3,
-    max: THREE.Vector3
+    max: THREE.Vector3,
   ): number | null {
-    let tmin = (min.x - origin.x) / (dir.x !== 0 ? dir.x : 0.00001);
-    let tmax = (max.x - origin.x) / (dir.x !== 0 ? dir.x : 0.00001);
-    if (tmin > tmax) [tmin, tmax] = [tmax, tmin];
-
-    let tymin = (min.y - origin.y) / (dir.y !== 0 ? dir.y : 0.00001);
-    let tymax = (max.y - origin.y) / (dir.y !== 0 ? dir.y : 0.00001);
-    if (tymin > tymax) [tymin, tymax] = [tymax, tymin];
-
-    if (tmin > tymax || tymin > tmax) return null;
-    if (tymin > tmin) tmin = tymin;
-    if (tymax < tmax) tmax = tymax;
-
-    let tzmin = (min.z - origin.z) / (dir.z !== 0 ? dir.z : 0.00001);
-    let tzmax = (max.z - origin.z) / (dir.z !== 0 ? dir.z : 0.00001);
-    if (tzmin > tzmax) [tzmin, tzmax] = [tzmax, tzmin];
-
-    if (tmin > tzmax || tzmin > tmax) return null;
-    if (tzmin > tmin) tmin = tzmin;
-
-    return tmin > 0 ? tmin : null;
+    return rayAabbDistance(origin, dir, min, max);
   }
 
   // Leaderboard broadcast

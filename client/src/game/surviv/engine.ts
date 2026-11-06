@@ -191,7 +191,7 @@ export class SurvivEngine {
   }
 
   public start() {
-    if (this.isRunning) return;
+    if (this.isRunning || this.isMatchOver) return;
     this.isRunning = true;
     this.lastTime = performance.now();
     this.loop();
@@ -212,7 +212,8 @@ export class SurvivEngine {
     this.lastTime = now;
 
     this.update(dt);
-    this.animFrameId = requestAnimationFrame(this.loop);
+    // The winning/losing frame may stop the match; do not schedule any more physics.
+    if (this.isRunning) this.animFrameId = requestAnimationFrame(this.loop);
   };
 
   private update(dt: number) {
@@ -256,9 +257,11 @@ export class SurvivEngine {
       if (!this.player.active) {
         this.isMatchOver = true;
         const rank = totalAlive + 1;
+        this.stop();
         this.callbacks.onGameOver(false, rank, this.player.kills, this.player.damageDealt);
       } else if (aliveBots === 0) {
         this.isMatchOver = true;
+        this.stop();
         this.callbacks.onGameOver(true, 1, this.player.kills, this.player.damageDealt);
       }
     }

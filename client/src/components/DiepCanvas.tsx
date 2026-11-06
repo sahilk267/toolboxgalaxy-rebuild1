@@ -51,6 +51,8 @@ export default function DiepCanvas({ callbacks, engineRef, audio }: DiepCanvasPr
 
     // KEYBOARD INPUTS
     const onKeyDown = (e: KeyboardEvent) => {
+      // Keyboard control is active only while the actual game canvas has focus.
+      if (document.activeElement !== canvas || e.ctrlKey || e.metaKey || e.altKey) return;
       if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Space"].includes(e.code)) {
         e.preventDefault();
       }
@@ -62,11 +64,11 @@ export default function DiepCanvas({ callbacks, engineRef, audio }: DiepCanvasPr
       if (e.code === "Space") engine.keys.space = true;
 
       // Auto-Fire Toggle (E)
-      if (e.key === "e" || e.key === "E") {
+      if (!e.repeat && (e.key === "e" || e.key === "E")) {
         engine.autoFire = !engine.autoFire;
       }
       // Auto-Spin Toggle (C)
-      if (e.key === "c" || e.key === "C") {
+      if (!e.repeat && (e.key === "c" || e.key === "C")) {
         engine.autoSpin = !engine.autoSpin;
       }
 
@@ -77,7 +79,7 @@ export default function DiepCanvas({ callbacks, engineRef, audio }: DiepCanvasPr
       ] as const;
 
       const num = parseInt(e.key, 10);
-      if (num >= 1 && num <= 8) {
+      if (!e.repeat && num >= 1 && num <= 8) {
         const statKey = statOrder[num - 1];
         engine.upgradeStat(statKey);
       }
@@ -100,6 +102,7 @@ export default function DiepCanvas({ callbacks, engineRef, audio }: DiepCanvasPr
 
     const onMouseDown = (e: MouseEvent) => {
       if (e.button === 0) {
+        canvas.focus({ preventScroll: true });
         engine.isMouseDown = true;
       }
     };
@@ -112,6 +115,7 @@ export default function DiepCanvas({ callbacks, engineRef, audio }: DiepCanvasPr
 
     // TOUCH INPUTS (Mobile Dual Sticks)
     const onTouchStart = (e: TouchEvent) => {
+      e.preventDefault();
       const rect = canvas.getBoundingClientRect();
       for (let i = 0; i < e.changedTouches.length; i++) {
         const touch = e.changedTouches[i];
@@ -134,6 +138,7 @@ export default function DiepCanvas({ callbacks, engineRef, audio }: DiepCanvasPr
     };
 
     const onTouchMove = (e: TouchEvent) => {
+      e.preventDefault();
       const rect = canvas.getBoundingClientRect();
       for (let i = 0; i < e.changedTouches.length; i++) {
         const touch = e.changedTouches[i];
@@ -174,23 +179,39 @@ export default function DiepCanvas({ callbacks, engineRef, audio }: DiepCanvasPr
       }
     };
 
+    const resetInputOnBlur = () => {
+      engine.keys = {};
+      engine.isMouseDown = false;
+      engine.moveStickX = 0;
+      engine.moveStickY = 0;
+      engine.aimStickX = 0;
+      engine.aimStickY = 0;
+      engine.isAimingTouch = false;
+      leftTouchId.current = null;
+      rightTouchId.current = null;
+    };
+
+    window.addEventListener("blur", resetInputOnBlur);
+    canvas.addEventListener("blur", resetInputOnBlur);
     window.addEventListener("keydown", onKeyDown);
     window.addEventListener("keyup", onKeyUp);
-    window.addEventListener("mousemove", onMouseMove);
-    window.addEventListener("mousedown", onMouseDown);
+    canvas.addEventListener("mousemove", onMouseMove);
+    canvas.addEventListener("mousedown", onMouseDown);
     window.addEventListener("mouseup", onMouseUp);
 
-    canvas.addEventListener("touchstart", onTouchStart, { passive: true });
-    canvas.addEventListener("touchmove", onTouchMove, { passive: true });
+    canvas.addEventListener("touchstart", onTouchStart, { passive: false });
+    canvas.addEventListener("touchmove", onTouchMove, { passive: false });
     canvas.addEventListener("touchend", onTouchEnd, { passive: true });
     canvas.addEventListener("touchcancel", onTouchEnd, { passive: true });
 
     return () => {
       resizeObserver.disconnect();
+      window.removeEventListener("blur", resetInputOnBlur);
+      canvas.removeEventListener("blur", resetInputOnBlur);
       window.removeEventListener("keydown", onKeyDown);
       window.removeEventListener("keyup", onKeyUp);
-      window.removeEventListener("mousemove", onMouseMove);
-      window.removeEventListener("mousedown", onMouseDown);
+      canvas.removeEventListener("mousemove", onMouseMove);
+      canvas.removeEventListener("mousedown", onMouseDown);
       window.removeEventListener("mouseup", onMouseUp);
 
       canvas.removeEventListener("touchstart", onTouchStart);
@@ -208,6 +229,7 @@ export default function DiepCanvas({ callbacks, engineRef, audio }: DiepCanvasPr
       <canvas
         ref={canvasRef}
         className="w-full h-full block cursor-crosshair touch-none"
+        tabIndex={0}
         aria-label="Diep Arena Canvas"
       />
     </div>
