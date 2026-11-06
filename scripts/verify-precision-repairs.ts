@@ -19,6 +19,7 @@ import { parseGstDecimal } from "../client/src/components/RegionalHighDemandTool
 import { parseCronField, calculateNextRuns, explainCron } from "../client/src/components/CronScheduleTool";
 import { validMockSqlTableName } from "../client/src/components/FakeDataGeneratorTool";
 import { fitResizeDimensions, imageResizeError } from "../client/src/components/ImageResizerTool";
+import { canvasBackingSize, logicalCanvasSize, pointerToCanvas, survivPointerToWorld } from "../client/src/game/canvasGeometry";
 
 let totalTests = 0;
 let passedTests = 0;
@@ -639,6 +640,36 @@ console.log("\n[TOOLS] Verifying cron parsing, generated SQL identifiers, and im
   assert(imageResizeError(4000, 4000) === null, "Image resize accepts a safe 16MP output");
   assert(Boolean(imageResizeError(8192, 8192)), "Image resize blocks unsafe 67MP canvas allocation");
   assert(Boolean(imageResizeError(0, 800)), "Image resize rejects zero dimensions");
+}
+
+
+// -------------------------------------------------------------
+// GAME QA BATCH 4: 2D canvas physical/CSS pixels and embedded aiming
+// -------------------------------------------------------------
+console.log("\n[GAMES] Verifying Diep/Surviv retina viewport and pointer transforms...");
+{
+  const retina = logicalCanvasSize(1600, 1200, 800, 600);
+  assert(retina.width === 800 && retina.height === 600, "Diep retina backing buffer uses CSS-pixel camera viewport");
+  const regular = logicalCanvasSize(800, 600, 800, 600);
+  assert(regular.width === 800 && regular.height === 600, "Diep normal-density viewport remains unchanged");
+  const fallback = logicalCanvasSize(1600, 1200, 0, 0);
+  assert(fallback.width === 1600 && fallback.height === 1200, "Hidden canvas can fall back to bitmap dimensions");
+  const backing = canvasBackingSize(800, 600, 2);
+  assert(backing.width === 1600 && backing.height === 1200 && backing.scale === 2, "Surviv uses retina backing without changing logical coordinates");
+  const fractionalBacking = canvasBackingSize(500, 400, 1.5);
+  assert(fractionalBacking.width === 750 && fractionalBacking.height === 600, "Surviv supports fractional DPR 1.5");
+  const cappedBacking = canvasBackingSize(600, 400, 4);
+  assert(cappedBacking.width === 1200 && cappedBacking.height === 800, "Surviv caps expensive DPR values at 2");
+  const point = pointerToCanvas(550, 340, 150, 40);
+  assert(point.x === 400 && point.y === 300, "Embedded canvas pointer accounts for page offset");
+  const center = survivPointerToWorld(550, 340, 150, 40, 800, 600, 1000, 900, 1);
+  assert(center.x === 1000 && center.y === 900, "Surviv center pointer maps exactly to player world position");
+  const right = survivPointerToWorld(630, 340, 150, 40, 800, 600, 1000, 900, 1);
+  assert(right.x === 1080 && right.y === 900, "Surviv rightward aim maps by CSS pixels");
+  const scoped = survivPointerToWorld(630, 340, 150, 40, 800, 600, 1000, 900, 0.5);
+  assert(scoped.x === 1160 && scoped.y === 900, "Surviv scope zoom changes aim distance correctly");
+  const topLeft = survivPointerToWorld(150, 40, 150, 40, 800, 600, 1000, 900, 1);
+  assert(topLeft.x === 600 && topLeft.y === 600, "Surviv top-left pointer maps relative to canvas, not window");
 }
 
 console.log(`\n=== RESULTS: ${passedTests}/${totalTests} TESTS PASSED ===\n`);

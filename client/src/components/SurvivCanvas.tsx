@@ -2,6 +2,7 @@
 import { useEffect, useRef, useCallback } from "react";
 import { SurvivEngine, type SurvivCallbacks } from "@/game/surviv/engine";
 import { SurvivAudio } from "@/game/surviv/audio";
+import { canvasBackingSize, pointerToCanvas, survivPointerToWorld } from "@/game/canvasGeometry";
 import {
   MAP_SIZE,
   PLAYER_RADIUS,
@@ -39,13 +40,22 @@ export default function SurvivCanvas({ callbacks, engineRef, audio }: SurvivCanv
     const engine = new SurvivEngine(audio, callbacks);
     engineRef.current = engine;
 
-    let width = (canvas.width = window.innerWidth);
-    let height = (canvas.height = window.innerHeight);
-
+    // Render inside the actual game canvas. CSS pixels control camera, HUD and input;
+    // the bitmap backing store alone uses device pixels for crisp high-DPI rendering.
+    let width = 1;
+    let height = 1;
     const handleResize = () => {
-      width = canvas.width = window.innerWidth;
-      height = canvas.height = window.innerHeight;
+      const rect = canvas.getBoundingClientRect();
+      width = Math.max(1, Math.round(rect.width));
+      height = Math.max(1, Math.round(rect.height));
+      const backing = canvasBackingSize(width, height, window.devicePixelRatio || 1);
+      canvas.width = backing.width;
+      canvas.height = backing.height;
+      ctx.setTransform(backing.scale, 0, 0, backing.scale, 0, 0);
     };
+    handleResize();
+    const resizeObserver = new ResizeObserver(handleResize);
+    resizeObserver.observe(canvas);
     window.addEventListener("resize", handleResize);
 
     // Keyboard handlers
@@ -81,11 +91,13 @@ export default function SurvivCanvas({ callbacks, engineRef, audio }: SurvivCanv
     const handleMouseMove = (e: MouseEvent) => {
       const p = engine.player;
       const scopeZoom = [1.0, 1.0, 0.85, 0.68, 0.52][p.scopeTier] || 1.0;
-      const cx = width / 2;
-      const cy = height / 2;
-
-      engine.mouseWorldX = p.x + (e.clientX - cx) / scopeZoom;
-      engine.mouseWorldY = p.y + (e.clientY - cy) / scopeZoom;
+      const rect = canvas.getBoundingClientRect();
+      const target = survivPointerToWorld(
+        e.clientX, e.clientY, rect.left, rect.top,
+        width, height, p.x, p.y, scopeZoom,
+      );
+      engine.mouseWorldX = target.x;
+      engine.mouseWorldY = target.y;
     };
 
     const handleMouseDown = (e: MouseEvent) => {
@@ -107,52 +119,58 @@ export default function SurvivCanvas({ callbacks, engineRef, audio }: SurvivCanv
     };
 
     window.addEventListener("mousemove", handleMouseMove);
-    window.addEventListener("mousedown", handleMouseDown);
+    canvas.addEventListener("mousedown", handleMouseDown);
     window.addEventListener("mouseup", handleMouseUp);
     canvas.addEventListener("wheel", handleWheel, { passive: false });
 
     // Touch Event Handlers for Mobile Dual Joysticks
     const handleTouchStart = (e: TouchEvent) => {
       const ts = touchState.current;
+      e.preventDefault();
+      const rect = canvas.getBoundingClientRect();
       const halfWidth = width / 2;
 
       for (let i = 0; i < e.changedTouches.length; i++) {
         const t = e.changedTouches[i];
-        if (t.clientX < halfWidth && ts.moveTouchId === null) {
+        const point = pointerToCanvas(t.clientX, t.clientY, rect.left, rect.top);
+        if (point.x < halfWidth && ts.moveTouchId === null) {
           // Left half -> Move joystick
           ts.moveTouchId = t.identifier;
-          ts.moveOrigin = { x: t.clientX, y: t.clientY };
-          ts.moveCurrent = { x: t.clientX, y: t.clientY };
+          ts.moveOrigin = point;
+          ts.moveCurrent = point;
           engine.moveStick.active = true;
-        } else if (t.clientX >= halfWidth && ts.aimTouchId === null) {
+        } else if (point.x >= halfWidth && ts.aimTouchId === null) {
           // Right half -> Aim & fire joystick
           ts.aimTouchId = t.identifier;
-          ts.aimOrigin = { x: t.clientX, y: t.clientY };
-          ts.aimCurrent = { x: t.clientX, y: t.clientY };
+          ts.aimOrigin = point;
+          ts.aimCurrent = point;
           engine.aimStick.active = true;
         }
       }
     };
 
     const handleTouchMove = (e: TouchEvent) => {
+      e.preventDefault();
       const ts = touchState.current;
+      const rect = canvas.getBoundingClientRect();
       const maxRadius = 55;
 
       for (let i = 0; i < e.changedTouches.length; i++) {
         const t = e.changedTouches[i];
+        const point = pointerToCanvas(t.clientX, t.clientY, rect.left, rect.top);
         if (t.identifier === ts.moveTouchId) {
-          ts.moveCurrent = { x: t.clientX, y: t.clientY };
-          const dx = t.clientX - ts.moveOrigin.x;
-          const dy = t.clientY - ts.moveOrigin.y;
+          ts.moveCurrent = point;
+          const dx = point.x - ts.moveOrigin.x;
+          const dy = point.y - ts.moveOrigin.y;
           const dist = Math.hypot(dx, dy);
           const clampedDist = Math.min(dist, maxRadius);
           const angle = Math.atan2(dy, dx);
           engine.moveStick.x = (Math.cos(angle) * clampedDist) / maxRadius;
           engine.moveStick.y = (Math.sin(angle) * clampedDist) / maxRadius;
         } else if (t.identifier === ts.aimTouchId) {
-          ts.aimCurrent = { x: t.clientX, y: t.clientY };
-          const dx = t.clientX - ts.aimOrigin.x;
-          const dy = t.clientY - ts.aimOrigin.y;
+          ts.aimCurrent = point;
+          const dx = point.x - ts.aimOrigin.x;
+          const dy = point.y - ts.aimOrigin.y;
           const dist = Math.hypot(dx, dy);
           const clampedDist = Math.min(dist, maxRadius);
           const angle = Math.atan2(dy, dx);
@@ -268,10 +286,11 @@ export default function SurvivCanvas({ callbacks, engineRef, audio }: SurvivCanv
     return () => {
       cancelAnimationFrame(animId);
       window.removeEventListener("resize", handleResize);
+      resizeObserver.disconnect();
       window.removeEventListener("keydown", handleKeyDown);
       window.removeEventListener("keyup", handleKeyUp);
       window.removeEventListener("mousemove", handleMouseMove);
-      window.removeEventListener("mousedown", handleMouseDown);
+      canvas.removeEventListener("mousedown", handleMouseDown);
       window.removeEventListener("mouseup", handleMouseUp);
       canvas.removeEventListener("wheel", handleWheel);
       canvas.removeEventListener("touchstart", handleTouchStart);
