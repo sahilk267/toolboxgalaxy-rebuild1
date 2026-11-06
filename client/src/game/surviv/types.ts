@@ -130,6 +130,8 @@ export interface PlayerEntity {
   activeSlot: 0 | 1 | 2;
   isReloading: boolean;
   reloadTimer: number;
+  /** Slot that started the current reload; prevents auto-loot from redirecting it. */
+  reloadingSlot?: 0 | 1 | 2;
 
   // Ammo inventory
   ammo: Record<AmmoType, number>;

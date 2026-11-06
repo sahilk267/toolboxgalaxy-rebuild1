@@ -30,7 +30,7 @@ import { segmentCircleHit, segmentBoxHit, firstProjectileImpact } from "../clien
 import { separateCircleFromBox, separateCircleFromCircle, resolveSurvivMovement } from "../client/src/game/surviv/playerCollision";
 import { isStackableSurvivLoot, SURVIV_MEDICAL_LIMITS, transferSurvivLootStack } from "../client/src/game/surviv/lootTransfer";
 import { SURVIV_INITIAL_ZONE_RADIUS, advanceSurvivZoneShrink, completeSurvivZoneShrink } from "../client/src/game/surviv/zoneMechanics";
-import { MAP_SIZE as SURVIV_MAP_SIZE, ZONE_PHASES } from "../client/src/game/surviv/constants";
+import { MAP_SIZE as SURVIV_MAP_SIZE, ZONE_PHASES, WEAPONS as SURVIV_WEAPONS } from "../client/src/game/surviv/constants";
 import type { ZoneState as SurvivZoneState } from "../client/src/game/surviv/types";
 import type { SurvivCallbacks } from "../client/src/game/surviv/engine";
 import type { GroundLoot as SurvivGroundLoot } from "../client/src/game/surviv/types";
@@ -1251,6 +1251,131 @@ console.log("\n[GAMES] Verifying Surviv red-zone shrink progression and one-time
     "Surviv repeated red-zone ticks do not duplicate gas death loot or killfeed");
 }
 
+
+// -------------------------------------------------------------
+// GAME QA BATCH 12: Surviv reload, auto-pickup, bandage and action invariants
+// -------------------------------------------------------------
+console.log("\n[GAMES] Verifying Surviv weapon reload and medical action correctness...");
+{
+  const player = (): SurvivPlayer => ({
+    id: 0, name: "Survivor", isBot: true, x: 700, y: 700, vx: 0, vy: 0,
+    angle: 0, health: 60, maxHealth: 100, boost: 0,
+    helmetTier: 0, vestTier: 0, backpackTier: 1, scopeTier: 1,
+    weapons: [{ weaponId: "m9", curAmmo: 3 }, { weaponId: "m870", curAmmo: 2 }, { weaponId: "fists", curAmmo: 0 }],
+    activeSlot: 0, isReloading: false, reloadTimer: 0,
+    ammo: { "9mm": 20, "12g": 9, "762mm": 0, "556mm": 0 },
+    meds: { bandages: 3, medkits: 1, sodas: 1, pills: 1 },
+    isUsingMed: false, medTimer: 0, medType: null,
+    fireCooldown: 0, kills: 0, damageDealt: 0, active: true, inBush: false,
+  });
+  const game = Object.create(SurvivEngine.prototype) as SurvivEngine;
+  game.player = player();
+  game.bullets = [];
+
+  game.reloadWeapon(game.player);
+  assert(game.player.isReloading && game.player.reloadingSlot === 0 &&
+         game.player.reloadTimer === SURVIV_WEAPONS.m9.reloadTimeMs,
+    "Surviv reload locks its original weapon slot and uses its correct duration");
+  const ammoBeforeSwitch = game.player.ammo["9mm"];
+  game.switchWeapon(1);
+  assert(!game.player.isReloading && game.player.reloadTimer === 0 &&
+         game.player.reloadingSlot === undefined && game.player.activeSlot === 1,
+    "Surviv manual slot switch cancels pending reload and clears stale timer");
+  (game as unknown as { finishReload(p: SurvivPlayer): void }).finishReload(game.player);
+  assert(game.player.weapons[0]!.curAmmo === 3 && game.player.weapons[1]!.curAmmo === 2 &&
+         game.player.ammo["9mm"] === ammoBeforeSwitch,
+    "Surviv canceled reload cannot later transfer ammo into a different gun");
+
+  game.reloadWeapon(game.player);
+  assert(game.player.isReloading && game.player.reloadingSlot === 1,
+    "Surviv secondary shotgun reload starts on secondary slot");
+  const m870Needed = SURVIV_WEAPONS.m870.magSize - 2;
+  const shotgunAmmo = game.player.ammo["12g"];
+  (game as unknown as { finishReload(p: SurvivPlayer): void }).finishReload(game.player);
+  assert(!game.player.isReloading && game.player.reloadTimer === 0 &&
+         game.player.reloadingSlot === undefined,
+    "Surviv finished reload clears all reload state");
+  assert(game.player.weapons[1]!.curAmmo === SURVIV_WEAPONS.m870.magSize &&
+         game.player.ammo["12g"] === shotgunAmmo - m870Needed,
+    "Surviv genuine reload fills magazine and debits only its correct ammo type");
+
+  // An auto-looted weapon can silently change activeSlot while a reload is underway.
+  const auto = player();
+  auto.weapons[1] = null;
+  game.player = auto;
+  game.reloadWeapon(auto);
+  const pickup: SurvivGroundLoot = {
+    id: 801, type: "weapon", weaponId: "mac10", x: 700, y: 700,
+    vx: 0, vy: 0, amount: 1, active: true,
+  };
+  const picked = (game as unknown as {
+    tryCollectLoot(p: SurvivPlayer, loot: SurvivGroundLoot): boolean
+  }).tryCollectLoot(auto, pickup);
+  assert(picked && auto.activeSlot === 1 && auto.weapons[1]?.weaponId === "mac10",
+    "Surviv engine auto-pickup correctly equips a newly found secondary weapon");
+  assert(!auto.isReloading && auto.reloadTimer === 0 && auto.reloadingSlot === undefined,
+    "Surviv auto-pickup cancels old-gun reload when it auto-switches slots");
+  (game as unknown as { finishReload(p: SurvivPlayer): void }).finishReload(auto);
+  assert(auto.weapons[0]!.curAmmo === 3 && auto.weapons[1]!.curAmmo === SURVIV_WEAPONS.mac10.magSize &&
+         auto.ammo["9mm"] === 20,
+    "Surviv auto-equipping never redirects stale reload into a newly picked weapon");
+
+  // Even an unexpected direct slot mutation cannot redirect the pending reload.
+  const mutated = player();
+  game.player = mutated;
+  game.reloadWeapon(mutated);
+  mutated.activeSlot = 1;
+  (game as unknown as { finishReload(p: SurvivPlayer): void }).finishReload(mutated);
+  assert(!mutated.isReloading && mutated.weapons[1]!.curAmmo === 2 && mutated.ammo["12g"] === 9,
+    "Surviv stale reload slot mismatch is rejected without moving ammo");
+
+  const blocked = player();
+  game.player = blocked;
+  game.reloadWeapon(blocked);
+  const magazineBeforeFire = blocked.weapons[0]!.curAmmo;
+  const bulletsBeforeFire = game.bullets.length;
+  game.fireWeapon(blocked);
+  assert(blocked.weapons[0]!.curAmmo === magazineBeforeFire && game.bullets.length === bulletsBeforeFire,
+    "Surviv firing cannot bypass an active reload through a public engine call");
+  game.useMed(blocked, "bandage");
+  assert(!blocked.isUsingMed,
+    "Surviv does not consume medicine and reload simultaneously");
+
+  const healing = player();
+  game.player = healing;
+  game.useMed(healing, "bandage");
+  assert(healing.isUsingMed && healing.medType === "bandage",
+    "Surviv begins a valid bandage action from below 75 health");
+  game.reloadWeapon(healing);
+  assert(!healing.isReloading,
+    "Surviv cannot start a reload while applying medicine");
+  healing.health = 80; // Simulate health regeneration while the bandage action is in progress.
+  (game as unknown as { finishMed(p: SurvivPlayer): void }).finishMed(healing);
+  assert(healing.health === 80 && healing.meds.bandages === 2,
+    "Surviv completed bandage never REDUCES health already above its 75 HP cap");
+  assert(!healing.isUsingMed && healing.medTimer === 0 && healing.medType === null,
+    "Surviv finished bandage clears medical timer and action state");
+
+  const ordinary = player();
+  game.useMed(ordinary, "bandage");
+  (game as unknown as { finishMed(p: SurvivPlayer): void }).finishMed(ordinary);
+  assert(ordinary.health === 75 && ordinary.meds.bandages === 2,
+    "Surviv bandage still heals 60 HP to its normal 75 HP cap");
+  const pending = player();
+  game.useMed(pending, "bandage");
+  pending.meds.bandages = 0; // Item was consumed/removed while the timer was active.
+  (game as unknown as { finishMed(p: SurvivPlayer): void }).finishMed(pending);
+  assert(pending.meds.bandages === 0 && pending.health === 60,
+    "Surviv medical completion never decrements a depleted stack below zero");
+
+  const deceased = player();
+  deceased.active = false;
+  game.reloadWeapon(deceased);
+  game.useMed(deceased, "medkit");
+  game.fireWeapon(deceased);
+  assert(!deceased.isReloading && !deceased.isUsingMed && deceased.weapons[0]!.curAmmo === 3,
+    "Surviv inactive player cannot start reload, medical use, or firing");
+}
 console.log(`\n=== RESULTS: ${passedTests}/${totalTests} TESTS PASSED ===\n`);
 
 if (passedTests !== totalTests) {
