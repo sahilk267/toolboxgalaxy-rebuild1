@@ -16,6 +16,9 @@ import { PDFDocument } from "pdf-lib";
 import JSZip from "jszip";
 import { parseCurl, generateFetch, generateAxios, generatePython, generateGo, generateNode, generatePhp, pythonLiteral } from "../client/src/components/CurlToCodeTool";
 import { parseGstDecimal } from "../client/src/components/RegionalHighDemandTools";
+import { parseCronField, calculateNextRuns, explainCron } from "../client/src/components/CronScheduleTool";
+import { validMockSqlTableName } from "../client/src/components/FakeDataGeneratorTool";
+import { fitResizeDimensions, imageResizeError } from "../client/src/components/ImageResizerTool";
 
 let totalTests = 0;
 let passedTests = 0;
@@ -599,6 +602,43 @@ console.log("\n[TOOLS] Verifying cURL parsing and generated language literals...
   assert(pythonLiteral({ text: "true null false", nested: [false, null, 1] }) === '{"text": "true null false", "nested": [False, None, 1]}', "Python literal serializer avoids mutating ordinary strings");
   assert(phpCode.includes("CURLOPT_HTTPHEADER") && phpCode.includes("true false null"), "PHP output retains headers and original body text");
   assert(fetchCode.includes('const raw = await response.text()'), "Fetch output handles non-JSON response bodies");
+}
+
+
+// -------------------------------------------------------------
+// TOOL QA BATCH 3: cron, mock SQL output, and image-resizing boundaries
+// -------------------------------------------------------------
+console.log("\n[TOOLS] Verifying cron parsing, generated SQL identifiers, and image resize limits...");
+{
+  const intervals = parseCronField("*/15", 0, 59);
+  assert(Boolean(intervals && [0, 15, 30, 45].every((v) => intervals.has(v)) && intervals.size === 4), "Cron */15 expands to expected minute set");
+  assert(parseCronField("55-60", 0, 59) === null, "Cron rejects out-of-range range endpoint instead of silently clipping");
+  assert(parseCronField("0-90/5", 0, 59) === null, "Cron rejects out-of-range stepped interval");
+  assert(parseCronField("0/15/2", 0, 59) === null, "Cron rejects multiple step separators");
+  assert(parseCronField("*/0", 0, 59) === null, "Cron rejects zero step");
+  assert(parseCronField("60", 0, 59) === null, "Cron rejects invalid single minute");
+  const namedMonths = parseCronField("JAN-MAR", 1, 12, { JAN: 1, FEB: 2, MAR: 3 });
+  assert(Boolean(namedMonths && namedMonths.size === 3 && namedMonths.has(1) && namedMonths.has(3)), "Cron recognizes named month range");
+  assert(explainCron(["0", "9", "1", "*", "1"]).includes(" OR "), "Cron explains day-of-month/day-of-week OR semantics");
+  const cronRuns = calculateNextRuns(["0", "9", "1", "*", "1"], 2, new Date(2026, 0, 1, 8, 0, 0));
+  assert(cronRuns.length === 2 && cronRuns[0].getDate() === 1 && cronRuns[1].getDate() === 5 && cronRuns.every((d) => d.getHours() === 9), "Cron schedules Jan 1 and following Monday under OR semantics");
+
+  assert(validMockSqlTableName("users") && validMockSqlTableName("public.users"), "Fake-data SQL export accepts valid identifier names");
+  assert(!validMockSqlTableName("") && !validMockSqlTableName("123users"), "Fake-data SQL export rejects missing or invalid identifiers");
+  assert(!validMockSqlTableName("users; DROP TABLE users;--"), "Fake-data SQL export rejects executable table-name fragments");
+  assert(!validMockSqlTableName("users name"), "Fake-data SQL export rejects whitespace in table identifier");
+
+  const landscape = fitResizeDimensions(640, 480, 640, 480, "width", "800", true);
+  assert(landscape?.width === 800 && landscape?.height === 600, "Image resize respects normal locked aspect ratio");
+  const portrait = fitResizeDimensions(1, 8192, 1, 8192, "width", "8192", true);
+  assert(portrait?.width === 1 && portrait?.height === 8192, "Image resize does not generate gigantic portrait canvas");
+  const panorama = fitResizeDimensions(8192, 1, 8192, 1, "height", "8192", true);
+  assert(panorama?.width === 8192 && panorama?.height === 1, "Image resize bounds extreme panoramic canvas");
+  const unlocked = fitResizeDimensions(640, 480, 640, 480, "width", "800", false);
+  assert(unlocked?.width === 800 && unlocked?.height === 480, "Unlocked image resize updates only chosen dimension");
+  assert(imageResizeError(4000, 4000) === null, "Image resize accepts a safe 16MP output");
+  assert(Boolean(imageResizeError(8192, 8192)), "Image resize blocks unsafe 67MP canvas allocation");
+  assert(Boolean(imageResizeError(0, 800)), "Image resize rejects zero dimensions");
 }
 
 console.log(`\n=== RESULTS: ${passedTests}/${totalTests} TESTS PASSED ===\n`);

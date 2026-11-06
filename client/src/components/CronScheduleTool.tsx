@@ -31,71 +31,55 @@ const CRON_PRESETS = [
 const MONTH_NAMES = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const DOW_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 
-// Parse cron field to set of numbers
-function parseField(field: string, min: number, max: number, mapNames?: Record<string, number>): Set<number> | null {
-  const result = new Set<number>();
-  let norm = field.trim().toUpperCase();
+// Five-field cron parser: reject invalid endpoints instead of silently clipping ranges.
+export function parseCronField(field: string, min: number, max: number, mapNames?: Record<string, number>): Set<number> | null {
+  if (!Number.isSafeInteger(min) || !Number.isSafeInteger(max) || min > max) return null;
+  let normalized = field.trim().toUpperCase();
 
   if (mapNames) {
-    Object.entries(mapNames).forEach(([name, val]) => {
-      norm = norm.replace(new RegExp(name, "g"), String(val));
-    });
-  }
-
-  if (norm === "*") {
-    for (let i = min; i <= max; i++) result.add(i);
-    return result;
-  }
-
-  const parts = norm.split(",");
-  for (const part of parts) {
-    if (part.includes("/")) {
-      const [rangeStr, stepStr] = part.split("/");
-      if (!stepStr || !/^\d+$/.test(stepStr)) return null;
-      const step = parseInt(stepStr, 10);
-      if (isNaN(step) || step <= 0) return null;
-
-      let start = min;
-      let end = max;
-      if (rangeStr !== "*") {
-        if (rangeStr.includes("-")) {
-          const rangeParts = rangeStr.split("-");
-          if (rangeParts.length !== 2 || !/^\d+$/.test(rangeParts[0]) || !/^\d+$/.test(rangeParts[1])) return null;
-          const [rStart, rEnd] = rangeParts.map(Number);
-          if (isNaN(rStart) || isNaN(rEnd)) return null;
-          start = rStart;
-          end = rEnd;
-        } else {
-          if (!/^\d+$/.test(rangeStr)) return null;
-          start = parseInt(rangeStr, 10);
-          if (isNaN(start)) return null;
-        }
-      }
-
-      for (let i = start; i <= end; i += step) {
-        if (i >= min && i <= max) result.add(i);
-      }
-    } else if (part.includes("-")) {
-      const rangeParts = part.split("-");
-      if (rangeParts.length !== 2 || !/^\d+$/.test(rangeParts[0]) || !/^\d+$/.test(rangeParts[1])) return null;
-      const [rStart, rEnd] = rangeParts.map(Number);
-      if (isNaN(rStart) || isNaN(rEnd) || rStart > rEnd) return null;
-      for (let i = rStart; i <= rEnd; i++) {
-        if (i >= min && i <= max) result.add(i);
-      }
-    } else {
-      if (!/^\d+$/.test(part)) return null;
-      const num = parseInt(part, 10);
-      if (isNaN(num) || num < min || num > max) return null;
-      result.add(num);
+    for (const [name, value] of Object.entries(mapNames)) {
+      normalized = normalized.replace(new RegExp("\\b" + name + "\\b", "g"), String(value));
     }
   }
 
-  return result.size > 0 ? result : null;
+  const result = new Set<number>();
+  for (const part of normalized.split(",")) {
+    if (!part) return null;
+    const stepParts = part.split("/");
+    if (stepParts.length > 2) return null;
+    const [rangeText, stepText] = stepParts;
+    const step = stepText === undefined ? 1 : Number(stepText);
+    if (stepText !== undefined && !/^\d+$/.test(stepText)) return null;
+    if (!Number.isSafeInteger(step) || step < 1) return null;
+
+    let first: number;
+    let last: number;
+    if (rangeText === "*") {
+      first = min;
+      last = max;
+    } else if (/^\d+-\d+$/.test(rangeText)) {
+      const [start, end] = rangeText.split("-").map(Number);
+      first = start;
+      last = end;
+    } else if (/^\d+$/.test(rangeText)) {
+      first = Number(rangeText);
+      last = stepText === undefined ? first : max;
+    } else {
+      return null;
+    }
+
+    if (
+      !Number.isSafeInteger(first) || !Number.isSafeInteger(last) ||
+      first < min || first > max || last < min || last > max || first > last
+    ) return null;
+
+    for (let value = first; value <= last; value += step) result.add(value);
+  }
+  return result.size ? result : null;
 }
 
 // Convert cron string to human-friendly English sentence
-function explainCron(fields: string[]): string {
+export function explainCron(fields: string[]): string {
   const [minStr, hourStr, domStr, monthStr, dowStr] = fields;
 
   let timeDesc = "";
@@ -133,20 +117,24 @@ function explainCron(fields: string[]): string {
     else dowDesc = ` on day-of-week [${dowStr}]`;
   }
 
+  if (domStr !== "*" && dowStr !== "*") {
+    return `Runs ${timeDesc}${domDesc} OR${dowDesc}${monthDesc}.`;
+  }
   return `Runs ${timeDesc}${domDesc}${dowDesc}${monthDesc}.`;
 }
 
 // Calculate the next N run times
-function calculateNextRuns(fields: string[], count = 8): Date[] {
+export function calculateNextRuns(fields: string[], count = 8, from = new Date()): Date[] {
+  if (fields.length !== 5 || !Number.isSafeInteger(count) || count < 1 || count > 100) return [];
   const [minStr, hourStr, domStr, monthStr, dowStr] = fields;
 
-  const validMinutes = parseField(minStr, 0, 59);
-  const validHours = parseField(hourStr, 0, 23);
-  const validDom = parseField(domStr, 1, 31);
-  const validMonths = parseField(monthStr, 1, 12, {
+  const validMinutes = parseCronField(minStr, 0, 59);
+  const validHours = parseCronField(hourStr, 0, 23);
+  const validDom = parseCronField(domStr, 1, 31);
+  const validMonths = parseCronField(monthStr, 1, 12, {
     JAN: 1, FEB: 2, MAR: 3, APR: 4, MAY: 5, JUN: 6, JUL: 7, AUG: 8, SEP: 9, OCT: 10, NOV: 11, DEC: 12
   });
-  const validDow = parseField(dowStr, 0, 7, {
+  const validDow = parseCronField(dowStr, 0, 7, {
     SUN: 0, MON: 1, TUE: 2, WED: 3, THU: 4, FRI: 5, SAT: 6
   });
 
@@ -160,7 +148,8 @@ function calculateNextRuns(fields: string[], count = 8): Date[] {
   }
 
   const results: Date[] = [];
-  const current = new Date();
+  const current = new Date(from.getTime());
+  if (!Number.isFinite(current.getTime())) return [];
   current.setSeconds(0, 0);
   current.setMinutes(current.getMinutes() + 1); // Start from next minute
 
