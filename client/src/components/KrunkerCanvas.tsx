@@ -395,7 +395,7 @@ export const KrunkerCanvas: React.FC<KrunkerCanvasProps> = ({ onBackToMenu }) =>
             </p>
 
             <button
-              onClick={requestLock}
+              onClick={() => requestLock()}
               className="w-full py-3 bg-amber-500 hover:bg-amber-400 text-zinc-950 font-black tracking-wider uppercase rounded-xl transition-all shadow-lg shadow-amber-500/20 flex items-center justify-center gap-2 cursor-pointer"
             >
               <Target size={18} /> Click To Lock & Play
