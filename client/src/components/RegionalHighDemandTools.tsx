@@ -232,6 +232,14 @@ export function WhatsappDirectTool() {
 // -------------------------------------------------------------
 // 2. GST / VAT & Tax Invoice Calculator
 // -------------------------------------------------------------
+/** Parse a nonnegative GST input without accepting truncated values such as "18oops". */
+export function parseGstDecimal(input: string, maximum: number): number | null {
+  const trimmed = input.trim();
+  if (!/^(?:\d+(?:\.\d*)?|\.\d+)$/.test(trimmed)) return null;
+  const value = Number(trimmed);
+  return Number.isFinite(value) && value >= 0 && value <= maximum ? value : null;
+}
+
 export function GstCalculatorTool() {
   const { dict, isHindi } = useLanguage();
   const t = dict.gstTax;
@@ -242,10 +250,15 @@ export function GstCalculatorTool() {
   const [isInterState, setIsInterState] = useState(false); // IGST vs CGST+SGST
   const [copied, setCopied] = useState(false);
 
-  const parsedRate = customRate !== "" ? parseFloat(customRate) : gstRate;
-  const activeRate = Number.isFinite(parsedRate) && parsedRate >= 0 ? parsedRate : 0;
-  const rawAmount = parseFloat(amount);
-  const numAmount = Number.isFinite(rawAmount) && rawAmount >= 0 ? rawAmount : 0;
+  const parsedRate = customRate.trim() === "" ? gstRate : parseGstDecimal(customRate, 100);
+  const rawAmount = parseGstDecimal(amount, 1_000_000_000_000);
+  const inputError = rawAmount === null
+    ? "Enter a valid nonnegative amount (up to ₹1 trillion)."
+    : parsedRate === null
+      ? "Enter a valid GST rate between 0% and 100%."
+      : null;
+  const activeRate = parsedRate ?? 0;
+  const numAmount = rawAmount ?? 0;
 
   const result = useMemo(() => {
     const rateDecimal = activeRate / 100;
@@ -290,6 +303,7 @@ export function GstCalculatorTool() {
   };
 
   const copyInvoice = async () => {
+    if (inputError) return;
     const text = `🧾 ${t.invoiceReceiptHeader}\n------------------------------\nType: ${isInclusive ? t.typeInclusive : t.typeExclusive}\n${t.basePrice}: ${formatCurr(result.baseAmount)}\nGST Rate: ${activeRate}%\n${t.totalTax}: ${formatCurr(result.totalTax)}\n${isInterState ? `IGST (${activeRate}%): ${formatCurr(result.igst)}` : `CGST (${activeRate / 2}%): ${formatCurr(result.cgst)}\nSGST (${activeRate / 2}%): ${formatCurr(result.sgst)}`}\n------------------------------\n${t.totalAmountWord}: ${formatCurr(result.finalTotal)}\nGenerated via Toolbox Galaxy`;
     await navigator.clipboard.writeText(text);
     setCopied(true);
@@ -375,6 +389,21 @@ export function GstCalculatorTool() {
             ))}
           </div>
         </div>
+        <div className="mt-3">
+          <label htmlFor="gst-custom-rate" className="block text-xs font-semibold uppercase text-slate-300 mb-1.5 font-mono">
+            {isHindi ? "कस्टम जीएसटी दर (%)" : "Custom GST Rate (%)"} — {isHindi ? "वैकल्पिक" : "optional"}
+          </label>
+          <input
+            id="gst-custom-rate"
+            type="text"
+            inputMode="decimal"
+            value={customRate}
+            onChange={(e) => setCustomRate(e.target.value)}
+            placeholder="e.g. 7.5"
+            aria-invalid={parsedRate === null}
+            className="w-full h-11 rounded-xl bg-slate-900 border border-slate-700 px-3 text-white font-mono focus:border-emerald-500 focus:outline-none"
+          />
+        </div>
       </div>
 
       {/* State / IGST Toggle */}
@@ -392,6 +421,11 @@ export function GstCalculatorTool() {
       </div>
 
       {/* Results Matrix */}
+      {inputError ? (
+        <div role="alert" className="p-4 rounded-xl border border-rose-500/40 bg-rose-950/40 text-sm text-rose-200">
+          {inputError}
+        </div>
+      ) : (
       <div className="p-5 rounded-2xl bg-gradient-to-br from-slate-900 via-slate-900/90 to-slate-950 border border-slate-800 shadow-xl space-y-4">
         <div className="flex items-center justify-between pb-3 border-b border-slate-800">
           <div className="flex items-center gap-2 text-emerald-400 font-bold text-sm">
@@ -467,6 +501,7 @@ export function GstCalculatorTool() {
           </span>
         </div>
       </div>
+      )}
     </div>
   );
 }

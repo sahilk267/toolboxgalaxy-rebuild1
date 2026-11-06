@@ -15,6 +15,7 @@ import { estimateVisualLines, chunkLinesForSlides, buildPresentationPptx } from 
 import { PDFDocument } from "pdf-lib";
 import JSZip from "jszip";
 import { parseCurl, generateFetch, generateAxios, generatePython, generateGo, generateNode, generatePhp, pythonLiteral } from "../client/src/components/CurlToCodeTool";
+import { parseGstDecimal } from "../client/src/components/RegionalHighDemandTools";
 
 let totalTests = 0;
 let passedTests = 0;
@@ -396,6 +397,14 @@ console.log("\n[P1-05] Testing PPTX Text Layout & Continuation Slides (pdfExtrac
   const chunks = chunkLinesForSlides(sample40Lines, 10);
   assert(chunks.length >= 4, `40 lines + long line chunked into ${chunks.length} slides (expected >= 4)`);
 
+  // A single oversized source line must become multiple bounded slides without text loss.
+  const oversizedLine = "START-" + "x".repeat(1500) + "-END";
+  const oversizedChunks = chunkLinesForSlides([oversizedLine], 10);
+  assert(oversizedChunks.length >= 3, "Single 1500-character line generates continuation slides");
+  assert(oversizedChunks.flat().join("") === oversizedLine, "Oversized source line preserved character-for-character");
+  assert(oversizedChunks.every((chunk) => chunk.reduce((sum, text) => sum + estimateVisualLines(text), 0) <= 10), "Every slide chunk stays within ten estimated visual lines");
+
+
   // Verify all 40 lines are present in order
   const flattened = chunks.flat();
   assert(flattened.length === 40, "All 40 lines are preserved without omission");
@@ -433,6 +442,32 @@ console.log("\n[P1-05] Testing PPTX Text Layout & Continuation Slides (pdfExtrac
   assert(allSlideXml.includes("Marker 6:"), "PPTX slide XML contains long line Marker 6");
   assert(allSlideXml.includes("Marker 20:"), "PPTX slide XML contains Marker 20");
   assert(allSlideXml.includes("Marker 40:"), "PPTX slide XML contains Marker 40");
+  const oversizedPptx = await buildPresentationPptx([{ pageNumber: 3, text: oversizedLine }], "Long Paragraph Test");
+  assert(oversizedPptx.slideCount >= 3, "Real PPTX allocates multiple slides for a single oversized paragraph");
+  const oversizedZip = await JSZip.loadAsync(oversizedPptx.bytes);
+  const oversizedSlideXml: string[] = [];
+  for (let i = 1; i <= oversizedPptx.slideCount; i++) {
+    const slide = oversizedZip.file("ppt/slides/slide" + i + ".xml");
+    assert(Boolean(slide), "Continuation slide " + i + " exists in the actual PPTX");
+    if (slide) oversizedSlideXml.push(await slide.async("string"));
+  }
+  assert(oversizedSlideXml.join("").includes("START-") && oversizedSlideXml.join("").includes("-END"), "Reopened PPTX contains start and end of oversized text");
+
+}
+
+// -------------------------------------------------------------
+// TOOL QA: GST input validation rejects malformed and negative amounts
+// -------------------------------------------------------------
+console.log("\n[TOOLS] Verifying strict GST input handling...");
+{
+  assert(parseGstDecimal("100", 1_000_000_000_000) === 100, "GST accepts ordinary invoice amount");
+  assert(parseGstDecimal("0", 100) === 0, "GST accepts valid zero rate");
+  assert(parseGstDecimal("18.5", 100) === 18.5, "GST accepts fractional custom rate");
+  assert(parseGstDecimal("18oops", 100) === null, "GST rejects a partially parsed rate");
+  assert(parseGstDecimal("-1", 1_000_000_000_000) === null, "GST rejects negative amount");
+  assert(parseGstDecimal("", 1_000_000_000_000) === null, "GST rejects empty amount instead of silently using zero");
+  assert(parseGstDecimal("101", 100) === null, "GST rejects a rate above supported range");
+  assert(parseGstDecimal("1e309", 1_000_000_000_000) === null, "GST rejects non-finite exponential input");
 }
 
 // -------------------------------------------------------------

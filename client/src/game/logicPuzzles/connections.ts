@@ -32,7 +32,15 @@ export function evaluateGuess(selectedWords: string[], edition: ConnectionsEditi
     return { correct: false, message: "Select 4 words to submit." };
   }
 
-  const upperSelected = selectedWords.map((w) => w.toUpperCase());
+  const upperSelected = selectedWords.map((w) => w.trim().toUpperCase());
+  // Do not count the same word four times as a solved group.
+  if (new Set(upperSelected).size !== 4) {
+    return { correct: false, message: "Select 4 different words." };
+  }
+  const availableWords = new Set(getAllWords(edition).map((w) => w.toUpperCase()));
+  if (upperSelected.some((w) => !availableWords.has(w))) {
+    return { correct: false, message: "Select words from this puzzle." };
+  }
 
   for (const group of edition.groups) {
     const groupUpper = group.words.map((w) => w.toUpperCase());

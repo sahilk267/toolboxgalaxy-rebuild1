@@ -13,6 +13,14 @@ import { DAILY_WORDLE_BANK, VALID_5_LETTER_WORDS, wordleEditionForDate } from ".
 import { CHESS_PUZZLE_EDITIONS, coordToSquare, getChessEditionForDate } from "../client/src/game/logicPuzzles/chessBank";
 import { Chess } from "chess.js";
 import { MINI_CROSSWORD_BANK, miniCrosswordEditionForDate } from "../client/src/game/logicPuzzles/miniCrosswordBank";
+import { connectionsEditionBank } from "../client/src/game/logicPuzzles/connectionsBank";
+import { evaluateGuess, getAllWords } from "../client/src/game/logicPuzzles/connections";
+import { hiveEditionsBank } from "../client/src/game/logicPuzzles/hiveBank";
+import { validateWordGuess, getMaxScore, isPangram } from "../client/src/game/logicPuzzles/hive";
+import { STRANDS_EDITIONS } from "../client/src/game/logicPuzzles/strandsBank";
+import { STRANDS_ROWS, STRANDS_COLS, isValidPath, getWordFromPath, touchesOppositeEdges } from "../client/src/game/logicPuzzles/strands";
+import { NONOGRAM_EDITIONS } from "../client/src/game/logicPuzzles/nonogramBank";
+
 
 const assert = (condition: unknown, message: string) => { if (!condition) throw new Error(message); };
 const week = (select: (date: string) => { id: string }) => new Set(Array.from({ length: 7 }, (_, index) => select(`2026-08-${String(24 + index).padStart(2, "0")}`).id));
@@ -118,5 +126,96 @@ MINI_CROSSWORD_BANK.forEach((edition) => {
   }
 });
 
-console.log("Logic puzzle validators passed: Mini Sudoku, Tango, Queens, Patches, Zip, Wend, Wordle, Chess, Mini Crossword.");
+
+// Verify Connections against all authored groups, including the duplicate-word exploit.
+assert(connectionsEditionBank.length === 7, "Connections has seven editions");
+connectionsEditionBank.forEach((edition) => {
+  const all = getAllWords(edition).map((word) => word.toUpperCase());
+  assert(all.length === 16 && new Set(all).size === 16, edition.id + " contains 16 unique tiles");
+  assert(new Set(edition.groups.map((group) => group.level)).size === 4, edition.id + " covers all difficulty levels");
+  edition.groups.forEach((group) => {
+    const solved = evaluateGuess([...group.words], edition);
+    assert(solved.correct && solved.group?.category === group.category, edition.id + ": " + group.category + " is solvable");
+    assert(!evaluateGuess(Array(4).fill(group.words[0]), edition).correct, edition.id + ": repeated word rejected");
+  });
+  const near = evaluateGuess([...edition.groups[0].words.slice(0, 3), edition.groups[1].words[0]], edition);
+  assert(!near.correct && near.oneAway === true, edition.id + ": 3-of-4 reports one away");
+  assert(!evaluateGuess(["NOT_A_TILE", ...edition.groups[0].words.slice(1)], edition).correct, edition.id + ": unknown tile rejected");
+});
+
+assert(hiveEditionsBank.length >= 6, "Hive has authored editions");
+hiveEditionsBank.forEach((edition) => {
+  const alphabet = [edition.centerLetter, ...edition.outerLetters].map((letter) => letter.toUpperCase());
+  assert(new Set(alphabet).size === 7, edition.id + ": exactly seven distinct letters");
+  assert(edition.validWords.length > 0 && getMaxScore(edition) > 0, edition.id + ": has playable scoring words");
+  edition.validWords.forEach((word) => {
+    assert(validateWordGuess(word, edition, []).valid, edition.id + ": accepts " + word);
+    assert(!validateWordGuess(word, edition, [word]).valid, edition.id + ": disallows duplicate " + word);
+  });
+  edition.pangrams.forEach((word) => {
+    assert(isPangram(word, edition) && edition.validWords.includes(word), edition.id + ": valid playable pangram " + word);
+  });
+  assert(!validateWordGuess("ZZZZ", edition, []).valid, edition.id + ": rejects invalid letters");
+});
+
+assert(STRANDS_EDITIONS.length === 7, "Strands has seven editions");
+STRANDS_EDITIONS.forEach((edition) => {
+  assert(edition.grid.length === STRANDS_ROWS && edition.grid.every((row) => row.length === STRANDS_COLS), edition.id + ": valid 8x6 grid");
+  const words = [...(edition.spangramWord ? [edition.spangramWord] : []), ...edition.themeWords];
+  const visited = new Set<string>();
+  words.forEach((word) => {
+    assert(isValidPath(word.path) && getWordFromPath(edition.grid, word.path) === word.word.toUpperCase(), edition.id + ": valid spelling and path for " + word.word);
+    word.path.forEach((cell) => {
+      const key = String(cell.row) + "," + String(cell.col);
+      assert(!visited.has(key), edition.id + ": solution cells do not overlap at " + key);
+      visited.add(key);
+    });
+  });
+  assert(visited.size === STRANDS_ROWS * STRANDS_COLS, edition.id + ": exact board coverage");
+  assert(edition.spangramWord?.word === edition.spangram && touchesOppositeEdges(edition.spangramWord.path), edition.id + ": spangram crosses board");
+});
+assert(!isValidPath([{ row: -1, col: 0 }]) && !isValidPath([{ row: 0, col: STRANDS_COLS }]), "Strands rejects out-of-bounds coordinates");
+assert(!isValidPath([{ row: 0, col: 0 }, { row: 0, col: 0 }]), "Strands rejects reused cells");
+
+function nonogramRuns(row: number[]): number[] {
+  const groups: number[] = [];
+  let streak = 0;
+  for (const value of row) {
+    if (value) streak++;
+    else if (streak) { groups.push(streak); streak = 0; }
+  }
+  if (streak) groups.push(streak);
+  return groups.length ? groups : [0];
+}
+function countNonogramSolutions(rowClues: number[][], colClues: number[][], limit = 2): number {
+  const n = rowClues.length;
+  const same = (a: number[], b: number[]) => a.length === b.length && a.every((v, i) => v === b[i]);
+  const candidates = rowClues.map((clue) =>
+    Array.from({ length: 2 ** n }, (_, mask) =>
+      Array.from({ length: n }, (_, col) => (mask >> col) & 1)
+    ).filter((row) => same(nonogramRuns(row), clue))
+  );
+  let count = 0;
+  const search = (index: number, rows: number[][]) => {
+    if (count >= limit) return;
+    if (index === n) {
+      if (colClues.every((clue, col) => same(nonogramRuns(rows.map((row) => row[col])), clue))) count++;
+      return;
+    }
+    for (const row of candidates[index]) search(index + 1, [...rows, row]);
+  };
+  search(0, []);
+  return count;
+}
+assert(NONOGRAM_EDITIONS.length === 7, "Nonogram has seven editions");
+NONOGRAM_EDITIONS.forEach((edition) => {
+  assert(edition.solution.length === edition.size && edition.solution.every((row) => row.length === edition.size), edition.id + ": proper dimensions");
+  edition.solution.forEach((row, i) => assert(JSON.stringify(nonogramRuns(row)) === JSON.stringify(edition.rowClues[i]), edition.id + ": row " + i + " clues match"));
+  for (let col = 0; col < edition.size; col++) {
+    assert(JSON.stringify(nonogramRuns(edition.solution.map((row) => row[col]))) === JSON.stringify(edition.colClues[col]), edition.id + ": col " + col + " clues match");
+  }
+  assert(countNonogramSolutions(edition.rowClues, edition.colClues) === 1, edition.id + ": solution is mathematically unique");
+});
+
+console.log("Logic puzzle validators passed: Mini Sudoku, Tango, Queens, Patches, Zip, Wend, Wordle, Chess, Mini Crossword, Connections, Hive, Strands, Nonogram.");
 

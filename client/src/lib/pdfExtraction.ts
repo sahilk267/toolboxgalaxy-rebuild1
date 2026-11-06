@@ -250,26 +250,44 @@ export function estimateVisualLines(text: string, charsPerLine: number = 70): nu
  * Instead of rigid 12 source lines, calculates total visual weight per slide (default max 10 visual lines).
  */
 export function chunkLinesForSlides(lines: string[], maxVisualLines: number = 10): string[][] {
+  const visualLimit = Math.max(1, Math.floor(Number.isFinite(maxVisualLines) ? maxVisualLines : 10));
+  const charsPerLine = 70;
+  const segmentLimit = charsPerLine * visualLimit;
   const chunks: string[][] = [];
   let currentChunk: string[] = [];
   let currentWeight = 0;
 
-  for (const line of lines) {
-    const weight = estimateVisualLines(line, 70);
-    // If adding this line exceeds capacity and we already have lines, flush to a new slide
-    if (currentWeight + weight > maxVisualLines && currentChunk.length > 0) {
+  const addSegment = (segment: string) => {
+    const weight = estimateVisualLines(segment, charsPerLine);
+    if (currentChunk.length > 0 && currentWeight + weight > visualLimit) {
       chunks.push(currentChunk);
       currentChunk = [];
       currentWeight = 0;
     }
-    currentChunk.push(line);
+    currentChunk.push(segment);
     currentWeight += weight;
+  };
+
+  for (const line of lines) {
+    let remaining = line;
+    // A single long source paragraph must never exceed the slide's visual-line budget.
+    // Preserve every character: concatenating its segments reproduces the original line.
+    while (remaining.length > segmentLimit) {
+      const preview = remaining.slice(0, segmentLimit);
+      const spaceBreak = preview.lastIndexOf(" ");
+      let cut = spaceBreak >= Math.floor(segmentLimit * 0.6) ? spaceBreak + 1 : segmentLimit;
+
+      // Do not split a UTF-16 surrogate pair across separate PPTX text runs.
+      const lastCodeUnit = remaining.charCodeAt(cut - 1);
+      if (lastCodeUnit >= 0xd800 && lastCodeUnit <= 0xdbff && cut > 1) cut--;
+
+      addSegment(remaining.slice(0, cut));
+      remaining = remaining.slice(cut);
+    }
+    addSegment(remaining);
   }
 
-  if (currentChunk.length > 0) {
-    chunks.push(currentChunk);
-  }
-
+  if (currentChunk.length > 0) chunks.push(currentChunk);
   return chunks;
 }
 
