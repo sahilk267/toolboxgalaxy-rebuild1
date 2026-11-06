@@ -253,7 +253,11 @@ export const KrunkerCanvas: React.FC<KrunkerCanvasProps> = ({ onBackToMenu }) =>
     };
 
     const onContextMenu = (e: MouseEvent) => {
-      e.preventDefault();
+      // Right click elsewhere on the website must remain a normal browser action.
+      if (document.pointerLockElement === containerRef.current ||
+          (e.target instanceof Node && Boolean(containerRef.current?.contains(e.target)))) {
+        e.preventDefault();
+      }
     };
 
     window.addEventListener("mousedown", onMouseDown);
@@ -263,6 +267,9 @@ export const KrunkerCanvas: React.FC<KrunkerCanvasProps> = ({ onBackToMenu }) =>
     // Keyboard Listeners
     const onKeyDown = (e: KeyboardEvent) => {
       if (!engineRef.current) return;
+      const gameHasKeyboard = document.pointerLockElement === containerRef.current ||
+        Boolean(containerRef.current?.contains(document.activeElement));
+      if (!gameHasKeyboard || e.ctrlKey || e.metaKey || e.altKey) return;
       engineRef.current.keys[e.code] = true;
 
       if (e.code === "Tab") {
@@ -303,6 +310,15 @@ export const KrunkerCanvas: React.FC<KrunkerCanvasProps> = ({ onBackToMenu }) =>
       }
     };
 
+    const onWindowBlur = () => {
+      if (!engineRef.current) return;
+      engineRef.current.keys = {};
+      engineRef.current.isMouseDown = false;
+      engineRef.current.isRightMouseDown = false;
+      setShowTabScoreboard(false);
+      setIsADS(false);
+    };
+    window.addEventListener("blur", onWindowBlur);
     window.addEventListener("keydown", onKeyDown);
     window.addEventListener("keyup", onKeyUp);
 
@@ -339,6 +355,7 @@ export const KrunkerCanvas: React.FC<KrunkerCanvasProps> = ({ onBackToMenu }) =>
       window.removeEventListener("mousedown", onMouseDown);
       window.removeEventListener("mouseup", onMouseUp);
       window.removeEventListener("contextmenu", onContextMenu);
+      window.removeEventListener("blur", onWindowBlur);
       window.removeEventListener("keydown", onKeyDown);
       window.removeEventListener("keyup", onKeyUp);
       window.removeEventListener("resize", onResize);

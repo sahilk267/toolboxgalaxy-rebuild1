@@ -60,7 +60,10 @@ export default function SurvivCanvas({ callbacks, engineRef, audio }: SurvivCanv
 
     // Keyboard handlers
     const handleKeyDown = (e: KeyboardEvent) => {
+      // Other controls on the page must never operate this game.
+      if (document.activeElement !== canvas || e.ctrlKey || e.metaKey || e.altKey) return;
       engine.keys[e.code] = true;
+      if (e.repeat) return;
       if (e.code === "KeyR") {
         engine.reloadWeapon(engine.player);
       } else if (e.code === "Digit1") {
@@ -84,6 +87,20 @@ export default function SurvivCanvas({ callbacks, engineRef, audio }: SurvivCanv
       engine.keys[e.code] = false;
     };
 
+    const resetInputOnBlur = () => {
+      engine.keys = {};
+      engine.isMouseDown = false;
+      engine.moveStick.active = false;
+      engine.moveStick.x = 0;
+      engine.moveStick.y = 0;
+      engine.aimStick.active = false;
+      engine.aimStick.x = 0;
+      engine.aimStick.y = 0;
+      touchState.current.moveTouchId = null;
+      touchState.current.aimTouchId = null;
+    };
+    window.addEventListener("blur", resetInputOnBlur);
+    canvas.addEventListener("blur", resetInputOnBlur);
     window.addEventListener("keydown", handleKeyDown);
     window.addEventListener("keyup", handleKeyUp);
 
@@ -102,6 +119,7 @@ export default function SurvivCanvas({ callbacks, engineRef, audio }: SurvivCanv
 
     const handleMouseDown = (e: MouseEvent) => {
       if (e.button === 0) {
+        canvas.focus({ preventScroll: true });
         engine.isMouseDown = true;
       }
     };
@@ -118,7 +136,7 @@ export default function SurvivCanvas({ callbacks, engineRef, audio }: SurvivCanv
       engine.switchWeapon(nextSlot as 0 | 1 | 2);
     };
 
-    window.addEventListener("mousemove", handleMouseMove);
+    canvas.addEventListener("mousemove", handleMouseMove);
     canvas.addEventListener("mousedown", handleMouseDown);
     window.addEventListener("mouseup", handleMouseUp);
     canvas.addEventListener("wheel", handleWheel, { passive: false });
@@ -287,9 +305,11 @@ export default function SurvivCanvas({ callbacks, engineRef, audio }: SurvivCanv
       cancelAnimationFrame(animId);
       window.removeEventListener("resize", handleResize);
       resizeObserver.disconnect();
+      window.removeEventListener("blur", resetInputOnBlur);
+      canvas.removeEventListener("blur", resetInputOnBlur);
       window.removeEventListener("keydown", handleKeyDown);
       window.removeEventListener("keyup", handleKeyUp);
-      window.removeEventListener("mousemove", handleMouseMove);
+      canvas.removeEventListener("mousemove", handleMouseMove);
       canvas.removeEventListener("mousedown", handleMouseDown);
       window.removeEventListener("mouseup", handleMouseUp);
       canvas.removeEventListener("wheel", handleWheel);
@@ -305,6 +325,7 @@ export default function SurvivCanvas({ callbacks, engineRef, audio }: SurvivCanv
     <canvas
       ref={canvasRef}
       className="absolute inset-0 w-full h-full cursor-crosshair touch-none select-none block"
+      tabIndex={0}
     />
   );
 }
