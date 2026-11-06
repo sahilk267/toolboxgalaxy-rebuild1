@@ -27,6 +27,7 @@ import { imagesPdfFileError, imagesPdfDimensionError, imagesPdfPlacement } from 
 import { KRUNKER_MATCH_DURATION_SECONDS, freshKrunkerMatchStats, resetKrunkerBotForMatch } from "../client/src/game/krunker/matchReset";
 import { rayAabbDistance } from "../client/src/game/krunker/rayAabb";
 import { segmentCircleHit, segmentBoxHit, firstProjectileImpact } from "../client/src/game/surviv/projectileCollision";
+import { separateCircleFromBox, separateCircleFromCircle, resolveSurvivMovement } from "../client/src/game/surviv/playerCollision";
 import { SurvivEngine } from "../client/src/game/surviv/engine";
 import type { Obstacle as SurvivObstacle, PlayerEntity as SurvivPlayer, BulletEntity as SurvivBullet } from "../client/src/game/surviv/types";
 import type { BotEntity } from "../client/src/game/krunker/types";
@@ -946,6 +947,106 @@ console.log("\n[GAMES] Verifying Surviv high-speed bullet collisions and cover p
   const outOfRangeGame = runRealBullet([], 35, 80);
   assert(outOfRangeGame.bots[0].health === 100 && outOfRangeGame.bullets.length === 0,
     "Real Surviv engine clips projectile travel at maximum range without hitting distant enemy");
+}
+
+
+// -------------------------------------------------------------
+// GAME QA BATCH 9: Surviv player/AI collision with boxes, circles and island bounds
+// -------------------------------------------------------------
+console.log("\n[GAMES] Verifying Surviv movement and obstacle separation...");
+{
+  const boxCenter = { x: 500, y: 500 };
+  const insideBox = separateCircleFromBox({ x: 500, y: 500 }, boxCenter, 100, 40, 20);
+  assert(insideBox.x === 500 && insideBox.y === 440,
+    "Surviv player inside a thick wall exits beyond its nearest face, not merely one radius");
+  const onFace = separateCircleFromBox({ x: 400, y: 500 }, boxCenter, 100, 40, 20);
+  assert(onFace.x === 380 && onFace.y === 500,
+    "Surviv center directly on a wall edge separates outwards");
+  const touching = separateCircleFromBox({ x: 380, y: 500 }, boxCenter, 100, 40, 20);
+  assert(touching.x === 380 && touching.y === 500,
+    "Surviv exact wall tangency does not cause jitter");
+  const nearCorner = separateCircleFromBox({ x: 395, y: 455 }, boxCenter, 100, 40, 20);
+  assert(Math.abs(Math.hypot(nearCorner.x - 400, nearCorner.y - 460) - 20) < 1e-7,
+    "Surviv wall corner resolves via actual diagonal separation distance");
+  const outsideWall = separateCircleFromBox({ x: 700, y: 500 }, boxCenter, 100, 40, 20);
+  assert(outsideWall.x === 700 && outsideWall.y === 500,
+    "Surviv wall collision leaves distant players unchanged");
+
+  const coincident = separateCircleFromCircle({ x: 700, y: 700 }, { x: 700, y: 700 }, 50);
+  assert(coincident.x === 750 && coincident.y === 700,
+    "Surviv coincident tree/player centers push player out deterministically");
+  const ordinaryCircle = separateCircleFromCircle({ x: 720, y: 700 }, { x: 700, y: 700 }, 50);
+  assert(ordinaryCircle.x === 750 && ordinaryCircle.y === 700,
+    "Surviv normal tree/rock collision separates to sum of radii");
+  const circleTangency = separateCircleFromCircle({ x: 750, y: 700 }, { x: 700, y: 700 }, 50);
+  assert(circleTangency.x === 750 && circleTangency.y === 700,
+    "Surviv circle tangency leaves a non-overlapping player unchanged");
+
+  const wall = (x: number, y: number, w: number, h: number, active = true): SurvivObstacle => ({
+    id: 50, type: "wall", x, y, radius: 0, width: w, height: h,
+    health: 999, maxHealth: 999, collidable: true, destructible: false,
+    color: "#334155", active,
+  });
+  const rock = (x: number, y: number, radius = 30, collidable = true): SurvivObstacle => ({
+    id: 51, type: "rock", x, y, radius, health: 100, maxHealth: 100,
+    collidable, destructible: false, color: "#64748b", active: true,
+  });
+  const moved = resolveSurvivMovement(
+    { x: 700, y: 700 }, { x: 100, y: 0 }, 0.1, []
+  );
+  assert(moved.x === 710 && moved.y === 700,
+    "Surviv ordinary player/bot movement preserves speed and direction");
+  const isolatedWall = resolveSurvivMovement(
+    { x: 500, y: 500 }, { x: 0, y: 0 }, 0, [wall(500, 500, 200, 80)]
+  );
+  assert(isolatedWall.y === 440 && isolatedWall.x === 500,
+    "Surviv actual movement resolver frees a player trapped inside a thick wall");
+  const disabledWall = resolveSurvivMovement(
+    { x: 500, y: 500 }, { x: 0, y: 0 }, 0, [wall(500, 500, 200, 80, false)]
+  );
+  assert(disabledWall.x === 500 && disabledWall.y === 500,
+    "Surviv destroyed walls no longer impede movement");
+  const treeCenter = resolveSurvivMovement(
+    { x: 700, y: 700 }, { x: 0, y: 0 }, 0, [rock(700, 700)]
+  );
+  assert(treeCenter.x === 750 && treeCenter.y === 700,
+    "Surviv movement resolver frees a player exactly inside a tree");
+  const bush = resolveSurvivMovement(
+    { x: 700, y: 700 }, { x: 0, y: 0 }, 0, [rock(700, 700, 40, false)]
+  );
+  assert(bush.x === 700 && bush.y === 700,
+    "Surviv noncollidable cover does not block movement");
+  const bunkerCorner = resolveSurvivMovement(
+    { x: 502, y: 502 }, { x: 0, y: 0 }, 0,
+    [wall(500, 500, 20, 100), wall(500, 500, 100, 20)]
+  );
+  assert(bunkerCorner.x >= 530 && bunkerCorner.y >= 530,
+    "Surviv adjoining bunker walls resolve both axes without leaving player embedded");
+  const islandEdge = resolveSurvivMovement(
+    { x: 55, y: 1000 }, { x: -1000, y: 0 }, 0.1, []
+  );
+  assert(islandEdge.x === 50,
+    "Surviv player cannot escape west island boundary at high movement speed");
+  const perimeter = resolveSurvivMovement(
+    { x: 70, y: 55 }, { x: 0, y: -100 }, 0.1, [wall(1400, 30, 2800, 60)]
+  );
+  assert(perimeter.y >= 80 && perimeter.x === 70,
+    "Surviv world-border wall prevents entry and does not push player outside island");
+
+  // Integrate with actual production SurvivEngine moveAndCollide() for humans and bots.
+  const testEngine = Object.create(SurvivEngine.prototype) as SurvivEngine;
+  testEngine.obstacles = [wall(500, 500, 200, 80)];
+  const human = { id: 0, x: 500, y: 500, vx: 0, vy: 0 } as SurvivPlayer;
+  (testEngine as unknown as { moveAndCollide(p: SurvivPlayer, dt: number): void })
+    .moveAndCollide(human, 0);
+  assert(human.x === 500 && human.y === 440,
+    "Real Surviv engine ejects a stuck human player from a solid wall");
+  testEngine.obstacles = [rock(700, 700)];
+  const bot = { id: 5, x: 700, y: 700, vx: 0, vy: 0, isBot: true } as SurvivPlayer;
+  (testEngine as unknown as { moveAndCollide(p: SurvivPlayer, dt: number): void })
+    .moveAndCollide(bot, 0);
+  assert(bot.x === 750 && bot.y === 700,
+    "Real Surviv AI bot movement also resolves coincident-center rock collisions");
 }
 
 console.log(`\n=== RESULTS: ${passedTests}/${totalTests} TESTS PASSED ===\n`);
