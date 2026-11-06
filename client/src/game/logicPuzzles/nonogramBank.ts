@@ -133,13 +133,13 @@ const RAW_EDITIONS = [
     symbol: "🗡️",
     size: 5,
     solution: [
-      [0, 0, 0, 0, 1],
-      [0, 0, 0, 1, 0],
+      [0, 0, 1, 0, 1],
+      [0, 0, 1, 1, 0],
       [0, 0, 1, 0, 0],
-      [1, 1, 0, 0, 0],
+      [1, 1, 1, 0, 0],
       [0, 1, 0, 0, 0]
     ],
-    hint: "The blade forms an elegant diagonal running from top-right towards bottom-left."
+    hint: "Follow the upper-right diagonal blade to the wider guard and handle near the bottom."
   },
   {
     id: "nonogram-rocket",

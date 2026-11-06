@@ -36,6 +36,11 @@ export function isValidPath(path: CellCoord[]): boolean {
   if (path.length === 0) return false;
   const seen = new Set<string>();
   for (let i = 0; i < path.length; i++) {
+    const { row, col } = path[i];
+    if (
+      !Number.isInteger(row) || !Number.isInteger(col) ||
+      row < 0 || row >= STRANDS_ROWS || col < 0 || col >= STRANDS_COLS
+    ) return false;
     const k = cellKey(path[i]);
     if (seen.has(k)) return false;
     seen.add(k);
