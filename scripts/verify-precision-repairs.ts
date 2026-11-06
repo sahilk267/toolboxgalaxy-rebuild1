@@ -20,6 +20,9 @@ import { parseCronField, calculateNextRuns, explainCron } from "../client/src/co
 import { validMockSqlTableName } from "../client/src/components/FakeDataGeneratorTool";
 import { fitResizeDimensions, imageResizeError } from "../client/src/components/ImageResizerTool";
 import { canvasBackingSize, logicalCanvasSize, pointerToCanvas, survivPointerToWorld } from "../client/src/game/canvasGeometry";
+import { buildTextPdf, fitPdfCellText, wrapPdfTextLine } from "../client/src/lib/pdfTextExport";
+import { parsePageRange, applyBatesStamping } from "../client/src/lib/enterprisePdf";
+import { StandardFonts } from "pdf-lib";
 
 let totalTests = 0;
 let passedTests = 0;
@@ -670,6 +673,65 @@ console.log("\n[GAMES] Verifying Diep/Surviv retina viewport and pointer transfo
   assert(scoped.x === 1160 && scoped.y === 900, "Surviv scope zoom changes aim distance correctly");
   const topLeft = survivPointerToWorld(150, 40, 150, 40, 800, 600, 1000, 900, 1);
   assert(topLeft.x === 600 && topLeft.y === 600, "Surviv top-left pointer maps relative to canvas, not window");
+}
+
+
+// -------------------------------------------------------------
+// TOOL QA BATCH 5: real Word/Excel PDF exports and Bates range correctness
+// -------------------------------------------------------------
+console.log("\n[TOOLS] Verifying PDF text layout, Excel column bounds, and Bates page ranges...");
+{
+  const sample = await PDFDocument.create();
+  const font = await sample.embedFont(StandardFonts.Helvetica);
+  const longWord = "START_" + "W".repeat(1900) + "_END";
+  const lines = wrapPdfTextLine(longWord, font, 10, 250);
+  assert(lines.length > 10, "Word PDF layout splits a long unbroken word over many bounded lines");
+  assert(lines.join("") === longWord, "Word PDF layout preserves all unbroken characters");
+  assert(lines.every((line) => font.widthOfTextAtSize(line, 10) <= 250.01), "Word PDF wrapped lines fit the actual PDF font width");
+
+  const mixed = wrapPdfTextLine("One two three four five six seven", font, 12, 75);
+  assert(mixed.length >= 2 && mixed.every((line) => font.widthOfTextAtSize(line, 12) <= 75.01), "Word PDF respects paragraph word boundaries and layout width");
+  const cellText = fitPdfCellText("Long spreadsheet cell with text", font, 9, 55);
+  assert(cellText.endsWith("...") && font.widthOfTextAtSize(cellText, 9) <= 55, "Excel PDF clips long cell text with a measured ellipsis");
+  assert(fitPdfCellText("Short", font, 9, 100) === "Short", "Excel PDF preserves short cell values");
+  assert(fitPdfCellText("LongValue", font, 9, 1) === "", "Excel PDF refuses to draw outside a column too narrow for any label");
+
+  const sourceText = Array.from({ length: 150 }, (_, i) =>
+    "# Entry " + i + "\n" + "LONG_" + "X".repeat(500) + " " + "ordinary paragraph ".repeat(8)
+  ).join("\n");
+  const output = await buildTextPdf(sourceText, "Document Export Layout Test");
+  assert(output.length > 500, "Word PDF exporter produces nonempty genuine PDF bytes");
+  const reopened = await PDFDocument.load(output);
+  assert(reopened.getPageCount() > 1, "Long Word PDF export reopens with multiple continuation pages");
+  assert(reopened.getPages().every((page) => Math.abs(page.getWidth() - 595.28) < 0.1), "Reopened Word PDF retains A4 portrait page dimensions");
+
+  const pagesDoc = await PDFDocument.create();
+  for (let i = 0; i < 5; i++) pagesDoc.addPage([595.28, 841.89]);
+  const selected = parsePageRange("1, 3-4, 3", 5);
+  assert(selected.size === 3 && selected.has(0) && selected.has(2) && selected.has(3), "Bates range selection deduplicates exact 1-based pages");
+  assert(parsePageRange("all", 5).size === 5, "Bates accepts 'all' pages");
+  assert(parsePageRange("  ", 5).size === 5, "Bates empty input defaults to all pages");
+
+  for (const malformed of ["1foo", "0-2", "3-1", "1-99", "1,,3", "1--3", "2-3-4"]) {
+    let rejected = false;
+    try { parsePageRange(malformed, 5); } catch { rejected = true; }
+    assert(rejected, "Bates rejects malformed/out-of-bounds range: " + malformed);
+  }
+
+  const stamped = await applyBatesStamping(pagesDoc, {
+    prefix: "QA-",
+    startNumber: 7,
+    digits: 3,
+    suffix: "",
+    position: "bottom-right",
+    fontSize: 9,
+    colorHex: "#111111",
+    pageRange: "1,3-4",
+  });
+  assert(stamped.stampedPages === 3 && stamped.sampleSequence === "QA-007", "Real Bates stamping numbers only three requested PDF pages");
+  const stampedPdf = await pagesDoc.save();
+  const reopenedStamped = await PDFDocument.load(stampedPdf);
+  assert(reopenedStamped.getPageCount() === 5, "Reopened Bates-numbered PDF preserves the original five pages");
 }
 
 console.log(`\n=== RESULTS: ${passedTests}/${totalTests} TESTS PASSED ===\n`);

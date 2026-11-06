@@ -1,9 +1,9 @@
 import { useState } from "react";
 import mammoth from "mammoth";
 import DOMPurify from "dompurify";
-import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
+import { buildTextPdf } from "../lib/pdfTextExport";
 import { Document, Packer, Paragraph, TextRun, HeadingLevel } from "docx";
-import { sanitizeWinAnsiText } from "../lib/pdfTextSanitizer";
+
 import {
   FileText,
   Download,
@@ -256,87 +256,9 @@ No document packets are ever transferred over network sockets. The document is c
   const exportTextToPdf = async (textToExport: string, defaultName: string) => {
     try {
       if (!textToExport.trim()) return;
-      const sanitizedText = sanitizeWinAnsiText(textToExport);
-      const sanitizedTitle = sanitizeWinAnsiText(defaultName || "Converted Document");
-
-      const pdfDoc = await PDFDocument.create();
-      const helvetica = await pdfDoc.embedFont(StandardFonts.Helvetica);
-      const helveticaBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
-
-      const pageWidth = 595.28;
-      const pageHeight = 841.89;
-      const margin = 45;
-      const contentWidth = pageWidth - margin * 2;
-      const lineHeight = 16;
-
-      let currentPage = pdfDoc.addPage([pageWidth, pageHeight]);
-      let currentY = pageHeight - margin;
-
-      currentPage.drawText(sanitizedTitle, {
-        x: margin,
-        y: currentY,
-        size: 15,
-        font: helveticaBold,
-        color: rgb(0.12, 0.22, 0.54),
-      });
-      currentY -= 28;
-
-      const paragraphs = sanitizedText.split("\n");
-      for (const para of paragraphs) {
-        if (!para.trim()) {
-          currentY -= 8;
-          continue;
-        }
-
-        const isHeading = para.startsWith("#");
-        const cleanPara = para.replace(/^#+\s*/, "");
-        const fontSize = isHeading ? 12 : 9.5;
-        const font = isHeading ? helveticaBold : helvetica;
-        const color = isHeading ? rgb(0.12, 0.22, 0.54) : rgb(0.15, 0.15, 0.15);
-
-        const words = cleanPara.split(/\s+/);
-        let currentLine = "";
-
-        for (const word of words) {
-          const testLine = currentLine ? `${currentLine} ${word}` : word;
-          const textWidth = font.widthOfTextAtSize(testLine, fontSize);
-
-          if (textWidth > contentWidth && currentLine) {
-            if (currentY <= margin + 20) {
-              currentPage = pdfDoc.addPage([pageWidth, pageHeight]);
-              currentY = pageHeight - margin;
-            }
-            currentPage.drawText(currentLine, {
-              x: margin,
-              y: currentY,
-              size: fontSize,
-              font,
-              color,
-            });
-            currentY -= lineHeight;
-            currentLine = word;
-          } else {
-            currentLine = testLine;
-          }
-        }
-
-        if (currentLine) {
-          if (currentY <= margin + 20) {
-            currentPage = pdfDoc.addPage([pageWidth, pageHeight]);
-            currentY = pageHeight - margin;
-          }
-          currentPage.drawText(currentLine, {
-            x: margin,
-            y: currentY,
-            size: fontSize,
-            font,
-            color,
-          });
-          currentY -= lineHeight + (isHeading ? 6 : 4);
-        }
-      }
-
-      const pdfBytes = await pdfDoc.save();
+      // The shared layout helper measures every line and adds continuation pages.
+      // Unbroken tokens and long titles no longer draw beyond the PDF page edge.
+      const pdfBytes = await buildTextPdf(textToExport, defaultName);
       const blob = new Blob([pdfBytes], { type: "application/pdf" });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");

@@ -3,6 +3,7 @@ import { toast } from "sonner";
 import * as XLSX from "xlsx";
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
 import { sanitizeWinAnsiText } from "../lib/pdfTextSanitizer";
+import { fitPdfCellText } from "../lib/pdfTextExport";
 import {
   FileSpreadsheet,
   Download,
@@ -384,7 +385,11 @@ export default function ExcelStudioTool() {
       const availableWidth = pageWidth - margin * 2;
       const headers = rawData[0] || [];
       const rows = rawData.slice(1);
-      const colCount = Math.max(headers.length, 1);
+      // A sparse header must not make us silently omit trailing row columns.
+      const colCount = rows.reduce((maxCols, row) =>
+        Math.max(maxCols, row?.length ?? 0), Math.max(1, headers.length));
+      const headerLabels = Array.from({ length: colCount }, (_, index) =>
+        headers[index] ?? `Col ${index + 1}`);
       const colWidth = availableWidth / colCount;
       const rowHeight = 18;
 
@@ -392,7 +397,7 @@ export default function ExcelStudioTool() {
       let currentY = pageHeight - margin;
 
       // Title & Sheet Name
-      const titleText = sanitizeWinAnsiText(`${fileName} - Sheet: ${activeSheet}`);
+      const titleText = fitPdfCellText(sanitizeWinAnsiText(`${fileName} - Sheet: ${activeSheet}`), helveticaBold, 13, availableWidth);
       currentPage.drawText(titleText, {
         x: margin,
         y: currentY,
@@ -412,8 +417,8 @@ export default function ExcelStudioTool() {
       });
 
       // Draw Headers
-      headers.forEach((h: any, i: number) => {
-        const text = sanitizeWinAnsiText(String(h ?? `Col ${i + 1}`).substring(0, 22));
+      headerLabels.forEach((h, i) => {
+        const text = fitPdfCellText(sanitizeWinAnsiText(String(h)), helveticaBold, 9, colWidth - 8);
         currentPage.drawText(text, {
           x: margin + i * colWidth + 4,
           y: currentY,
@@ -437,8 +442,8 @@ export default function ExcelStudioTool() {
             height: rowHeight,
             color: rgb(0.92, 0.94, 0.98),
           });
-          headers.forEach((h: any, i: number) => {
-            const text = sanitizeWinAnsiText(String(h ?? `Col ${i + 1}`).substring(0, 22));
+          headerLabels.forEach((h, i) => {
+            const text = fitPdfCellText(sanitizeWinAnsiText(String(h)), helveticaBold, 9, colWidth - 8);
             currentPage.drawText(text, {
               x: margin + i * colWidth + 4,
               y: currentY,
@@ -462,9 +467,9 @@ export default function ExcelStudioTool() {
           });
         }
 
-        headers.forEach((_: any, colIdx: number) => {
-          const val = row[colIdx] !== undefined && row[colIdx] !== null ? String(row[colIdx]) : "";
-          const text = sanitizeWinAnsiText(val.substring(0, 24));
+        headerLabels.forEach((_, colIdx) => {
+          const val = row?.[colIdx] !== undefined && row[colIdx] !== null ? String(row[colIdx]) : "";
+          const text = fitPdfCellText(sanitizeWinAnsiText(val), helvetica, 8.5, colWidth - 8);
           currentPage.drawText(text, {
             x: margin + colIdx * colWidth + 4,
             y: currentY,
