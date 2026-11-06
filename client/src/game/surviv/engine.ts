@@ -12,6 +12,7 @@ import {
 } from "./constants";
 import { generateIslandMap } from "./map";
 import { firstProjectileImpact } from "./projectileCollision";
+import { resolveSurvivMovement } from "./playerCollision";
 import type { SurvivAudio } from "./audio";
 import type {
   PlayerEntity,
@@ -541,54 +542,14 @@ export class SurvivEngine {
 
   // Physics & Obstacle Collision
   private moveAndCollide(p: PlayerEntity, dt: number) {
-    let nextX = p.x + p.vx * dt;
-    let nextY = p.y + p.vy * dt;
-
-    // Bounds clamp
-    nextX = Math.max(PLAYER_RADIUS + 30, Math.min(MAP_SIZE - PLAYER_RADIUS - 30, nextX));
-    nextY = Math.max(PLAYER_RADIUS + 30, Math.min(MAP_SIZE - PLAYER_RADIUS - 30, nextY));
-
-    // Circle & AABB collisions
-    for (const obs of this.obstacles) {
-      if (!obs.active || !obs.collidable) continue;
-
-      if (obs.type === "wall" || obs.type === "crate" || obs.type === "metal_crate") {
-        // Box collision
-        const hw = (obs.width || 40) / 2;
-        const hh = (obs.height || 40) / 2;
-        const closestX = Math.max(obs.x - hw, Math.min(obs.x + hw, nextX));
-        const closestY = Math.max(obs.y - hh, Math.min(obs.y + hh, nextY));
-        const distX = nextX - closestX;
-        const distY = nextY - closestY;
-        const distSq = distX * distX + distY * distY;
-
-        if (distSq < PLAYER_RADIUS * PLAYER_RADIUS) {
-          const dist = Math.sqrt(distSq);
-          const overlap = PLAYER_RADIUS - (dist || 0.001);
-          const nx = dist ? distX / dist : 1;
-          const ny = dist ? distY / dist : 0;
-          nextX += nx * overlap;
-          nextY += ny * overlap;
-        }
-      } else {
-        // Circle collision (trees, rocks)
-        const dx = nextX - obs.x;
-        const dy = nextY - obs.y;
-        const dist = Math.hypot(dx, dy);
-        const minDist = PLAYER_RADIUS + obs.radius;
-
-        if (dist < minDist) {
-          const overlap = minDist - dist;
-          const nx = dx / (dist || 1);
-          const ny = dy / (dist || 1);
-          nextX += nx * overlap;
-          nextY += ny * overlap;
-        }
-      }
-    }
-
-    p.x = nextX;
-    p.y = nextY;
+    const next = resolveSurvivMovement(
+      { x: p.x, y: p.y },
+      { x: p.vx, y: p.vy },
+      dt,
+      this.obstacles,
+    );
+    p.x = next.x;
+    p.y = next.y;
   }
 
   // Weapon & Combat
