@@ -28,6 +28,8 @@ import { KRUNKER_MATCH_DURATION_SECONDS, freshKrunkerMatchStats, resetKrunkerBot
 import { rayAabbDistance } from "../client/src/game/krunker/rayAabb";
 import { segmentCircleHit, segmentBoxHit, firstProjectileImpact } from "../client/src/game/surviv/projectileCollision";
 import { separateCircleFromBox, separateCircleFromCircle, resolveSurvivMovement } from "../client/src/game/surviv/playerCollision";
+import { isStackableSurvivLoot, SURVIV_MEDICAL_LIMITS, transferSurvivLootStack } from "../client/src/game/surviv/lootTransfer";
+import type { GroundLoot as SurvivGroundLoot } from "../client/src/game/surviv/types";
 import { SurvivEngine } from "../client/src/game/surviv/engine";
 import type { Obstacle as SurvivObstacle, PlayerEntity as SurvivPlayer, BulletEntity as SurvivBullet } from "../client/src/game/surviv/types";
 import type { BotEntity } from "../client/src/game/krunker/types";
@@ -1047,6 +1049,87 @@ console.log("\n[GAMES] Verifying Surviv movement and obstacle separation...");
     .moveAndCollide(bot, 0);
   assert(bot.x === 750 && bot.y === 700,
     "Real Surviv AI bot movement also resolves coincident-center rock collisions");
+}
+
+
+// -------------------------------------------------------------
+// GAME QA BATCH 10: Surviv partial stack pickups and medicine capacity
+// -------------------------------------------------------------
+console.log("\n[GAMES] Verifying Surviv ammo/medical loot persistence and inventory caps...");
+{
+  const partial = transferSurvivLootStack(118, 120, 30);
+  assert(partial.taken === 2 && partial.carried === 120 && partial.onGround === 28,
+    "Surviv ammo pickup takes only remaining backpack capacity");
+  const full = transferSurvivLootStack(120, 120, 30);
+  assert(full.taken === 0 && full.onGround === 30 && full.carried === 120,
+    "Surviv full ammo inventory leaves entire ground stack");
+  const medicine = transferSurvivLootStack(14, 15, 5);
+  assert(medicine.taken === 1 && medicine.carried === 15 && medicine.onGround === 4,
+    "Surviv medical pickup never exceeds inventory cap");
+  const empty = transferSurvivLootStack(0, 3, 2);
+  assert(empty.taken === 2 && empty.carried === 2 && empty.onGround === 0,
+    "Surviv complete pickup consumes entire stack when capacity permits");
+  const invalid = transferSurvivLootStack(2, 15, -1);
+  assert(invalid.taken === 0 && invalid.carried === 2,
+    "Surviv rejects corrupted negative loot amounts");
+  assert(isStackableSurvivLoot("ammo") && isStackableSurvivLoot("bandage") &&
+    isStackableSurvivLoot("medkit") && isStackableSurvivLoot("soda") &&
+    isStackableSurvivLoot("pills") && !isStackableSurvivLoot("weapon"),
+    "Surviv stackable loot classification excludes weapons and armor");
+  assert(SURVIV_MEDICAL_LIMITS.bandage === 15 &&
+    SURVIV_MEDICAL_LIMITS.medkit === 3 &&
+    SURVIV_MEDICAL_LIMITS.soda === 6 &&
+    SURVIV_MEDICAL_LIMITS.pills === 4,
+    "Surviv existing medicine capacity limits are preserved");
+
+  const game = Object.create(SurvivEngine.prototype) as SurvivEngine;
+  const survivor = {
+    id: 1, isBot: true, x: 700, y: 700,
+    ammo: { "9mm": 118, "12g": 30, "762mm": 90, "556mm": 90 },
+    backpackTier: 1,
+    meds: { bandages: 14, medkits: 2, sodas: 6, pills: 4 },
+    helmetTier: 0,
+  } as SurvivPlayer;
+  const makeLoot = (id: number, type: SurvivGroundLoot["type"], amount: number): SurvivGroundLoot => ({
+    id, type, x: 700, y: 700, vx: 0, vy: 0, amount, active: true,
+    ammoType: type === "ammo" ? "9mm" : undefined,
+  });
+  const ammoItem = makeLoot(1, "ammo", 30);
+  const bandageItem = makeLoot(2, "bandage", 5);
+  const medkitItem = makeLoot(3, "medkit", 3);
+  const sodaItem = makeLoot(4, "soda", 2);
+  game.loot = [ammoItem, bandageItem, medkitItem, sodaItem];
+  (game as unknown as { checkLootPickup(p: SurvivPlayer): void }).checkLootPickup(survivor);
+  assert(survivor.ammo["9mm"] === 120 && ammoItem.amount === 28 && ammoItem.active,
+    "Real Surviv engine preserves unused ammo on the ground after a partial pickup");
+  assert(survivor.meds.bandages === 15 && bandageItem.amount === 4 && bandageItem.active,
+    "Real Surviv engine caps bandages and leaves leftover bandages");
+  assert(survivor.meds.medkits === 3 && medkitItem.amount === 2 && medkitItem.active,
+    "Real Surviv engine caps medkits and preserves unused medkits");
+  assert(survivor.meds.sodas === 6 && sodaItem.amount === 2 && sodaItem.active,
+    "Real Surviv engine does not consume soda when inventory is already full");
+
+  // After inventory space is freed, the same surviving ground stacks can be picked up again.
+  survivor.ammo["9mm"] = 95;
+  survivor.meds.bandages = 10;
+  survivor.meds.medkits = 0;
+  survivor.meds.sodas = 4;
+  (game as unknown as { checkLootPickup(p: SurvivPlayer): void }).checkLootPickup(survivor);
+  assert(survivor.ammo["9mm"] === 120 && ammoItem.amount === 3 && ammoItem.active,
+    "Real Surviv engine permits a later partial pickup from remaining ammunition");
+  assert(survivor.meds.bandages === 14 && bandageItem.amount === 0 && !bandageItem.active,
+    "Real Surviv engine deactivates bandage stack only after every item is taken");
+  assert(survivor.meds.medkits === 2 && medkitItem.amount === 0 && !medkitItem.active,
+    "Real Surviv engine consumes the complete medkit remainder when capacity opens");
+  assert(survivor.meds.sodas === 6 && sodaItem.amount === 0 && !sodaItem.active,
+    "Real Surviv engine takes the correct soda remainder and clears empty ground loot");
+
+  const armor = makeLoot(5, "helmet", 1);
+  armor.tier = 2;
+  game.loot = [armor];
+  (game as unknown as { checkLootPickup(p: SurvivPlayer): void }).checkLootPickup(survivor);
+  assert(survivor.helmetTier === 2 && !armor.active,
+    "Real Surviv engine still consumes an upgraded non-stackable helmet normally");
 }
 
 console.log(`\n=== RESULTS: ${passedTests}/${totalTests} TESTS PASSED ===\n`);
