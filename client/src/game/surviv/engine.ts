@@ -11,6 +11,7 @@ import {
   BOT_NAMES
 } from "./constants";
 import { generateIslandMap } from "./map";
+import { firstProjectileImpact } from "./projectileCollision";
 import type { SurvivAudio } from "./audio";
 import type {
   PlayerEntity,
@@ -683,75 +684,56 @@ export class SurvivEngine {
   }
 
   private updateBullets(dt: number) {
-    for (const b of this.bullets) {
-      if (!b.active) continue;
-
-      const stepX = b.vx * dt;
-      const stepY = b.vy * dt;
-      b.x += stepX;
-      b.y += stepY;
-      b.distanceTraveled += Math.hypot(stepX, stepY);
-
-      if (b.distanceTraveled >= b.maxDistance) {
-        b.active = false;
+    for (const bullet of this.bullets) {
+      if (!bullet.active) continue;
+      const remainingRange = bullet.maxDistance - bullet.distanceTraveled;
+      if (remainingRange <= 0) {
+        bullet.active = false;
         continue;
       }
 
-      // Check collision with obstacles
-      let hitObs = false;
-      for (const obs of this.obstacles) {
-        if (!obs.active || !obs.collidable) continue;
+      const from = { x: bullet.x, y: bullet.y };
+      const fullX = bullet.vx * dt;
+      const fullY = bullet.vy * dt;
+      const fullDistance = Math.hypot(fullX, fullY);
+      const distance = Math.min(remainingRange, fullDistance);
+      const fraction = fullDistance > 0 ? distance / fullDistance : 0;
+      const to = { x: from.x + fullX * fraction, y: from.y + fullY * fraction };
 
-        if (obs.type === "wall" || obs.type === "crate" || obs.type === "metal_crate") {
-          const hw = (obs.width || 40) / 2;
-          const hh = (obs.height || 40) / 2;
-          if (b.x >= obs.x - hw && b.x <= obs.x + hw && b.y >= obs.y - hh && b.y <= obs.y + hh) {
-            b.active = false;
-            hitObs = true;
-            this.spawnParticle(b.x, b.y, obs.color, 4, 0.2);
-            if (obs.destructible) {
-              const attacker = b.ownerId === 0 ? this.player : this.bots.find((x) => x.id === b.ownerId);
-              this.damageObstacle(obs, b.damage, attacker);
-            }
-            break;
-          }
+      // Sweep the complete movement segment to stop high-speed bullets tunneling
+      // through walls or players. Resolve only the earliest impact.
+      const impact = firstProjectileImpact(
+        bullet, from, to, this.obstacles, [this.player, ...this.bots],
+      );
+      if (impact) {
+        bullet.x = from.x + (to.x - from.x) * impact.t;
+        bullet.y = from.y + (to.y - from.y) * impact.t;
+        bullet.distanceTraveled += distance * impact.t;
+        bullet.active = false;
+
+        const attacker = bullet.ownerId === this.player.id
+          ? this.player
+          : this.bots.find((bot) => bot.id === bullet.ownerId);
+
+        if (impact.kind === "obstacle") {
+          const obs = impact.obstacle;
+          this.spawnParticle(bullet.x, bullet.y, obs.color, 4, 0.2);
+          if (obs.destructible) this.damageObstacle(obs, bullet.damage, attacker);
         } else {
-          // Trees & Rocks
-          const dist = Math.hypot(b.x - obs.x, b.y - obs.y);
-          if (dist < obs.radius) {
-            b.active = false;
-            hitObs = true;
-            this.spawnParticle(b.x, b.y, obs.color, 4, 0.2);
-            if (obs.destructible) {
-              const attacker = b.ownerId === 0 ? this.player : this.bots.find((x) => x.id === b.ownerId);
-              this.damageObstacle(obs, b.damage, attacker);
-            }
-            break;
-          }
-        }
-      }
-
-      if (hitObs) continue;
-
-      // Check collision with players
-      const allPlayers = [this.player, ...this.bots];
-      for (const target of allPlayers) {
-        if (target.id === b.ownerId || !target.active) continue;
-
-        const dist = Math.hypot(b.x - target.x, b.y - target.y);
-        if (dist < PLAYER_RADIUS + b.radius) {
-          b.active = false;
-          const attacker = b.ownerId === 0 ? this.player : this.bots.find((x) => x.id === b.ownerId);
-          const wep = attacker ? this.getActiveWeapon(attacker) : WEAPONS.m9;
-          this.damagePlayer(target, b.damage, attacker, wep.name);
+          const target = impact.target;
+          const weapon = attacker ? this.getActiveWeapon(attacker) : WEAPONS.m9;
+          this.damagePlayer(target, bullet.damage, attacker, weapon.name);
           this.spawnBlood(target.x, target.y);
-          break;
         }
+      } else {
+        bullet.x = to.x;
+        bullet.y = to.y;
+        bullet.distanceTraveled += distance;
+        if (bullet.distanceTraveled >= bullet.maxDistance) bullet.active = false;
       }
     }
 
-    // Clean inactive bullets
-    this.bullets = this.bullets.filter((b) => b.active);
+    this.bullets = this.bullets.filter((bullet) => bullet.active);
   }
 
   private damageObstacle(obs: Obstacle, damage: number, attacker?: PlayerEntity) {

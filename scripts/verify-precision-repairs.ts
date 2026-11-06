@@ -26,6 +26,9 @@ import { assertCanvasImageEncoding } from "../client/src/lib/imageExportValidati
 import { imagesPdfFileError, imagesPdfDimensionError, imagesPdfPlacement } from "../client/src/lib/imagesToPdfLayout";
 import { KRUNKER_MATCH_DURATION_SECONDS, freshKrunkerMatchStats, resetKrunkerBotForMatch } from "../client/src/game/krunker/matchReset";
 import { rayAabbDistance } from "../client/src/game/krunker/rayAabb";
+import { segmentCircleHit, segmentBoxHit, firstProjectileImpact } from "../client/src/game/surviv/projectileCollision";
+import { SurvivEngine } from "../client/src/game/surviv/engine";
+import type { Obstacle as SurvivObstacle, PlayerEntity as SurvivPlayer, BulletEntity as SurvivBullet } from "../client/src/game/surviv/types";
 import type { BotEntity } from "../client/src/game/krunker/types";
 import * as THREE from "three";
 import { StandardFonts } from "pdf-lib";
@@ -855,6 +858,94 @@ console.log("\n[GAMES] Verifying Krunker ray-box hits across collision edge case
     "Krunker chooses nearer collider for hitscan");
   assert(ray({ x: 5.5, y: 0, z: 0 }, { x: 0, y: 1, z: 0 }) === 1,
     "Krunker inside-box ray parallel to horizontal axes exits vertically");
+}
+
+
+// -------------------------------------------------------------
+// GAME QA BATCH 8: Surviv continuous projectile collision & real engine integration
+// -------------------------------------------------------------
+console.log("\n[GAMES] Verifying Surviv high-speed bullet collisions and cover protection...");
+{
+  const from = { x: 0, y: 0 };
+  const to = { x: 100, y: 0 };
+  const wall = (x: number, active = true): SurvivObstacle => ({
+    id: 10, type: "wall", x, y: 0, radius: 0, width: 10, height: 20,
+    health: 100, maxHealth: 100, collidable: true, destructible: false,
+    color: "#334155", active,
+  });
+  const enemy = (x: number, active = true): SurvivPlayer => ({
+    id: 1, x, y: 0, active, isBot: true, health: 100, maxHealth: 100,
+    vestTier: 0, helmetTier: 0,
+  } as SurvivPlayer);
+  const shooter: SurvivPlayer = {
+    id: 0, x: 0, y: 0, active: true, isBot: false, health: 100,
+    vestTier: 0, helmetTier: 0, damageDealt: 0,
+    activeSlot: 0,
+    weapons: [{ weaponId: "m9", curAmmo: 10 }, null, { weaponId: "fists", curAmmo: 0 }],
+  } as SurvivPlayer;
+  const projectile = (maxDistance = 200): SurvivBullet => ({
+    id: 1, ownerId: 0, isBot: false, x: 0, y: 0, vx: 1000, vy: 0,
+    damage: 16, distanceTraveled: 0, maxDistance, radius: 2,
+    color: "#facc15", active: true,
+  });
+  const projectileKey = { ownerId: 0, radius: 2 };
+
+  assert(segmentCircleHit(from, to, { x: 50, y: 0 }, 5) === 0.45,
+    "Surviv segment-circle detects a thin enemy crossed in one frame");
+  assert(segmentCircleHit({ x: 0, y: 5 }, { x: 100, y: 5 }, { x: 50, y: 0 }, 5) === 0.5,
+    "Surviv segment-circle counts tangent hits");
+  assert(segmentCircleHit(from, to, { x: 50, y: 30 }, 5) === null,
+    "Surviv segment-circle rejects bullets missing a player");
+  assert(segmentCircleHit({ x: 50, y: 0 }, to, { x: 50, y: 0 }, 5) === 0,
+    "Surviv segment-circle detects a projectile originating inside its target");
+  assert(segmentBoxHit(from, to, { x: 50, y: 0 }, 5, 5) === 0.45,
+    "Surviv swept box hit detects a thin wall crossed between frame endpoints");
+  assert(segmentBoxHit({ x: 50, y: 0 }, to, { x: 50, y: 0 }, 5, 5) === 0,
+    "Surviv swept box detects bullets spawned inside a collider");
+  assert(segmentBoxHit({ x: 0, y: 20 }, { x: 100, y: 20 }, { x: 50, y: 0 }, 5, 5) === null,
+    "Surviv swept box excludes parallel rays outside a wall");
+  assert(segmentBoxHit({ x: 100, y: 0 }, from, { x: 50, y: 0 }, 5, 5) === 0.45,
+    "Surviv swept box detects reverse-direction shots");
+
+  const blocked = firstProjectileImpact(projectileKey, from, to, [wall(50)], [shooter, enemy(80)]);
+  assert(blocked?.kind === "obstacle" && blocked.obstacle.x === 50,
+    "Surviv walls block shots aimed at enemies behind cover");
+  const beforeCover = firstProjectileImpact(projectileKey, from, to, [wall(80)], [shooter, enemy(40)]);
+  assert(beforeCover?.kind === "player" && beforeCover.target.x === 40,
+    "Surviv correctly hits a player standing in front of a wall");
+  const nearestWall = firstProjectileImpact(projectileKey, from, to, [wall(80), wall(35)], [shooter]);
+  assert(nearestWall?.kind === "obstacle" && nearestWall.obstacle.x === 35,
+    "Surviv picks the closest wall even if listed later in the array");
+  const transparentWall = firstProjectileImpact(projectileKey, from, to, [wall(50, false)], [shooter, enemy(80)]);
+  assert(transparentWall?.kind === "player",
+    "Surviv inactive cover no longer blocks projectiles");
+  assert(firstProjectileImpact(projectileKey, from, to, [], [shooter]) === null,
+    "Surviv projectiles never damage their own shooter");
+
+  // Exercise the real engine's private physics routine without creating random maps or audio.
+  const runRealBullet = (obstacles: SurvivObstacle[], maxRange: number, enemyX: number) => {
+    const game = Object.create(SurvivEngine.prototype) as SurvivEngine;
+    game.player = { ...shooter, damageDealt: 0 };
+    game.bots = [enemy(enemyX)];
+    game.obstacles = obstacles;
+    game.bullets = [projectile(maxRange)];
+    game.particles = [];
+    game.loot = [];
+    (game as unknown as { updateBullets(dt: number): void }).updateBullets(0.1);
+    return game;
+  };
+  const wallGame = runRealBullet([wall(50)], 200, 80);
+  assert(wallGame.bullets.length === 0 && wallGame.bots[0].health === 100,
+    "Real Surviv engine bullet cannot tunnel through a thin wall into a player");
+  const openGame = runRealBullet([], 200, 80);
+  assert(openGame.bullets.length === 0 && openGame.bots[0].health === 84 && openGame.player.damageDealt === 16,
+    "Real Surviv engine registers a high-speed hit and correct damage in one frame");
+  const lastRangeGame = runRealBullet([], 65, 80);
+  assert(lastRangeGame.bots[0].health === 84,
+    "Real Surviv engine registers a hit BEFORE a projectile reaches maximum range");
+  const outOfRangeGame = runRealBullet([], 35, 80);
+  assert(outOfRangeGame.bots[0].health === 100 && outOfRangeGame.bullets.length === 0,
+    "Real Surviv engine clips projectile travel at maximum range without hitting distant enemy");
 }
 
 console.log(`\n=== RESULTS: ${passedTests}/${totalTests} TESTS PASSED ===\n`);
