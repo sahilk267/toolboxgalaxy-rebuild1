@@ -22,6 +22,11 @@ import { fitResizeDimensions, imageResizeError } from "../client/src/components/
 import { canvasBackingSize, logicalCanvasSize, pointerToCanvas, survivPointerToWorld } from "../client/src/game/canvasGeometry";
 import { buildTextPdf, fitPdfCellText, wrapPdfTextLine } from "../client/src/lib/pdfTextExport";
 import { parsePageRange, applyBatesStamping } from "../client/src/lib/enterprisePdf";
+import { assertCanvasImageEncoding } from "../client/src/lib/imageExportValidation";
+import { imagesPdfFileError, imagesPdfDimensionError, imagesPdfPlacement } from "../client/src/lib/imagesToPdfLayout";
+import { KRUNKER_MATCH_DURATION_SECONDS, freshKrunkerMatchStats, resetKrunkerBotForMatch } from "../client/src/game/krunker/matchReset";
+import type { BotEntity } from "../client/src/game/krunker/types";
+import * as THREE from "three";
 import { StandardFonts } from "pdf-lib";
 
 let totalTests = 0;
@@ -732,6 +737,81 @@ console.log("\n[TOOLS] Verifying PDF text layout, Excel column bounds, and Bates
   const stampedPdf = await pagesDoc.save();
   const reopenedStamped = await PDFDocument.load(stampedPdf);
   assert(reopenedStamped.getPageCount() === 5, "Reopened Bates-numbered PDF preserves the original five pages");
+}
+
+
+// -------------------------------------------------------------
+// BATCH 6: browser image encoding, ordered images-to-PDF geometry, game replay
+// -------------------------------------------------------------
+console.log("\n[TOOLS/GAMES] Verifying image output formats, PDF geometry and Krunker replay state...");
+{
+  // The image download extension must always agree with the actual canvas output.
+  const webp = new Blob(["image-data"], { type: "image/webp" });
+  const jpeg = new Blob(["image-data"], { type: "image/jpeg" });
+  const png = new Blob(["image-data"], { type: "image/png" });
+  assert(assertCanvasImageEncoding(webp, "image/webp") === webp, "WebP export accepts browser-returned WebP format");
+  assert(assertCanvasImageEncoding(jpeg, "image/jpeg") === jpeg, "JPEG export accepts browser-returned JPEG format");
+  assert(assertCanvasImageEncoding(png, "image/png") === png, "PNG export accepts browser-returned PNG format");
+  let fallbackRejected = false;
+  try { assertCanvasImageEncoding(png, "image/webp"); } catch { fallbackRejected = true; }
+  assert(fallbackRejected, "Image exporter rejects PNG fallback mislabeled as WebP");
+  let emptyRejected = false;
+  try { assertCanvasImageEncoding(new Blob([], { type: "image/png" }), "image/png"); } catch { emptyRejected = true; }
+  assert(emptyRejected, "Image exporter rejects empty canvas image blob");
+
+  assert(imagesPdfFileError({ type: "image/png", size: 200 }) === null, "Images-to-PDF accepts PNG");
+  assert(imagesPdfFileError({ type: "image/jpeg", size: 200 }) === null, "Images-to-PDF accepts JPEG");
+  assert(imagesPdfFileError({ type: "image/webp", size: 200 }) === null, "Images-to-PDF accepts WebP");
+  assert(Boolean(imagesPdfFileError({ type: "image/svg+xml", size: 200 })), "Images-to-PDF rejects unsupported SVG input");
+  assert(Boolean(imagesPdfFileError({ type: "image/png", size: 30 * 1024 * 1024 })), "Images-to-PDF rejects oversized uploaded images");
+  assert(Boolean(imagesPdfDimensionError(8192, 8192)), "Images-to-PDF blocks overly expensive 67MP decode");
+  assert(imagesPdfDimensionError(4000, 4000) === null, "Images-to-PDF accepts safe 16MP decode");
+
+  const a4 = imagesPdfPlacement(1200, 600, "a4", "portrait", 20);
+  assert(a4.pageWidth === 595.28 && a4.pageHeight === 841.89, "Images-to-PDF preserves A4 portrait dimensions");
+  assert(a4.x >= 20 && a4.y >= 20 && a4.x + a4.width <= a4.pageWidth - 19.9, "Wide images stay within page margins");
+  const landscape = imagesPdfPlacement(1200, 600, "a4", "landscape", 20);
+  assert(landscape.pageWidth === 841.89 && landscape.pageHeight === 595.28, "Images-to-PDF rotates A4 landscape dimensions");
+  const fit = imagesPdfPlacement(100, 50, "fit", "portrait", 20);
+  assert(fit.pageWidth === 140 && fit.pageHeight === 90 && fit.x === 20 && fit.y === 20, "Fit-to-image uses exact image size and margins");
+  let invalidMarginRejected = false;
+  try { imagesPdfPlacement(100, 50, "a4", "portrait", 1000); } catch { invalidMarginRejected = true; }
+  assert(invalidMarginRejected, "Images-to-PDF rejects margins that erase the printable area");
+
+  const photoPdf = await PDFDocument.create();
+  for (const layout of [a4, landscape, fit]) {
+    const page = photoPdf.addPage([layout.pageWidth, layout.pageHeight]);
+    page.drawRectangle({ x: layout.x, y: layout.y, width: layout.width, height: layout.height });
+  }
+  const reopened = await PDFDocument.load(await photoPdf.save());
+  assert(reopened.getPageCount() === 3, "Images-to-PDF computed page placements survive real PDF save/reopen");
+  assert(Math.abs(reopened.getPage(2).getWidth() - fit.pageWidth) < 0.01, "Reopened fit-to-image PDF retains expected physical width");
+
+  const fresh = freshKrunkerMatchStats();
+  assert(KRUNKER_MATCH_DURATION_SECONDS === 240, "Krunker match duration resets to four minutes");
+  assert(Object.values(fresh).every((value) => value === 0), "Krunker round reset zeroes every gameplay statistic");
+  fresh.score = 500;
+  assert(freshKrunkerMatchStats().score === 0, "New Krunker match statistics are independent of previous rounds");
+
+  const mockBot = {
+    position: new THREE.Vector3(100, 2, 50),
+    velocity: new THREE.Vector3(5, 0, 3),
+    mesh: new THREE.Group(),
+    leftLegMesh: new THREE.Mesh(),
+    rightLegMesh: new THREE.Mesh(),
+    health: 0, maxHealth: 100, isAlive: false, respawnTimer: 9,
+    invulnerableTimer: 0, targetId: "player", state: "chase",
+    stateTimer: 0, fireCooldown: 3, reactionTimer: 0,
+    lastKnownTargetPos: new THREE.Vector3(1, 2, 3),
+    rotationY: 1, pitch: 0.5, kills: 8, deaths: 4,
+    score: 800, walkCycle: 4,
+  } as unknown as BotEntity;
+  mockBot.mesh.visible = false;
+  resetKrunkerBotForMatch(mockBot, new THREE.Vector3(10, 0, 20));
+  assert(mockBot.isAlive && mockBot.health === 100 && mockBot.mesh.visible, "Krunker replay revives previously eliminated bots");
+  assert(mockBot.position.x === 10 && mockBot.position.z === 20 && mockBot.velocity.length() === 0, "Krunker replay restores spawn position and clears velocity");
+  assert(mockBot.kills === 0 && mockBot.deaths === 0 && mockBot.score === 0, "Krunker replay clears bot scoreboard");
+  assert(mockBot.targetId === null && mockBot.state === "patrol" && mockBot.respawnTimer === 0, "Krunker replay clears combat AI state");
 }
 
 console.log(`\n=== RESULTS: ${passedTests}/${totalTests} TESTS PASSED ===\n`);

@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { PDFDocument } from "pdf-lib";
 import { trackPageView } from "@/lib/analytics";
+import { imagesPdfDimensionError, imagesPdfFileError, imagesPdfPlacement } from "@/lib/imagesToPdfLayout";
 import {
   FilePlus,
   Scissors,
@@ -429,6 +430,8 @@ async function renderImageToPngBytes(dataUrl: string): Promise<Uint8Array> {
         const canvas = document.createElement("canvas");
         canvas.width = el.naturalWidth || el.width;
         canvas.height = el.naturalHeight || el.height;
+        const invalid = imagesPdfDimensionError(canvas.width, canvas.height);
+        if (invalid) throw new Error(invalid);
         const ctx = canvas.getContext("2d");
         if (!ctx) {
           reject(new Error("Unable to obtain 2D rendering context"));
@@ -459,34 +462,54 @@ export function ImagesToPdfTool() {
   const [isGenerating, setIsGenerating] = useState(false);
   const [isDone, setIsDone] = useState(false);
 
-  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files;
-    if (!files || files.length === 0) return;
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const selected = Array.from(e.target.files ?? []);
+    e.target.value = "";
+    if (selected.length === 0) return;
 
-    for (let i = 0; i < files.length; i++) {
-      const file = files[i];
-      const reader = new FileReader();
-      reader.onload = () => {
-        const result = reader.result as string;
-        const arrayBuffer = new Uint8Array(
-          atob(result.split(",")[1])
-            .split("")
-            .map((c) => c.charCodeAt(0))
-        );
-        setImages((prev) => [
-          ...prev,
-          {
-            id: `${Date.now()}-${i}-${Math.random()}`,
+    // FileReader completion timing must not reorder a multi-file PDF document.
+    // Promise.all returns entries in the original input selection order.
+    const loaded = await Promise.all(selected.map(async (file, index): Promise<{
+      item: ImageItem | null; error: string | null;
+    }> => {
+      const validation = imagesPdfFileError(file);
+      if (validation) return { item: null, error: `${file.name}: ${validation}` };
+      try {
+        const [buffer, dataUrl] = await Promise.all([
+          file.arrayBuffer(),
+          new Promise<string>((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => typeof reader.result === "string"
+              ? resolve(reader.result)
+              : reject(new Error("Image could not be previewed."));
+            reader.onerror = () => reject(new Error("Image could not be read."));
+            reader.readAsDataURL(file);
+          }),
+        ]);
+        return {
+          item: {
+            id: `${Date.now()}-${index}-${Math.random()}`,
             name: file.name,
             type: file.type,
-            dataUrl: result,
-            bytes: arrayBuffer,
+            dataUrl,
+            bytes: new Uint8Array(buffer),
           },
-        ]);
-      };
-      reader.readAsDataURL(file);
+          error: null,
+        };
+      } catch (error) {
+        return {
+          item: null,
+          error: `${file.name}: ${error instanceof Error ? error.message : "Unable to read file"}`,
+        };
+      }
+    }));
+
+    const valid = loaded.flatMap((entry) => entry.item ? [entry.item] : []);
+    const rejected = loaded.flatMap((entry) => entry.error ? [entry.error] : []);
+    if (valid.length > 0) setImages((prev) => [...prev, ...valid]);
+    if (rejected.length > 0) {
+      alert("Skipped unsupported or unreadable images:\n" + rejected.join("\n"));
     }
-    e.target.value = "";
   };
 
   const removeImage = (id: string) => {
@@ -534,44 +557,15 @@ export function ImagesToPdfTool() {
           embeddedImage = await pdfDoc.embedPng(pngBytes);
         }
 
-        const imgWidth = embeddedImage.width;
-        const imgHeight = embeddedImage.height;
-
-        let pageWidth = 595.28; // A4 portrait
-        let pageHeight = 841.89;
-
-        if (pageSize === "letter") {
-          pageWidth = 612;
-          pageHeight = 792;
-        } else if (pageSize === "fit") {
-          pageWidth = imgWidth + margin * 2;
-          pageHeight = imgHeight + margin * 2;
-        }
-
-        if (pageSize !== "fit" && orientation === "landscape") {
-          const temp = pageWidth;
-          pageWidth = pageHeight;
-          pageHeight = temp;
-        }
-
-        const page = pdfDoc.addPage([pageWidth, pageHeight]);
-
-        // Calculate aspect ratio fitting within margins
-        const availableWidth = pageWidth - margin * 2;
-        const availableHeight = pageHeight - margin * 2;
-
-        const scale = Math.min(availableWidth / imgWidth, availableHeight / imgHeight);
-        const finalWidth = imgWidth * scale;
-        const finalHeight = imgHeight * scale;
-
-        const xPos = margin + (availableWidth - finalWidth) / 2;
-        const yPos = margin + (availableHeight - finalHeight) / 2;
-
+        const layout = imagesPdfPlacement(
+          embeddedImage.width, embeddedImage.height, pageSize, orientation, margin,
+        );
+        const page = pdfDoc.addPage([layout.pageWidth, layout.pageHeight]);
         page.drawImage(embeddedImage, {
-          x: xPos,
-          y: yPos,
-          width: finalWidth,
-          height: finalHeight,
+          x: layout.x,
+          y: layout.y,
+          width: layout.width,
+          height: layout.height,
         });
       }
 

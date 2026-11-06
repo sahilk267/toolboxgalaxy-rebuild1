@@ -80,8 +80,8 @@ export const KrunkerCanvas: React.FC<KrunkerCanvasProps> = ({ onBackToMenu }) =>
   const pendingLockTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Request Pointer Lock on desktop safely
-  const requestLock = useCallback(() => {
-    if (!containerRef.current || matchEnded) return;
+  const requestLock = useCallback((allowCompletedRound = false) => {
+    if (!containerRef.current || (matchEnded && !allowCompletedRound)) return;
     if (document.pointerLockElement === containerRef.current) return;
 
     if (pendingLockTimeoutRef.current) {
@@ -93,7 +93,7 @@ export const KrunkerCanvas: React.FC<KrunkerCanvasProps> = ({ onBackToMenu }) =>
     if (elapsed < 1250) {
       // Chrome cooldown: pointer lock cannot be acquired immediately after exiting
       pendingLockTimeoutRef.current = setTimeout(() => {
-        requestLock();
+        requestLock(allowCompletedRound);
       }, 1300 - elapsed);
       return;
     }
@@ -888,13 +888,22 @@ export const KrunkerCanvas: React.FC<KrunkerCanvasProps> = ({ onBackToMenu }) =>
 
             <button
               onClick={() => {
+                const engine = engineRef.current;
+                if (!engine) return;
+                engine.restartMatch();
                 setMatchEnded(false);
-                if (engineRef.current) {
-                  engineRef.current.matchTimeRemaining = 240;
-                  engineRef.current.isMatchEnded = false;
-                  engineRef.current.spawnPlayer();
-                  requestLock();
-                }
+                setFinalStats(null);
+                setMatchWinner("");
+                setMatchTime(240);
+                setKillfeed([]);
+                setScorePopups([]);
+                setSpeed(0);
+                setIsADS(false);
+                setHitmarkerActive(false);
+                setDamageIndicator(false);
+                setShowTabScoreboard(false);
+                // This click is the new-round gesture; the prior render still has matchEnded=true.
+                requestLock(true);
               }}
               className="w-full py-3 bg-amber-500 hover:bg-amber-400 text-zinc-950 font-black tracking-wider uppercase rounded-xl transition-all shadow-lg shadow-amber-500/20 flex items-center justify-center gap-2 cursor-pointer"
             >

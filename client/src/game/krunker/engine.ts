@@ -20,6 +20,7 @@ import {
 import { buildKrunkerArena } from "./mapBuilder";
 import { buildBotCharacter, buildFPSViewmodel } from "./characterBuilder";
 import { krunkerAudio } from "./audio";
+import { freshKrunkerMatchStats, KRUNKER_MATCH_DURATION_SECONDS, resetKrunkerBotForMatch } from "./matchReset";
 
 export class KrunkerEngine {
   // Three.js Core
@@ -80,20 +81,9 @@ export class KrunkerEngine {
   public baseFOV: number = 80;
 
   // Match Telemetry & Callbacks
-  public stats: MatchStats = {
-    kills: 0,
-    deaths: 0,
-    headshots: 0,
-    damageDealt: 0,
-    shotsFired: 0,
-    shotsHit: 0,
-    score: 0,
-    highestKillstreak: 0,
-    currentKillstreak: 0,
-    topSpeed: 0,
-  };
+  public stats: MatchStats = freshKrunkerMatchStats();
   public callbacks: KrunkerCallbacks;
-  public matchTimeRemaining: number = 240; // 4 minutes
+  public matchTimeRemaining: number = KRUNKER_MATCH_DURATION_SECONDS; // 4 minutes
   public isMatchEnded: boolean = false;
 
   // Internal Loop
@@ -167,6 +157,39 @@ export class KrunkerEngine {
     this.callbacks.onPlayerRespawn();
     this.callbacks.onPlayerDamaged(this.health, this.maxHealth);
     this.callbacks.onAmmoChange(this.currentAmmo, this.currentWeapon.magSize, false);
+  }
+
+  /** Start a genuinely new round, not just a respawn into the previous scoreboard. */
+  public restartMatch(): void {
+    if (this.isDestroyed) return;
+    this.matchTimeRemaining = KRUNKER_MATCH_DURATION_SECONDS;
+    this.isMatchEnded = false;
+    this.stats = freshKrunkerMatchStats();
+
+    this.keys = {};
+    this.isMouseDown = false;
+    this.isRightMouseDown = false;
+    this.isADS = false;
+    this.isReloading = false;
+    this.reloadTimer = 0;
+    this.fireCooldown = 0;
+    this.yaw = 0;
+    this.pitch = 0;
+    this.recoilOffset.set(0, 0, 0);
+    this.recoilRotation.set(0, 0, 0);
+    this.bobCycle = 0;
+    this.camera.fov = this.baseFOV;
+    this.camera.updateProjectionMatrix();
+
+    this.tracers = [];
+    this.sparks = [];
+    this.damagePopups = [];
+    this.bots.forEach((bot, index) => {
+      resetKrunkerBotForMatch(bot, this.spawnPoints[(index + 1) % this.spawnPoints.length]);
+    });
+    this.spawnPlayer();
+    this.callbacks.onSpeedUpdate(0);
+    this.updateLeaderboard();
   }
 
   // Switch Active Weapon Class

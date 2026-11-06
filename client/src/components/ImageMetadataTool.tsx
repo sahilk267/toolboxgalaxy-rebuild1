@@ -2,6 +2,7 @@
 import { Download, FileOutput, ImageUp, RotateCcw, ShieldCheck, Sparkles, MapPin, Camera, Clock, ExternalLink, AlertTriangle, CheckCircle2 } from "lucide-react";
 import { type ChangeEvent, useEffect, useMemo, useState } from "react";
 import { trackPageView } from "@/lib/analytics";
+import { assertCanvasImageEncoding } from "@/lib/imageExportValidation";
 import { imageMetadataLimits, metadataDimensionError, metadataFileError, metadataFormatExtension, metadataFormatLabel, type MetadataImageFormat } from "@/lib/localImageMetadata";
 import { parseExifFromBlob, type ExifTagSummary } from "@/lib/exifReader";
 
@@ -124,6 +125,7 @@ export default function ImageMetadataTool() {
         )
       );
 
+      assertCanvasImageEncoding(blob, source.format);
       const url = URL.createObjectURL(blob);
       setOutput((current) => {
         if (current) URL.revokeObjectURL(current.url);
