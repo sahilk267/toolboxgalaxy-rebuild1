@@ -156,29 +156,33 @@ export function sanitizePdfDocument(doc: PDFDocument): { purgedFields: string[] 
  * Parses page range string (e.g., "1-3, 5, 7") into a 0-indexed set of page numbers.
  */
 export function parsePageRange(rangeStr: string, totalPages: number): Set<number> {
+  if (!Number.isSafeInteger(totalPages) || totalPages < 0) {
+    throw new Error("Invalid PDF page count.");
+  }
+  const input = (rangeStr || "").trim();
   const selected = new Set<number>();
-  if (!rangeStr || rangeStr.trim().toLowerCase() === "all") {
+
+  if (!input || input.toLowerCase() === "all") {
     for (let i = 0; i < totalPages; i++) selected.add(i);
     return selected;
   }
 
-  const parts = rangeStr.split(",").map((p) => p.trim());
-  for (const part of parts) {
-    if (part.includes("-")) {
-      const [startStr, endStr] = part.split("-").map((s) => s.trim());
-      const start = Math.max(1, parseInt(startStr, 10));
-      const end = Math.min(totalPages, parseInt(endStr, 10));
-      if (!isNaN(start) && !isNaN(end)) {
-        for (let i = start; i <= end; i++) {
-          selected.add(i - 1);
-        }
-      }
-    } else {
-      const pageNum = parseInt(part, 10);
-      if (!isNaN(pageNum) && pageNum >= 1 && pageNum <= totalPages) {
-        selected.add(pageNum - 1);
-      }
+  // Reject malformed ranges rather than stamping the wrong subset of pages.
+  for (const part of input.split(",")) {
+    const token = part.trim();
+    const range = /^(\d+)\s*-\s*(\d+)$/.exec(token);
+    const single = /^(\d+)$/.exec(token);
+    if (!range && !single) {
+      throw new Error(`Invalid page token "${token}". Use numbers and ranges like "1-3, 5" or "all".`);
     }
+
+    const start = Number(range ? range[1] : single![1]);
+    const end = Number(range ? range[2] : single![1]);
+    if (!Number.isSafeInteger(start) || !Number.isSafeInteger(end) ||
+        start < 1 || end > totalPages || start > end) {
+      throw new Error(`Page range "${token}" must be within 1-${totalPages} in ascending order.`);
+    }
+    for (let n = start; n <= end; n++) selected.add(n - 1);
   }
   return selected;
 }
