@@ -156,6 +156,7 @@ export default function ExcelStudioTool() {
     setFileName("sample_company_data.xlsx");
     setOriginalRawBytes(null);
     setHasUserEdits(false);
+    setEditedSheets(new Set());
   };
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -178,6 +179,7 @@ export default function ExcelStudioTool() {
         setFileName(file.name);
         setOriginalRawBytes(bytes);
         setHasUserEdits(false);
+    setEditedSheets(new Set());
       } catch (err) {
         toast.error("Failed to parse Excel/CSV file. Please check file format.");
       }

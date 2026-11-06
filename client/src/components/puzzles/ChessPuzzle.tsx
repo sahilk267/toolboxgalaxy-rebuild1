@@ -65,6 +65,26 @@ export default function ChessPuzzle() {
   const [showVictoryModal, setShowVictoryModal] = useState(false);
   const [hintActive, setHintActive] = useState(false);
   const [moveHistory, setMoveHistory] = useState<string[]>([]);
+  const gameSessionRef = useRef(0);
+  const replyTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const victoryTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const cancelPendingMoves = () => {
+    if (replyTimeoutRef.current !== null) {
+      clearTimeout(replyTimeoutRef.current);
+      replyTimeoutRef.current = null;
+    }
+    if (victoryTimeoutRef.current !== null) {
+      clearTimeout(victoryTimeoutRef.current);
+      victoryTimeoutRef.current = null;
+    }
+  };
+
+  // Prevent callbacks from an old game session from touching a reset/unmounted board.
+  useEffect(() => () => {
+    gameSessionRef.current++;
+    cancelPendingMoves();
+  }, []);
 
   // Sync board and chess engine when edition changes
   useEffect(() => {
@@ -79,7 +99,10 @@ export default function ChessPuzzle() {
   }, [isSolved]);
 
   const handleReset = () => {
+    gameSessionRef.current++;
+    cancelPendingMoves();
     audio.current.play("rotate");
+    setSeconds(0);
     const freshEngine = new Chess(edition.fen);
     setChessInstance(freshEngine);
     setBoard(fenToBoard(edition.fen));
@@ -118,7 +141,7 @@ export default function ChessPuzzle() {
   }, [chessInstance, selectedCoord]);
 
   const onSquareClick = (r: number, c: number) => {
-    if (isSolved) return;
+    if (isSolved || replyTimeoutRef.current !== null) return;
 
     const clickedSquare = coordToSquare({ r, c }) as Square;
     const piece = board[r][c];
@@ -185,7 +208,10 @@ export default function ChessPuzzle() {
             text: `Superb! Opponent responds ${step.opponentReply.notation}...`,
             type: "success"
           });
-          setTimeout(() => {
+          const scheduledSession = gameSessionRef.current;
+          replyTimeoutRef.current = setTimeout(() => {
+            if (scheduledSession !== gameSessionRef.current) return;
+            replyTimeoutRef.current = null;
             audio.current.play("rotate");
             const reply = step.opponentReply!;
             const oppFrom = coordToSquare(reply.from) as Square;
@@ -232,7 +258,10 @@ export default function ChessPuzzle() {
       spread: 60,
       origin: { y: 0.6 }
     });
-    setTimeout(() => {
+    const scheduledSession = gameSessionRef.current;
+    victoryTimeoutRef.current = setTimeout(() => {
+      if (scheduledSession !== gameSessionRef.current) return;
+      victoryTimeoutRef.current = null;
       setShowVictoryModal(true);
     }, 900);
   };

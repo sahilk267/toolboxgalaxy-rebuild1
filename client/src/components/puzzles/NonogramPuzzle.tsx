@@ -45,6 +45,13 @@ export default function NonogramPuzzle() {
   const [showRules, setShowRules] = useState(false);
   const [showVictoryModal, setShowVictoryModal] = useState(false);
   const [hintCount, setHintCount] = useState(0);
+  const gameSessionRef = useRef(0);
+  const victoryTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => () => {
+    gameSessionRef.current++;
+    if (victoryTimeoutRef.current !== null) clearTimeout(victoryTimeoutRef.current);
+  }, []);
 
   // Sync grid when edition changes
   useEffect(() => {
@@ -84,14 +91,23 @@ export default function NonogramPuzzle() {
         spread: 70,
         origin: { y: 0.6 }
       });
-      setTimeout(() => {
+      const scheduledSession = gameSessionRef.current;
+      victoryTimeoutRef.current = setTimeout(() => {
+        if (scheduledSession !== gameSessionRef.current) return;
+        victoryTimeoutRef.current = null;
         setShowVictoryModal(true);
       }, 700);
     }
   }, [grid, edition, isSolved]);
 
   const handleReset = () => {
+    gameSessionRef.current++;
+    if (victoryTimeoutRef.current !== null) {
+      clearTimeout(victoryTimeoutRef.current);
+      victoryTimeoutRef.current = null;
+    }
     audio.current.play("rotate");
+    setSeconds(0);
     setGrid(Array.from({ length: edition.size }, () => Array(edition.size).fill(0)));
     setIsSolved(false);
     setShowVictoryModal(false);

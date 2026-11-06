@@ -14,6 +14,7 @@ import { COMPRESSION_PROFILES } from "../client/src/components/PdfCompressTool";
 import { estimateVisualLines, chunkLinesForSlides, buildPresentationPptx } from "../client/src/lib/pdfExtraction";
 import { PDFDocument } from "pdf-lib";
 import JSZip from "jszip";
+import { parseCurl, generateFetch, generateAxios, generatePython, generateGo, generateNode, generatePhp, pythonLiteral } from "../client/src/components/CurlToCodeTool";
 
 let totalTests = 0;
 let passedTests = 0;
@@ -528,6 +529,41 @@ console.log("\n[TASK P] Verifying Accurate 61 Tool Count & MCP Server Card...");
 
   const serverIndex = fs.readFileSync("server/index.ts", "utf-8");
   assert(serverIndex.includes('app.post("/api/mcp"'), "server/index.ts exposes real /api/mcp JSON-RPC endpoint");
+}
+
+
+// -------------------------------------------------------------
+// TOOL/GAME BATCH A: cURL code generators use actual production functions
+// -------------------------------------------------------------
+console.log("\n[TOOLS] Verifying cURL parsing and generated language literals...");
+{
+  const curlInput = String.raw`curl -X POST https://example.com/api -H 'X-Note: a"b\c' -H 'Content-Type: application/json' --data '{"message":"true false null","active":true,"value":"hello"}'`;
+  const parsed = parseCurl(curlInput);
+  assert(parsed.method === "POST" && parsed.url === "https://example.com/api", "cURL parsing preserves method and URL");
+  assert(parsed.headers["X-Note"] === 'a"b\\c', "cURL parsing preserves quoted header and literal backslash");
+  assert(parsed.data === '{"message":"true false null","active":true,"value":"hello"}', "cURL shell tokenizer preserves nested JSON");
+
+  const fetchCode = generateFetch(parsed);
+  const axiosCode = generateAxios(parsed);
+  const pythonCode = generatePython(parsed);
+  const goCode = generateGo(parsed);
+  const nodeCode = generateNode(parsed);
+  const phpCode = generatePhp(parsed);
+
+  let fetchSyntax = true;
+  let nodeSyntax = true;
+  try { new Function(fetchCode); } catch { fetchSyntax = false; }
+  try { new Function(nodeCode); } catch { nodeSyntax = false; }
+  assert(fetchSyntax && nodeSyntax, "Generated Fetch and Node.js snippets are syntactically valid");
+  const encodedHeader = JSON.stringify("X-Note") + ": " + JSON.stringify('a"b\\c');
+  assert(fetchCode.includes(encodedHeader), "Fetch output safely escapes quoted headers");
+  assert(axiosCode.includes(encodedHeader), "Axios output safely escapes quoted headers");
+  assert(nodeCode.includes(encodedHeader), "Node.js output safely escapes quoted headers");
+  assert(goCode.includes("req.Header.Add(" + JSON.stringify("X-Note") + ", " + JSON.stringify('a"b\\c') + ")"), "Go output safely escapes header values");
+  assert(pythonCode.includes('payload = {"message": "true false null", "active": True, "value": "hello"}'), "Python generator preserves text and correctly serializes booleans");
+  assert(pythonLiteral({ text: "true null false", nested: [false, null, 1] }) === '{"text": "true null false", "nested": [False, None, 1]}', "Python literal serializer avoids mutating ordinary strings");
+  assert(phpCode.includes("CURLOPT_HTTPHEADER") && phpCode.includes("true false null"), "PHP output retains headers and original body text");
+  assert(fetchCode.includes('const raw = await response.text()'), "Fetch output handles non-JSON response bodies");
 }
 
 console.log(`\n=== RESULTS: ${passedTests}/${totalTests} TESTS PASSED ===\n`);
