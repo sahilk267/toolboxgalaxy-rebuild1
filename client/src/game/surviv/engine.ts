@@ -560,6 +560,8 @@ export class SurvivEngine {
   }
 
   public fireWeapon(p: PlayerEntity) {
+    // Enforce action state here too: fireWeapon is public, not just called by the frame loop.
+    if (!p.active || p.isReloading || p.isUsingMed || p.fireCooldown > 0) return;
     const wep = this.getActiveWeapon(p);
     const item = p.weapons[p.activeSlot];
 
@@ -873,19 +875,26 @@ export class SurvivEngine {
   }
 
   // Reloading
+  private cancelReload(p: PlayerEntity) {
+    p.isReloading = false;
+    p.reloadTimer = 0;
+    p.reloadingSlot = undefined;
+  }
+
   public reloadWeapon(p: PlayerEntity) {
-    if (p.isReloading) return;
+    if (!p.active || p.isReloading || p.isUsingMed) return;
     const item = p.weapons[p.activeSlot];
     if (!item || item.weaponId === "fists") return;
 
     const wep = WEAPONS[item.weaponId];
-    if (!wep.ammoType) return;
+    if (!wep?.ammoType) return;
 
     const needed = wep.magSize - item.curAmmo;
     const available = p.ammo[wep.ammoType] || 0;
 
     if (needed > 0 && available > 0) {
       p.isReloading = true;
+      p.reloadingSlot = p.activeSlot;
       p.reloadTimer = wep.reloadTimeMs;
       if (!p.isBot) {
         this.audio.playReload();
@@ -894,15 +903,19 @@ export class SurvivEngine {
   }
 
   private finishReload(p: PlayerEntity) {
-    p.isReloading = false;
-    const item = p.weapons[p.activeSlot];
+    if (!p.isReloading) return;
+    const slot = p.reloadingSlot;
+    // Always clear the old timer before processing the weapon inventory.
+    this.cancelReload(p);
+    if (!p.active || slot === undefined || slot !== p.activeSlot) return;
+    const item = p.weapons[slot];
     if (!item) return;
 
     const wep = WEAPONS[item.weaponId];
-    if (!wep.ammoType) return;
+    if (!wep?.ammoType) return;
 
-    const needed = wep.magSize - item.curAmmo;
-    const toLoad = Math.min(needed, p.ammo[wep.ammoType] || 0);
+    const needed = Math.max(0, wep.magSize - item.curAmmo);
+    const toLoad = Math.min(needed, Math.max(0, p.ammo[wep.ammoType] || 0));
 
     item.curAmmo += toLoad;
     p.ammo[wep.ammoType] -= toLoad;
@@ -910,7 +923,7 @@ export class SurvivEngine {
 
   // Medical Consumption
   public useMed(p: PlayerEntity, type: "bandage" | "medkit" | "soda" | "pills") {
-    if (p.isUsingMed) return;
+    if (!p.active || p.isUsingMed || p.isReloading) return;
 
     if (type === "bandage" && p.health >= 75) return;
     if (type === "medkit" && p.health >= 100) return;
@@ -925,15 +938,21 @@ export class SurvivEngine {
   }
 
   private finishMed(p: PlayerEntity) {
+    if (!p.isUsingMed) return;
     p.isUsingMed = false;
-    if (!p.medType) return;
-
     const type = p.medType;
     p.medType = null;
+    p.medTimer = 0;
+    if (!type || !p.active) return;
+    const countKey = type === "bandage" ? "bandages" :
+      type === "medkit" ? "medkits" : type === "soda" ? "sodas" : "pills";
+    if (p.meds[countKey] <= 0) return;
 
     if (type === "bandage") {
       p.meds.bandages--;
-      p.health = Math.min(75, p.health + 15);
+      // Boost/regen can raise HP above 75 while a bandage is being applied.
+      // Finishing a bandage must never LOWER the player's current health.
+      if (p.health < 75) p.health = Math.min(75, p.health + 15);
     } else if (type === "medkit") {
       p.meds.medkits--;
       p.health = 100;
@@ -954,7 +973,7 @@ export class SurvivEngine {
   public switchWeapon(slot: 0 | 1 | 2) {
     if (this.player.activeSlot === slot) return;
     this.player.activeSlot = slot;
-    this.player.isReloading = false;
+    this.cancelReload(this.player);
     this.player.fireCooldown = 150;
   }
 
@@ -994,12 +1013,14 @@ export class SurvivEngine {
       // If primary empty
       if (!p.weapons[0]) {
         p.weapons[0] = { weaponId: item.weaponId, curAmmo: wepDef.magSize };
+        this.cancelReload(p);
         p.activeSlot = 0;
         return true;
       }
       // If secondary empty
       if (!p.weapons[1]) {
         p.weapons[1] = { weaponId: item.weaponId, curAmmo: wepDef.magSize };
+        this.cancelReload(p);
         p.activeSlot = 1;
         return true;
       }
