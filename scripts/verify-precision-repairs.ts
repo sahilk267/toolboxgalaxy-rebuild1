@@ -29,6 +29,10 @@ import { rayAabbDistance } from "../client/src/game/krunker/rayAabb";
 import { segmentCircleHit, segmentBoxHit, firstProjectileImpact } from "../client/src/game/surviv/projectileCollision";
 import { separateCircleFromBox, separateCircleFromCircle, resolveSurvivMovement } from "../client/src/game/surviv/playerCollision";
 import { isStackableSurvivLoot, SURVIV_MEDICAL_LIMITS, transferSurvivLootStack } from "../client/src/game/surviv/lootTransfer";
+import { SURVIV_INITIAL_ZONE_RADIUS, advanceSurvivZoneShrink, completeSurvivZoneShrink } from "../client/src/game/surviv/zoneMechanics";
+import { MAP_SIZE as SURVIV_MAP_SIZE, ZONE_PHASES } from "../client/src/game/surviv/constants";
+import type { ZoneState as SurvivZoneState } from "../client/src/game/surviv/types";
+import type { SurvivCallbacks } from "../client/src/game/surviv/engine";
 import type { GroundLoot as SurvivGroundLoot } from "../client/src/game/surviv/types";
 import { SurvivEngine } from "../client/src/game/surviv/engine";
 import type { Obstacle as SurvivObstacle, PlayerEntity as SurvivPlayer, BulletEntity as SurvivBullet } from "../client/src/game/surviv/types";
@@ -1130,6 +1134,121 @@ console.log("\n[GAMES] Verifying Surviv ammo/medical loot persistence and invent
   (game as unknown as { checkLootPickup(p: SurvivPlayer): void }).checkLootPickup(survivor);
   assert(survivor.helmetTier === 2 && !armor.active,
     "Real Surviv engine still consumes an upgraded non-stackable helmet normally");
+}
+
+
+// -------------------------------------------------------------
+// GAME QA BATCH 11: Surviv gas-zone shrink geometry and one-time deaths
+// -------------------------------------------------------------
+console.log("\n[GAMES] Verifying Surviv red-zone shrink progression and one-time deaths...");
+{
+  const initialTarget = SURVIV_MAP_SIZE * ZONE_PHASES[0].radiusRatio;
+  assert(SURVIV_INITIAL_ZONE_RADIUS > initialTarget,
+    "Surviv first red-zone phase actually SHRINKS rather than expanding");
+  assert(SURVIV_INITIAL_ZONE_RADIUS > Math.SQRT2 * SURVIV_MAP_SIZE / 2,
+    "Surviv initial gas-zone circle covers the playable island corners");
+
+  const makeZone = (): SurvivZoneState => ({
+    currentCenterX: 1400, currentCenterY: 1400,
+    targetCenterX: 1600, targetCenterY: 1500,
+    currentRadius: SURVIV_INITIAL_ZONE_RADIUS, targetRadius: initialTarget,
+    phase: 0, phaseTimer: 45, isShrinking: true, dps: 1.5,
+  });
+  const zone = makeZone();
+  advanceSurvivZoneShrink(zone, 45, 15);
+  assert(Math.abs(zone.currentRadius - (SURVIV_INITIAL_ZONE_RADIUS + (initialTarget - SURVIV_INITIAL_ZONE_RADIUS) / 3)) < 0.001,
+    "Surviv safe-zone radius moves a third of remaining distance in a third of time");
+  assert(Math.abs(zone.currentCenterX - (1400 + 200 / 3)) < 0.001 &&
+         Math.abs(zone.currentCenterY - (1400 + 100 / 3)) < 0.001,
+    "Surviv gas-zone center moves in lockstep with radius");
+  advanceSurvivZoneShrink(zone, 30, 30);
+  assert(zone.currentRadius === initialTarget &&
+    zone.currentCenterX === 1600 && zone.currentCenterY === 1500,
+    "Surviv gas-zone radius and center reach their targets at phase completion");
+
+  const malformedShrink = makeZone();
+  malformedShrink.targetRadius = malformedShrink.currentRadius + 500;
+  advanceSurvivZoneShrink(malformedShrink, 20, 5);
+  assert(malformedShrink.currentRadius === SURVIV_INITIAL_ZONE_RADIUS,
+    "Surviv shrinking phase never expands radius even with an invalid larger target");
+  malformedShrink.currentCenterX = 1550;
+  completeSurvivZoneShrink(malformedShrink);
+  assert(malformedShrink.currentCenterX === 1600 &&
+         malformedShrink.currentRadius === SURVIV_INITIAL_ZONE_RADIUS,
+    "Surviv completed phases snap the center to the target without radius expansion");
+
+  const makePlayer = (id: number, health = 100): SurvivPlayer => ({
+    id, name: id === 0 ? "Survivor" : "AI Bot", isBot: id !== 0,
+    x: 100, y: 100, vx: 0, vy: 0, angle: 0,
+    health, maxHealth: 100, boost: 0,
+    helmetTier: 0, vestTier: 0, backpackTier: 1, scopeTier: 1,
+    weapons: [{ weaponId: "m9", curAmmo: 15 }, null, { weaponId: "fists", curAmmo: 0 }],
+    activeSlot: 0, isReloading: false, reloadTimer: 0,
+    ammo: { "9mm": 12, "12g": 0, "762mm": 0, "556mm": 0 },
+    meds: { bandages: 0, medkits: 1, sodas: 0, pills: 0 },
+    isUsingMed: false, medTimer: 0, medType: null,
+    fireCooldown: 0, kills: 0, damageDealt: 0, active: true, inBush: false,
+  });
+  const engine = Object.create(SurvivEngine.prototype) as SurvivEngine;
+  engine.player = makePlayer(0);
+  engine.bots = [];
+  engine.loot = [];
+  engine.zone = makeZone();
+  engine.zone.dps = 0;
+  let killFeedEntries = 0;
+  engine.callbacks = {
+    onKillFeed: () => { killFeedEntries++; },
+    onPlayerUpdate: () => {},
+    onAliveUpdate: () => {},
+    onZoneUpdate: () => {},
+    onGameOver: () => {},
+  } as SurvivCallbacks;
+  (engine as unknown as { nextLootId: number }).nextLootId = 300;
+
+  (engine as unknown as { updateZone(dt: number): void }).updateZone(15);
+  assert(engine.zone.currentRadius < SURVIV_INITIAL_ZONE_RADIUS &&
+         engine.zone.currentRadius > initialTarget,
+    "Real Surviv engine shrinks the first zone rather than growing it");
+  assert(engine.zone.currentCenterX > 1400 && engine.zone.currentCenterX < 1600,
+    "Real Surviv engine moves gas-zone center toward next safe zone");
+  (engine as unknown as { updateZone(dt: number): void }).updateZone(30);
+  assert(engine.zone.phase === 1 && engine.zone.currentRadius === initialTarget,
+    "Real Surviv engine advances phase with exact expected safe-zone radius");
+  assert(engine.zone.currentCenterX === 1600 && engine.zone.currentCenterY === 1500,
+    "Real Surviv engine completes safe-zone center motion before next phase");
+
+  const attacker = makePlayer(0);
+  const victim = makePlayer(1, 5);
+  engine.loot = [];
+  engine.zone = { ...makeZone(), currentRadius: 10, dps: 20 };
+  (engine as unknown as { damagePlayer(t: SurvivPlayer, damage: number, attacker: SurvivPlayer, weapon: string): void })
+    .damagePlayer(victim, 16, attacker, "M9");
+  assert(!victim.active && victim.health === 0 && attacker.kills === 1,
+    "Surviv real engine records one fatal combat hit and one kill");
+  assert(attacker.damageDealt === 5,
+    "Surviv combat damage statistic counts the actual 5 HP removed, not 16 HP of overkill");
+  const lootAfterCombat = engine.loot.length;
+  const feedAfterCombat = killFeedEntries;
+  (engine as unknown as { damagePlayer(t: SurvivPlayer, damage: number, attacker: SurvivPlayer, weapon: string): void })
+    .damagePlayer(victim, 16, attacker, "M9");
+  (engine as unknown as { applyZoneDamage(p: SurvivPlayer, dt: number): void })
+    .applyZoneDamage(victim, 1);
+  assert(attacker.kills === 1 && attacker.damageDealt === 5,
+    "Surviv already-dead victims never grant repeated kills or damage");
+  assert(engine.loot.length === lootAfterCombat && killFeedEntries === feedAfterCombat,
+    "Surviv already-dead victims never emit duplicate death loot or killfeed entries");
+
+  const zoneVictim = makePlayer(2, 5);
+  (engine as unknown as { applyZoneDamage(p: SurvivPlayer, dt: number): void })
+    .applyZoneDamage(zoneVictim, 1);
+  assert(zoneVictim.health === 0 && !zoneVictim.active,
+    "Surviv red-zone damage kills an alive unprotected player exactly once");
+  const afterGasDeath = engine.loot.length;
+  const afterGasFeed = killFeedEntries;
+  (engine as unknown as { applyZoneDamage(p: SurvivPlayer, dt: number): void })
+    .applyZoneDamage(zoneVictim, 1);
+  assert(engine.loot.length === afterGasDeath && killFeedEntries === afterGasFeed,
+    "Surviv repeated red-zone ticks do not duplicate gas death loot or killfeed");
 }
 
 console.log(`\n=== RESULTS: ${passedTests}/${totalTests} TESTS PASSED ===\n`);

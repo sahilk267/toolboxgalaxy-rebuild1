@@ -14,6 +14,7 @@ import { generateIslandMap } from "./map";
 import { firstProjectileImpact } from "./projectileCollision";
 import { resolveSurvivMovement } from "./playerCollision";
 import { isStackableSurvivLoot, SURVIV_MEDICAL_INVENTORY_KEY, SURVIV_MEDICAL_LIMITS, transferSurvivLootStack, type SurvivMedicalLoot } from "./lootTransfer";
+import { SURVIV_INITIAL_ZONE_RADIUS, advanceSurvivZoneShrink, completeSurvivZoneShrink } from "./zoneMechanics";
 import type { SurvivAudio } from "./audio";
 import type {
   PlayerEntity,
@@ -77,7 +78,7 @@ export class SurvivEngine {
     this.zone = {
       currentCenterX: MAP_SIZE / 2,
       currentCenterY: MAP_SIZE / 2,
-      currentRadius: MAP_SIZE * 0.48,
+      currentRadius: SURVIV_INITIAL_ZONE_RADIUS,
       targetCenterX: MAP_SIZE / 2 + (Math.random() - 0.5) * 400,
       targetCenterY: MAP_SIZE / 2 + (Math.random() - 0.5) * 400,
       targetRadius: MAP_SIZE * ZONE_PHASES[0].radiusRatio,
@@ -276,6 +277,7 @@ export class SurvivEngine {
 
   // Zone Logic
   private updateZone(dt: number) {
+    const timeRemainingBeforeStep = this.zone.phaseTimer;
     this.zone.phaseTimer -= dt;
 
     if (!this.zone.isShrinking) {
@@ -288,15 +290,10 @@ export class SurvivEngine {
       }
     } else {
       // Shrinking phase
-      const phaseDef = ZONE_PHASES[Math.min(this.zone.phase, ZONE_PHASES.length - 1)];
-      const shrinkSpeed = (this.zone.currentRadius - this.zone.targetRadius) / Math.max(0.1, this.zone.phaseTimer);
-      this.zone.currentRadius = Math.max(0, this.zone.currentRadius - shrinkSpeed * dt);
-
-      // Move center towards target
-      this.zone.currentCenterX += (this.zone.targetCenterX - this.zone.currentCenterX) * 0.05 * dt;
-      this.zone.currentCenterY += (this.zone.targetCenterY - this.zone.currentCenterY) * 0.05 * dt;
+      advanceSurvivZoneShrink(this.zone, timeRemainingBeforeStep, dt);
 
       if (this.zone.phaseTimer <= 0 || this.zone.currentRadius <= this.zone.targetRadius + 5) {
+        completeSurvivZoneShrink(this.zone);
         this.zone.phase++;
         this.zone.isShrinking = false;
         if (this.zone.phase < ZONE_PHASES.length) {
@@ -324,6 +321,8 @@ export class SurvivEngine {
   }
 
   private applyZoneDamage(p: PlayerEntity, dt: number) {
+    // A combat-dead player must not get another zone death, loot drop, or killfeed.
+    if (!p.active || dt <= 0) return;
     const distToCenter = Math.hypot(p.x - this.zone.currentCenterX, p.y - this.zone.currentCenterY);
     if (distToCenter > this.zone.currentRadius) {
       p.health -= this.zone.dps * dt;
@@ -836,16 +835,20 @@ export class SurvivEngine {
   }
 
   private damagePlayer(target: PlayerEntity, rawDamage: number, attacker?: PlayerEntity, weaponName = "Firearm") {
+    if (!target.active || !Number.isFinite(rawDamage) || rawDamage <= 0) return;
     // Damage reduction from Vest & Helmet
     const vestRed = ARMOR_DAMAGE_REDUCTION[target.vestTier] || 0;
     const helmetRed = HELMET_DAMAGE_REDUCTION[target.helmetTier] || 0;
     const totalReduction = Math.min(0.7, vestRed + helmetRed * 0.5);
     const actualDamage = Math.max(1, rawDamage * (1 - totalReduction));
 
-    target.health -= actualDamage;
+    const remainingHealth = Math.max(0, target.health);
+    const damageApplied = Math.min(remainingHealth, actualDamage);
+    target.health -= damageApplied;
 
     if (attacker) {
-      attacker.damageDealt += actualDamage;
+      // Score only real health removed, not overkill damage past zero.
+      attacker.damageDealt += damageApplied;
     }
 
     if (target.health <= 0) {
