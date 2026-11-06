@@ -13,6 +13,7 @@ import {
 import { generateIslandMap } from "./map";
 import { firstProjectileImpact } from "./projectileCollision";
 import { resolveSurvivMovement } from "./playerCollision";
+import { isStackableSurvivLoot, SURVIV_MEDICAL_INVENTORY_KEY, SURVIV_MEDICAL_LIMITS, transferSurvivLootStack, type SurvivMedicalLoot } from "./lootTransfer";
 import type { SurvivAudio } from "./audio";
 import type {
   PlayerEntity,
@@ -963,7 +964,10 @@ export class SurvivEngine {
       const dist = Math.hypot(p.x - item.x, p.y - item.y);
       if (dist < pickupDist) {
         if (this.tryCollectLoot(p, item)) {
-          item.active = false;
+          // Partial ammo and medical pickups leave the remaining stack on the ground.
+          if (!isStackableSurvivLoot(item.type) || item.amount === 0) {
+            item.active = false;
+          }
           if (!p.isBot) {
             this.audio.playPickup();
           }
@@ -974,14 +978,12 @@ export class SurvivEngine {
 
   private tryCollectLoot(p: PlayerEntity, item: GroundLoot): boolean {
     if (item.type === "ammo" && item.ammoType) {
-      const maxCap = MAX_AMMO_BY_BACKPACK[p.backpackTier][item.ammoType];
-      const cur = p.ammo[item.ammoType];
-      if (cur < maxCap) {
-        const canTake = Math.min(item.amount, maxCap - cur);
-        p.ammo[item.ammoType] += canTake;
-        return true;
-      }
-      return false;
+      const capacity = MAX_AMMO_BY_BACKPACK[p.backpackTier]?.[item.ammoType] ?? 0;
+      const moved = transferSurvivLootStack(p.ammo[item.ammoType], capacity, item.amount);
+      if (!moved.taken) return false;
+      p.ammo[item.ammoType] = moved.carried;
+      item.amount = moved.onGround;
+      return true;
     }
 
     if (item.type === "weapon" && item.weaponId) {
@@ -1033,36 +1035,16 @@ export class SurvivEngine {
       return false;
     }
 
-    if (item.type === "bandage") {
-      if (p.meds.bandages < 15) {
-        p.meds.bandages += item.amount;
-        return true;
-      }
-      return false;
-    }
-
-    if (item.type === "medkit") {
-      if (p.meds.medkits < 3) {
-        p.meds.medkits += item.amount;
-        return true;
-      }
-      return false;
-    }
-
-    if (item.type === "soda") {
-      if (p.meds.sodas < 6) {
-        p.meds.sodas += item.amount;
-        return true;
-      }
-      return false;
-    }
-
-    if (item.type === "pills") {
-      if (p.meds.pills < 4) {
-        p.meds.pills += item.amount;
-        return true;
-      }
-      return false;
+    if (item.type === "bandage" || item.type === "medkit" ||
+        item.type === "soda" || item.type === "pills") {
+      const medicalType: SurvivMedicalLoot = item.type;
+      const inventoryKey = SURVIV_MEDICAL_INVENTORY_KEY[medicalType];
+      const capacity = SURVIV_MEDICAL_LIMITS[medicalType];
+      const moved = transferSurvivLootStack(p.meds[inventoryKey], capacity, item.amount);
+      if (!moved.taken) return false;
+      p.meds[inventoryKey] = moved.carried;
+      item.amount = moved.onGround;
+      return true;
     }
 
     return false;
