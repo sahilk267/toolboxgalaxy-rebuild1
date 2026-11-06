@@ -24,6 +24,7 @@ import type {
   KillFeedItem
 } from "./types";
 import { DiepAudio } from "./audio";
+import { logicalCanvasSize } from "../canvasGeometry";
 
 export interface EngineCallbacks {
   onPlayerUpdate: (player: TankEntity) => void;
@@ -633,8 +634,8 @@ export class DiepEngine {
       this.player.angle += 0.04;
     } else {
       // Screen to world mouse coordinates
-      const worldMouseX = (this.mouseX - this.canvas.width / 2) / this.cameraZoom + this.cameraX;
-      const worldMouseY = (this.mouseY - this.canvas.height / 2) / this.cameraZoom + this.cameraY;
+      const worldMouseX = (this.mouseX - this.getLogicalViewport().width / 2) / this.cameraZoom + this.cameraX;
+      const worldMouseY = (this.mouseY - this.getLogicalViewport().height / 2) / this.cameraZoom + this.cameraY;
       this.player.angle = Math.atan2(worldMouseY - this.player.y, worldMouseX - this.player.x);
     }
 
@@ -830,8 +831,8 @@ export class DiepEngine {
 
       if (!drone.isBot) {
         // Player's drones follow cursor or attack closest enemy
-        const worldMouseX = (this.mouseX - this.canvas.width / 2) / this.cameraZoom + this.cameraX;
-        const worldMouseY = (this.mouseY - this.canvas.height / 2) / this.cameraZoom + this.cameraY;
+        const worldMouseX = (this.mouseX - this.getLogicalViewport().width / 2) / this.cameraZoom + this.cameraX;
+        const worldMouseY = (this.mouseY - this.getLogicalViewport().height / 2) / this.cameraZoom + this.cameraY;
         targetX = worldMouseX;
         targetY = worldMouseY;
       } else {
@@ -1142,11 +1143,20 @@ export class DiepEngine {
     this.callbacks.onLeaderboardUpdate(all);
   }
 
+  // CSS pixels are the viewport; canvas.width/height are device-pixel backing dimensions.
+  private getLogicalViewport(): { width: number; height: number } {
+    return logicalCanvasSize(
+      this.canvas.width,
+      this.canvas.height,
+      this.canvas.clientWidth,
+      this.canvas.clientHeight,
+    );
+  }
+
   // CANVAS 2D RENDERER (DIEP.IO SIGNATURE VECTORS)
   private render() {
     const ctx = this.ctx;
-    const width = this.canvas.width;
-    const height = this.canvas.height;
+    const { width, height } = this.getLogicalViewport();
 
     ctx.save();
     ctx.clearRect(0, 0, width, height);
@@ -1193,10 +1203,10 @@ export class DiepEngine {
     ctx.strokeStyle = COLORS.gridLine;
     const step = 32;
 
-    const startX = Math.max(0, Math.floor((this.cameraX - (this.canvas.width / 2) / this.cameraZoom) / step) * step);
-    const endX = Math.min(ARENA_SIZE, Math.ceil((this.cameraX + (this.canvas.width / 2) / this.cameraZoom) / step) * step);
-    const startY = Math.max(0, Math.floor((this.cameraY - (this.canvas.height / 2) / this.cameraZoom) / step) * step);
-    const endY = Math.min(ARENA_SIZE, Math.ceil((this.cameraY + (this.canvas.height / 2) / this.cameraZoom) / step) * step);
+    const startX = Math.max(0, Math.floor((this.cameraX - (this.getLogicalViewport().width / 2) / this.cameraZoom) / step) * step);
+    const endX = Math.min(ARENA_SIZE, Math.ceil((this.cameraX + (this.getLogicalViewport().width / 2) / this.cameraZoom) / step) * step);
+    const startY = Math.max(0, Math.floor((this.cameraY - (this.getLogicalViewport().height / 2) / this.cameraZoom) / step) * step);
+    const endY = Math.min(ARENA_SIZE, Math.ceil((this.cameraY + (this.getLogicalViewport().height / 2) / this.cameraZoom) / step) * step);
 
     ctx.beginPath();
     for (let x = startX; x <= endX; x += step) {

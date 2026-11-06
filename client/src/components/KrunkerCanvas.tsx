@@ -135,6 +135,16 @@ export const KrunkerCanvas: React.FC<KrunkerCanvasProps> = ({ onBackToMenu }) =>
   useEffect(() => {
     if (!containerRef.current) return;
 
+    // Game UI feedback timers must not update an unmounted game.
+    const feedbackTimeouts = new Set<ReturnType<typeof setTimeout>>();
+    const scheduleFeedback = (callback: () => void, ms: number) => {
+      const timeout = setTimeout(() => {
+        feedbackTimeouts.delete(timeout);
+        callback();
+      }, ms);
+      feedbackTimeouts.add(timeout);
+    };
+
     // Detect mobile touch
     const checkMobile = "ontouchstart" in window || navigator.maxTouchPoints > 0;
     setIsMobile(checkMobile);
@@ -152,19 +162,19 @@ export const KrunkerCanvas: React.FC<KrunkerCanvasProps> = ({ onBackToMenu }) =>
           timestamp: Date.now(),
         };
         setScorePopups((prev) => [...prev.slice(-3), popup]);
-        setTimeout(() => {
+        scheduleFeedback(() => {
           setScorePopups((prev) => prev.filter((p) => p.id !== popup.id));
         }, 1500);
       },
       onPlayerHit: (_damage, isHeadshot) => {
         setHitmarkerHeadshot(isHeadshot);
         setHitmarkerActive(true);
-        setTimeout(() => setHitmarkerActive(false), 140);
+        scheduleFeedback(() => setHitmarkerActive(false), 140);
       },
       onPlayerDamaged: (curHp) => {
         setHealth(curHp);
         setDamageIndicator(true);
-        setTimeout(() => setDamageIndicator(false), 180);
+        scheduleFeedback(() => setDamageIndicator(false), 180);
       },
       onPlayerKilled: (killer, weapon) => {
         setIsAlive(false);
@@ -315,6 +325,11 @@ export const KrunkerCanvas: React.FC<KrunkerCanvasProps> = ({ onBackToMenu }) =>
 
     return () => {
       clearInterval(timerInterval);
+      feedbackTimeouts.forEach(clearTimeout);
+      feedbackTimeouts.clear();
+      if (document.pointerLockElement === containerRef.current) {
+        document.exitPointerLock();
+      }
       if (pendingLockTimeoutRef.current) {
         clearTimeout(pendingLockTimeoutRef.current);
       }
