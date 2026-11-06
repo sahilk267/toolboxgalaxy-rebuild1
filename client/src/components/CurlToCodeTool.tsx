@@ -52,7 +52,7 @@ const PRESETS = [
   },
 ];
 
-function parseCurl(rawCurl: string): ParsedCurl {
+export function parseCurl(rawCurl: string): ParsedCurl {
   const clean = rawCurl
     .replace(/\\\r?\n/g, " ")
     .replace(/\^\r?\n/g, " ")
@@ -65,28 +65,46 @@ function parseCurl(rawCurl: string): ParsedCurl {
   let auth: { user: string; pass: string } | null = null;
   let cookies: string | null = null;
 
-  // Tokenize preserving quotes
+  // Parse shell quoting and backslash escapes without corrupting JSON payloads.
   const tokens: string[] = [];
   let current = "";
   let inSingleQuote = false;
   let inDoubleQuote = false;
+  let started = false;
 
   for (let i = 0; i < clean.length; i++) {
     const char = clean[i];
-    if (char === "'" && !inDoubleQuote) {
-      inSingleQuote = !inSingleQuote;
-    } else if (char === '"' && !inSingleQuote) {
-      inDoubleQuote = !inDoubleQuote;
-    } else if ((char === " " || char === "\t") && !inSingleQuote && !inDoubleQuote) {
-      if (current) {
-        tokens.push(current);
-        current = "";
-      }
-    } else {
-      current += char;
+    const next = clean[i + 1];
+
+    if (inSingleQuote) {
+      if (char === "'") inSingleQuote = false;
+      else current += char;
+      continue;
     }
+
+    if (inDoubleQuote) {
+      if (char === '"') {
+        inDoubleQuote = false;
+      } else if (char === "\\" && (next === '"' || next === "\\" || next === "$")) {
+        current += next;
+        i++;
+      } else {
+        current += char;
+      }
+      continue;
+    }
+
+    if (char === "'") { inSingleQuote = true; started = true; }
+    else if (char === '"') { inDoubleQuote = true; started = true; }
+    else if (char === "\\" && i + 1 < clean.length) {
+      current += next;
+      i++;
+      started = true;
+    } else if (char === " " || char === "\t") {
+      if (started) { tokens.push(current); current = ""; started = false; }
+    } else { current += char; started = true; }
   }
-  if (current) tokens.push(current);
+  if (started) tokens.push(current);
 
   // Scan tokens
   for (let i = 0; i < tokens.length; i++) {
@@ -165,18 +183,40 @@ function parseCurl(rawCurl: string): ParsedCurl {
   return { url: url || "https://api.example.com", method, headers, data, auth, cookies };
 }
 
-function generateFetch(parsed: ParsedCurl): string {
+// Serialize generated language literals without interpolating untrusted raw strings.
+export function pythonLiteral(value: unknown): string {
+  if (value === null) return "None";
+  if (typeof value === "boolean") return value ? "True" : "False";
+  if (typeof value === "number") {
+    if (!Number.isFinite(value)) throw new Error("Unsupported numeric payload");
+    return String(value);
+  }
+  if (typeof value === "string") return JSON.stringify(value);
+  if (Array.isArray(value)) return "[" + value.map(pythonLiteral).join(", ") + "]";
+  if (typeof value === "object") {
+    return "{" + Object.entries(value).map(([key, val]) =>
+      pythonLiteral(key) + ": " + pythonLiteral(val)
+    ).join(", ") + "}";
+  }
+  throw new Error("Unsupported Python payload");
+}
+
+function phpStringLiteral(value: string): string {
+  return "'" + value.replace(/\\/g, "\\\\").replace(/'/g, "\\'") + "'";
+}
+
+export function generateFetch(parsed: ParsedCurl): string {
   const hasHeaders = Object.keys(parsed.headers).length > 0;
   const hasBody = Boolean(parsed.data);
 
   let code = `async function makeRequest() {\n`;
-  code += `  const response = await fetch("${parsed.url}", {\n`;
-  code += `    method: "${parsed.method}",\n`;
+  code += `  const response = await fetch(${JSON.stringify(parsed.url)}, {\n`;
+  code += `    method: ${JSON.stringify(parsed.method)},\n`;
 
   if (hasHeaders) {
     code += `    headers: {\n`;
     for (const [k, v] of Object.entries(parsed.headers)) {
-      code += `      "${k}": "${v.replace(/"/g, '\\"')}",\n`;
+      code += `      ${JSON.stringify(k)}: ${JSON.stringify(v)},\n`;
     }
     code += `    },\n`;
   }
@@ -194,26 +234,28 @@ function generateFetch(parsed: ParsedCurl): string {
   code += `  if (!response.ok) {\n`;
   code += `    throw new Error(\`HTTP \${response.status}: \${response.statusText}\`);\n`;
   code += `  }\n\n`;
-  code += `  const data = await response.json();\n`;
+  code += `  const raw = await response.text();\n`;
+  code += `  const type = response.headers.get("content-type") || "";\n`;
+  code += `  const data = !raw ? null : type.includes("json") ? JSON.parse(raw) : raw;\n`;
   code += `  return data;\n`;
   code += `}\n\nmakeRequest().then(console.log).catch(console.error);`;
 
   return code;
 }
 
-function generateAxios(parsed: ParsedCurl): string {
+export function generateAxios(parsed: ParsedCurl): string {
   const hasHeaders = Object.keys(parsed.headers).length > 0;
   const hasBody = Boolean(parsed.data);
 
   let code = `import axios from 'axios';\n\n`;
   code += `const config = {\n`;
-  code += `  method: '${parsed.method.toLowerCase()}',\n`;
-  code += `  url: '${parsed.url}',\n`;
+  code += `  method: ${JSON.stringify(parsed.method.toLowerCase())},\n`;
+  code += `  url: ${JSON.stringify(parsed.url)},\n`;
 
   if (hasHeaders) {
     code += `  headers: {\n`;
     for (const [k, v] of Object.entries(parsed.headers)) {
-      code += `    '${k}': '${v.replace(/'/g, "\\'")}',\n`;
+      code += `    ${JSON.stringify(k)}: ${JSON.stringify(v)},\n`;
     }
     code += `  },\n`;
   }
@@ -239,43 +281,42 @@ function generateAxios(parsed: ParsedCurl): string {
   return code;
 }
 
-function generatePython(parsed: ParsedCurl): string {
+export function generatePython(parsed: ParsedCurl): string {
   let code = `import requests\n`;
   const isJson =
     parsed.headers["Content-Type"]?.includes("json") ||
     parsed.headers["content-type"]?.includes("json");
 
   let parsedJsonObj: unknown = null;
+  let parsedJsonValid = false;
   if (parsed.data) {
     try {
       parsedJsonObj = JSON.parse(parsed.data);
+      parsedJsonValid = true;
     } catch {
       parsedJsonObj = null;
     }
   }
 
-  if (parsedJsonObj) {
+  if (parsedJsonValid) {
     code += `import json\n\n`;
   } else {
     code += `\n`;
   }
 
-  code += `url = "${parsed.url}"\n\n`;
+  code += `url = ${JSON.stringify(parsed.url)}\n\n`;
 
   if (Object.keys(parsed.headers).length > 0) {
     code += `headers = {\n`;
     for (const [k, v] of Object.entries(parsed.headers)) {
-      code += `    "${k}": "${v.replace(/"/g, '\\"')}",\n`;
+      code += `    ${JSON.stringify(k)}: ${JSON.stringify(v)},\n`;
     }
     code += `}\n\n`;
   }
 
   if (parsed.data && parsed.method !== "GET") {
-    if (parsedJsonObj) {
-      code += `payload = ${JSON.stringify(parsedJsonObj, null, 4)
-        .replace(/true/g, "True")
-        .replace(/false/g, "False")
-        .replace(/null/g, "None")}\n\n`;
+    if (parsedJsonValid) {
+      code += `payload = ${pythonLiteral(parsedJsonObj)}\n\n`;
     } else {
       code += `payload = ${JSON.stringify(parsed.data)}\n\n`;
     }
@@ -285,7 +326,7 @@ function generatePython(parsed: ParsedCurl): string {
   const args = [`url`];
   if (Object.keys(parsed.headers).length > 0) args.push(`headers=headers`);
   if (parsed.data && parsed.method !== "GET") {
-    if (parsedJsonObj && isJson) {
+    if (parsedJsonValid && isJson) {
       args.push(`json=payload`);
     } else {
       args.push(`data=payload`);
@@ -299,7 +340,7 @@ function generatePython(parsed: ParsedCurl): string {
   return code;
 }
 
-function generateGo(parsed: ParsedCurl): string {
+export function generateGo(parsed: ParsedCurl): string {
   let code = `package main\n\n`;
   code += `import (\n`;
   code += `\t"fmt"\n`;
@@ -310,19 +351,19 @@ function generateGo(parsed: ParsedCurl): string {
   }
   code += `)\n\n`;
   code += `func main() {\n`;
-  code += `\turl := "${parsed.url}"\n`;
+  code += `\turl := ${JSON.stringify(parsed.url)}\n`;
 
   if (parsed.data && parsed.method !== "GET") {
     code += `\tpayload := strings.NewReader(${JSON.stringify(parsed.data)})\n`;
-    code += `\treq, err := http.NewRequest("${parsed.method}", url, payload)\n`;
+    code += `\treq, err := http.NewRequest(${JSON.stringify(parsed.method)}, url, payload)\n`;
   } else {
-    code += `\treq, err := http.NewRequest("${parsed.method}", url, nil)\n`;
+    code += `\treq, err := http.NewRequest(${JSON.stringify(parsed.method)}, url, nil)\n`;
   }
 
   code += `\tif err != nil {\n\t\tpanic(err)\n\t}\n\n`;
 
   for (const [k, v] of Object.entries(parsed.headers)) {
-    code += `\treq.Header.Add("${k}", "${v.replace(/"/g, '\\"')}")\n`;
+    code += `\treq.Header.Add(${JSON.stringify(k)}, ${JSON.stringify(v)})\n`;
   }
 
   code += `\n\tres, err := http.DefaultClient.Do(req)\n`;
@@ -337,18 +378,18 @@ function generateGo(parsed: ParsedCurl): string {
   return code;
 }
 
-function generateNode(parsed: ParsedCurl): string {
+export function generateNode(parsed: ParsedCurl): string {
   const isHttps = parsed.url.startsWith("https");
   let code = `const ${isHttps ? "https" : "http"} = require('${isHttps ? "https" : "http"}');\n\n`;
   code += `const options = {\n`;
-  code += `  method: '${parsed.method}',\n`;
+  code += `  method: ${JSON.stringify(parsed.method)},\n`;
   code += `  headers: {\n`;
   for (const [k, v] of Object.entries(parsed.headers)) {
-    code += `    '${k}': '${v.replace(/'/g, "\\'")}',\n`;
+    code += `    ${JSON.stringify(k)}: ${JSON.stringify(v)},\n`;
   }
   code += `  }\n`;
   code += `};\n\n`;
-  code += `const req = ${isHttps ? "https" : "http"}.request('${parsed.url}', options, (res) => {\n`;
+  code += `const req = ${isHttps ? "https" : "http"}.request(${JSON.stringify(parsed.url)}, options, (res) => {\n`;
   code += `  const chunks = [];\n\n`;
   code += `  res.on('data', (chunk) => chunks.push(chunk));\n`;
   code += `  res.on('end', () => {\n`;
@@ -365,27 +406,27 @@ function generateNode(parsed: ParsedCurl): string {
   return code;
 }
 
-function generatePhp(parsed: ParsedCurl): string {
+export function generatePhp(parsed: ParsedCurl): string {
   let code = `<?php\n\n`;
   code += `$curl = curl_init();\n\n`;
   code += `curl_setopt_array($curl, array(\n`;
-  code += `  CURLOPT_URL => '${parsed.url}',\n`;
+  code += `  CURLOPT_URL => ${phpStringLiteral(parsed.url)},\n`;
   code += `  CURLOPT_RETURNTRANSFER => true,\n`;
   code += `  CURLOPT_ENCODING => '',\n`;
   code += `  CURLOPT_MAXREDIRS => 10,\n`;
   code += `  CURLOPT_TIMEOUT => 30,\n`;
   code += `  CURLOPT_FOLLOWLOCATION => true,\n`;
   code += `  CURLOPT_HTTP_VERSION => CURL_HTTP_VERSION_1_1,\n`;
-  code += `  CURLOPT_CUSTOMREQUEST => '${parsed.method}',\n`;
+  code += `  CURLOPT_CUSTOMREQUEST => ${phpStringLiteral(parsed.method)},\n`;
 
   if (parsed.data && parsed.method !== "GET") {
-    code += `  CURLOPT_POSTFIELDS => ${JSON.stringify(parsed.data)},\n`;
+    code += `  CURLOPT_POSTFIELDS => ${phpStringLiteral(parsed.data)},\n`;
   }
 
   if (Object.keys(parsed.headers).length > 0) {
     code += `  CURLOPT_HTTPHEADER => array(\n`;
     for (const [k, v] of Object.entries(parsed.headers)) {
-      code += `    '${k}: ${v.replace(/'/g, "\\'")}',\n`;
+      code += `    ${phpStringLiteral(`${k}: ${v}`)},\n`;
     }
     code += `  ),\n`;
   }
