@@ -629,7 +629,8 @@ export class SurvivEngine {
         maxDistance: wep.falloffRange,
         radius: wep.bulletRadius,
         color: wep.bulletColor,
-        active: true
+        active: true,
+        weaponName: wep.name
       });
     }
   }
@@ -684,8 +685,9 @@ export class SurvivEngine {
           if (obs.destructible) this.damageObstacle(obs, bullet.damage, attacker);
         } else {
           const target = impact.target;
-          const weapon = attacker ? this.getActiveWeapon(attacker) : WEAPONS.m9;
-          this.damagePlayer(target, bullet.damage, attacker, weapon.name);
+          const weaponName = bullet.weaponName ||
+            (attacker ? this.getActiveWeapon(attacker).name : "Firearm");
+          this.damagePlayer(target, bullet.damage, attacker, weaponName);
           this.spawnBlood(target.x, target.y);
         }
       } else {

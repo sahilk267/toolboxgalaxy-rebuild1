@@ -89,6 +89,8 @@ export interface BulletEntity {
   radius: number;
   color: string;
   active: boolean;
+  /** Captured when fired; killfeed cannot change after shooter switches guns. */
+  weaponName?: string;
 }
 
 export interface ParticleEntity {

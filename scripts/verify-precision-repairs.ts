@@ -35,6 +35,8 @@ import type { ZoneState as SurvivZoneState } from "../client/src/game/surviv/typ
 import type { SurvivCallbacks } from "../client/src/game/surviv/engine";
 import type { GroundLoot as SurvivGroundLoot } from "../client/src/game/surviv/types";
 import { SurvivEngine } from "../client/src/game/surviv/engine";
+import { DiepEngine } from "../client/src/game/diep/engine";
+import type { TankEntity as DiepTank, ShapeEntity as DiepShape, BulletEntity as DiepBullet } from "../client/src/game/diep/types";
 import type { Obstacle as SurvivObstacle, PlayerEntity as SurvivPlayer, BulletEntity as SurvivBullet } from "../client/src/game/surviv/types";
 import type { BotEntity } from "../client/src/game/krunker/types";
 import * as THREE from "three";
@@ -1376,6 +1378,148 @@ console.log("\n[GAMES] Verifying Surviv weapon reload and medical action correct
   assert(!deceased.isReloading && !deceased.isUsingMed && deceased.weapons[0]!.curAmmo === 3,
     "Surviv inactive player cannot start reload, medical use, or firing");
 }
+
+// -------------------------------------------------------------
+// GAME QA BATCH 13: Surviv projectile weapon attribution & Diep single elimination
+// -------------------------------------------------------------
+console.log("\n[GAMES] Testing Surviv in-flight weapon names and Diep elimination/collision finality...");
+{
+  // Fire an actual Surviv M9 projectile, switch to a shotgun while it is in
+  // flight, and ensure the real engine's killfeed reports the weapon fired.
+  const game = Object.create(SurvivEngine.prototype) as SurvivEngine;
+  const shooter = {
+    id: 0, name: "Shooter", isBot: true, active: true,
+    x: 0, y: 0, angle: 0, vx: 0, vy: 0, fireCooldown: 0,
+    isReloading: false, isUsingMed: false,
+    weapons: [{ weaponId: "m9", curAmmo: 2 }, { weaponId: "m870", curAmmo: 2 }, { weaponId: "fists", curAmmo: 0 }],
+    activeSlot: 0, ammo: { "9mm": 20, "12g": 8, "762mm": 0, "556mm": 0 },
+    meds: { bandages: 0, medkits: 0, sodas: 0, pills: 0 },
+    health: 100, maxHealth: 100, helmetTier: 0, vestTier: 0, damageDealt: 0, kills: 0,
+  } as SurvivPlayer;
+  const victim = {
+    id: 4, name: "Victim", isBot: true, active: true,
+    x: 80, y: 0, health: 5, maxHealth: 100,
+    helmetTier: 0, vestTier: 0, activeSlot: 2,
+    weapons: [null, null, { weaponId: "fists", curAmmo: 0 }],
+    ammo: { "9mm": 0, "12g": 0, "762mm": 0, "556mm": 0 },
+    meds: { bandages: 0, medkits: 0, sodas: 0, pills: 0 },
+  } as SurvivPlayer;
+  game.player = shooter;
+  game.bots = [victim];
+  game.obstacles = [];
+  game.loot = [];
+  game.bullets = [];
+  game.particles = [];
+  game.audio = { playGunshot: () => {}, playPickup: () => {} } as unknown as SurvivEngine["audio"];
+  let lastWeapon = "";
+  let deaths = 0;
+  game.callbacks = {
+    onKillFeed: (entry: { weaponName: string }) => { lastWeapon = entry.weaponName; deaths++; },
+    onPlayerUpdate: () => {},
+    onAliveUpdate: () => {},
+    onZoneUpdate: () => {},
+    onGameOver: () => {},
+  } as SurvivCallbacks;
+  game.fireWeapon(shooter);
+  assert(game.bullets.length === 1 && game.bullets[0].weaponName === SURVIV_WEAPONS.m9.name,
+    "Surviv real fireWeapon stores the fired M9 weapon name on its projectile");
+  assert(shooter.weapons[0]!.curAmmo === 1, "Surviv firing still consumes exactly one M9 round");
+  shooter.activeSlot = 1;
+  const firedBullet = game.bullets[0];
+  firedBullet.x = 0;
+  firedBullet.y = 0;
+  firedBullet.vx = 1000;
+  firedBullet.vy = 0;
+  firedBullet.maxDistance = 200;
+  firedBullet.damage = 100;
+  (game as unknown as { updateBullets(dt: number): void }).updateBullets(0.1);
+  assert(!victim.active && deaths === 1, "Surviv switched-weapon bullet still delivers its lethal hit once");
+  assert(lastWeapon === SURVIV_WEAPONS.m9.name && lastWeapon !== SURVIV_WEAPONS.m870.name,
+    "Surviv killfeed credits the original gun despite an in-flight weapon switch");
+  assert(shooter.kills === 1 && game.bullets.length === 0, "Surviv preserves kill score and consumes spent projectile");
+
+  // Real Diep elimination must be idempotent even when overlapping damage
+  // sources attempt to kill a tank in the same physics frame.
+  const diep = Object.create(DiepEngine.prototype) as DiepEngine;
+  const makeTank = (id: number, score: number, health = 100): DiepTank => ({
+    id, name: id === 1 ? "Player" : "Bot", isBot: id !== 1,
+    x: id === 1 ? 0 : 100, y: id === 1 ? 0 : 100,
+    vx: 0, vy: 0, health, maxHealth: 100,
+    score, level: 1, classId: "basic", active: true, color: "#123456",
+    stats: { healthRegen: 0, maxHealth: 0, bodyDamage: 0,
+      bulletSpeed: 0, bulletPenetration: 0, bulletDamage: 0,
+      reload: 0, movementSpeed: 0 },
+  } as DiepTank);
+  const player = makeTank(1, 0);
+  const bot = makeTank(2, 400, 0);
+  diep.player = player;
+  diep.bots = [bot];
+  diep.kills = 0;
+  let killfeed = 0;
+  let popSounds = 0;
+  let gameOvers = 0;
+  diep.audio = { playPop: () => { popSounds++; }, playExplode: () => {} } as unknown as DiepEngine["audio"];
+  diep.callbacks = {
+    onKillFeed: () => { killfeed++; },
+    onGameOver: () => { gameOvers++; },
+    onPlayerUpdate: () => {},
+    onLeaderboardUpdate: () => {},
+    onEvolutionChoices: () => {},
+  };
+  (diep as unknown as { emitParticles(...args: unknown[]): void }).emitParticles = () => {};
+  (diep as unknown as { addScore(t: DiepTank, xp: number): void }).addScore = (tank, amount) => { tank.score += amount; };
+  const kill = (tank: DiepTank, killerId: number) =>
+    (diep as unknown as { eliminateTank(t: DiepTank, killer: number): void }).eliminateTank(tank, killerId);
+  kill(bot, player.id);
+  const awarded = player.score;
+  kill(bot, player.id);
+  assert(!bot.active && awarded === 160 && player.score === awarded,
+    "Diep eliminates a tank once and awards 40% score only once");
+  assert(diep.kills === 1 && killfeed === 1 && popSounds === 1,
+    "Diep duplicate lethal collisions cannot create repeated kills, feed or sound");
+
+  // Two targets overlap one bullet, but it has insufficient penetration for two hits.
+  diep.bots = [makeTank(2, 0), makeTank(3, 0)];
+  const [targetA, targetB] = diep.bots;
+  targetA.x = 100; targetA.y = 100;
+  targetB.x = 100; targetB.y = 140; // exactly two tank radii apart, no ramming.
+  diep.bullets = [{
+    id: 1, ownerId: player.id, isBot: false, active: true,
+    x: 100, y: 120, vx: 0, vy: 0, radius: 25,
+    health: 10, maxHealth: 10, damage: 20, lifetime: 20,
+    color: "#ff0000",
+  } as DiepBullet];
+  diep.shapes = [];
+  diep.drones = [];
+  (diep as unknown as { getComputedStats(t: DiepTank): { radius: number; bodyDamage: number } })
+    .getComputedStats = () => ({ radius: 20, bodyDamage: 10 });
+  diep.audio.playHit = () => {};
+  (diep as unknown as { resolveCollisions(): void }).resolveCollisions();
+  assert(targetA.health === 80 && targetB.health === 100,
+    "Diep exhausted bullet cannot damage a second overlapping tank");
+  assert(!diep.bullets[0].active, "Diep exhausted bullet is disabled on the first impact");
+
+  // When a player dies from the first of two colliding shapes,
+  // further shapes and ramming in the same frame must not damage them again.
+  player.active = true;
+  player.health = 1;
+  player.x = 100; player.y = 100;
+  diep.bots = [];
+  diep.bullets = [];
+  const shape = (id: number): DiepShape => ({
+    id, type: "square", x: 100, y: 100, vx: 0, vy: 0,
+    rotation: 0, vRot: 0, radius: 10, health: 100, maxHealth: 100,
+    xpValue: 10, bodyDamage: 10, damagedTimer: 0, active: true,
+  });
+  diep.shapes = [shape(1), shape(2)];
+  diep.audio.playExplode = () => {};
+  (diep as unknown as { resolveCollisions(): void }).resolveCollisions();
+  assert(!player.active && player.health <= 0 && gameOvers === 1,
+    "Diep environmental collision ends the player's life and emits game-over once");
+  assert(diep.shapes[0].health === 90 && diep.shapes[1].health === 100,
+    "Diep no longer allows a dead tank to damage more shapes in that frame");
+}
+
 console.log(`\n=== RESULTS: ${passedTests}/${totalTests} TESTS PASSED ===\n`);
 
 if (passedTests !== totalTests) {

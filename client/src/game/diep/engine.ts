@@ -968,6 +968,7 @@ export class DiepEngine {
     for (const b of this.bullets) {
       if (!b.active) continue;
       for (const tank of allTanks) {
+        if (!b.active) break;
         if (!tank.active || tank.id === b.ownerId) continue;
         const stats = this.getComputedStats(tank);
         const dist = Math.hypot(b.x - tank.x, b.y - tank.y);
@@ -1015,7 +1016,9 @@ export class DiepEngine {
       }
 
       // Drone vs Tanks
+      if (!drone.active) continue;
       for (const tank of allTanks) {
+        if (!drone.active) break;
         if (!tank.active || tank.id === drone.ownerId) continue;
         const stats = this.getComputedStats(tank);
         if (Math.hypot(drone.x - tank.x, drone.y - tank.y) < drone.radius + stats.radius) {
@@ -1033,8 +1036,10 @@ export class DiepEngine {
 
     // 4. Tank vs Shape Physical Collision
     for (const tank of allTanks) {
+      if (!tank.active) continue;
       const stats = this.getComputedStats(tank);
       for (const s of this.shapes) {
+        if (!tank.active) break;
         if (!s.active) continue;
         const dist = Math.hypot(tank.x - s.x, tank.y - s.y);
         if (dist < stats.radius + s.radius) {
@@ -1068,6 +1073,7 @@ export class DiepEngine {
       for (let j = i + 1; j < allTanks.length; j++) {
         const t1 = allTanks[i];
         const t2 = allTanks[j];
+        if (!t1.active || !t2.active) continue;
         const s1 = this.getComputedStats(t1);
         const s2 = this.getComputedStats(t2);
         const dist = Math.hypot(t1.x - t2.x, t1.y - t2.y);
@@ -1092,6 +1098,9 @@ export class DiepEngine {
 
   // Handle Tank Destruction
   private eliminateTank(victim: TankEntity, killerId: number) {
+    // Overlapping shapes, drones and tanks may all hit within one physics pass.
+    // Only the first lethal collision may award score, particles or a killfeed.
+    if (!victim.active) return;
     victim.active = false;
     this.emitParticles(victim.x, victim.y, victim.color, 24, 6);
 
