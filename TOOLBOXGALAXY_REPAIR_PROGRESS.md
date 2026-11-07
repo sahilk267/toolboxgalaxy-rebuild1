@@ -10,7 +10,8 @@
 - **Browser / touch / desktop / mobile:** not comprehensively exercised in these GitHub-only repair batches. No all-tools/all-games browser success claim.
 - **Game verification:** deterministic puzzle-bank solvers, real game-engine methods, and mathematical collision/geometry tests cover **specific features**, not every UI transition or device.
 - **Tool verification:** selected actual converter functions, document creation/reopen tests, and format validators run through CLI/CI. Other real file round-trips and visual checking remain pending.
-- **Batch 12:** Surviv weapon reload / auto-pickup / bandage fixes with new production-engine tests; consult [PR #12](https://github.com/sahilk267/toolboxgalaxy-rebuild1/pull/12) for its branch CI and merge status rather than assuming success from this ledger.
+- **Batch 12:** Surviv weapon reload / auto-pickup / bandage engine fixes merged in [PR #12](https://github.com/sahilk267/toolboxgalaxy-rebuild1/pull/12); GitHub Actions [42289841790](https://github.com/sahilk267/toolboxgalaxy-rebuild1/actions/runs/42289841790) passed clean install, automated checks and production build.
+- **Batch 13:** Surviv original projectile weapon attribution and Diep single-death / exhausted projectile collision repairs committed on a dedicated branch; follow [PR #13](https://github.com/sahilk267/toolboxgalaxy-rebuild1/pull/13) for its actual check and merge status (not yet proven here).
 
 ---
 
@@ -187,6 +188,7 @@ These are **merged code changes with targeted automated regression checks**. Do 
 | [#10](https://github.com/sahilk267/toolboxgalaxy-rebuild1/pull/10) | Surviv ammo/medicine partial pickups and stack caps | Real loot engine tests |
 | [#11](https://github.com/sahilk267/toolboxgalaxy-rebuild1/pull/11) | Surviv shrinking gas zone, one-time deaths, overkill stats | Real zone/damage engine tests |
 | [#12](https://github.com/sahilk267/toolboxgalaxy-rebuild1/pull/12) | Surviv reload slot tracking, auto-weapon pickup cancellation, non-damaging bandages and medical-use guards | Targeted reload/medical engine tests; consult PR for actual CI result |
+| [#13](https://github.com/sahilk267/toolboxgalaxy-rebuild1/pull/13) | Surviv shot-time weapon attribution; Diep Arena single-death and exhausted projectile collision handling | Direct real engine firing, bullet impact and same-frame elimination assertions; browser E2E pending |
 
 ### Open functional verification work
 
