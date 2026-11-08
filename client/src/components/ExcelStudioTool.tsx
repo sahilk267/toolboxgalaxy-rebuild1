@@ -98,16 +98,44 @@ export function workbookHasFormulas(wb?: XLSX.WorkBook | null): boolean {
 /**
  * Creates a values-only duplicate of a workbook preserving layout without formula references
  */
-export function createValuesOnlyWorkbook(wb: XLSX.WorkBook): XLSX.WorkBook {
+export function createValuesOnlyWorkbook(
+  wb: XLSX.WorkBook,
+  activeSheet?: string,
+  pendingActiveRows?: any[][],
+): XLSX.WorkBook {
   const newWb = XLSX.utils.book_new();
   for (const name of wb.SheetNames) {
     const ws = wb.Sheets[name];
     if (!ws) continue;
-    const aoa = XLSX.utils.sheet_to_json<any[]>(ws, { header: 1 });
+    // Current-sheet edits may be pending in React state when this export is clicked.
+    // Use them for the values-only copy without overwriting the original formulas.
+    const aoa = name === activeSheet && pendingActiveRows !== undefined
+      ? pendingActiveRows
+      : XLSX.utils.sheet_to_json<any[]>(ws, { header: 1 });
     const cleanWs = XLSX.utils.aoa_to_sheet(aoa);
     XLSX.utils.book_append_sheet(newWb, cleanWs, name);
   }
   return newWb;
+}
+
+/** Escape Markdown delimiters and multiline spreadsheet values before table export. */
+export function spreadsheetDataToMarkdownTable(data: any[][]): string {
+  if (!data.length) return "";
+  const cols = data.reduce((max, row) => Math.max(max, row?.length ?? 0), 0);
+  if (!cols) return "";
+
+  const escapeCell = (cell: unknown) => String(cell ?? "")
+    .replace(/\\/g, "\\\\")
+    .replace(/\|/g, "\\|")
+    .replace(/\r\n|\r|\n/g, "<br>");
+  const render = (row: any[]) =>
+    `| ${Array.from({ length: cols }, (_, index) => escapeCell(row?.[index])).join(" | ")} |`;
+
+  return [
+    render(data[0]),
+    `| ${Array.from({ length: cols }, () => "---").join(" | ")} |`,
+    ...data.slice(1).map(render),
+  ].join("\n");
 }
 
 export default function ExcelStudioTool() {
@@ -241,6 +269,10 @@ export default function ExcelStudioTool() {
     setRawData(cleaned);
     setHasUserEdits(true);
     setEditedSheets((prev) => new Set(prev).add(activeSheet));
+    // Synchronize the worksheet for all export formats, preserving formula cells.
+    if (workbook?.Sheets[activeSheet]) {
+      workbook.Sheets[activeSheet] = syncDataToWorksheet(workbook.Sheets[activeSheet], cleaned);
+    }
     toast.success("Trimmed extra spaces from all cells.");
   };
 
@@ -316,7 +348,11 @@ export default function ExcelStudioTool() {
   const exportToExcelValuesOnly = () => {
     try {
       if (!workbook) return;
-      const valuesOnlyWb = createValuesOnlyWorkbook(workbook);
+      const valuesOnlyWb = createValuesOnlyWorkbook(
+        workbook,
+        activeSheet,
+        editedSheets.has(activeSheet) ? rawData : undefined,
+      );
       XLSX.writeFile(valuesOnlyWb, fileName.replace(/\.[^/.]+$/, "") + "_values_only.xlsx");
     } catch (err) {
       console.error("Failed to export values-only Excel:", err);
@@ -520,15 +556,7 @@ export default function ExcelStudioTool() {
   const copyAsMarkdownTable = async () => {
     try {
       if (rawData.length === 0) return;
-      const header = rawData[0];
-      const divider = header.map(() => "---");
-      const rows = rawData.slice(1);
-      const mdLines = [
-        `| ${header.join(" | ")} |`,
-        `| ${divider.join(" | ")} |`,
-        ...rows.map((r) => `| ${r.map((c) => String(c ?? "")).join(" | ")} |`),
-      ];
-      await navigator.clipboard.writeText(mdLines.join("\n"));
+      await navigator.clipboard.writeText(spreadsheetDataToMarkdownTable(rawData));
       setCopied("markdown");
       setTimeout(() => setCopied(null), 2000);
     } catch (err) {
