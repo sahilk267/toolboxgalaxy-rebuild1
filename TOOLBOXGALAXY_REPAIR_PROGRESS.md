@@ -1,6 +1,6 @@
 # ToolboxGalaxy Repair & Verification Progress Ledger
 
-## Current verification standard — 7 November 2026
+## Current verification standard — 8 November 2026
 
 **Scope:** improve and validate the existing **61 utility-tool registrations** and **18 game catalog entries** only. Work on SEO, marketing, analytics, hosting, or unrelated infrastructure is not part of this repair scope.
 
@@ -11,7 +11,9 @@
 - **Game verification:** deterministic puzzle-bank solvers, real game-engine methods, and mathematical collision/geometry tests cover **specific features**, not every UI transition or device.
 - **Tool verification:** selected actual converter functions, document creation/reopen tests, and format validators run through CLI/CI. Other real file round-trips and visual checking remain pending.
 - **Batch 12:** Surviv weapon reload / auto-pickup / bandage engine fixes merged in [PR #12](https://github.com/sahilk267/toolboxgalaxy-rebuild1/pull/12); GitHub Actions [42289841790](https://github.com/sahilk267/toolboxgalaxy-rebuild1/actions/runs/42289841790) passed clean install, automated checks and production build.
-- **Batch 13:** Surviv original projectile weapon attribution and Diep single-death / exhausted projectile collision repairs committed on a dedicated branch; follow [PR #13](https://github.com/sahilk267/toolboxgalaxy-rebuild1/pull/13) for its actual check and merge status (not yet proven here).
+- **Batch 13:** Surviv shot-time weapon attribution and Diep single-death / exhausted-projectile fixes **merged in** [PR #13](https://github.com/sahilk267/toolboxgalaxy-rebuild1/pull/13); main-branch GitHub Actions [42383165095](https://github.com/sahilk267/toolboxgalaxy-rebuild1/actions/runs/42383165095) passed all three clean-install, check and build gates.
+- **Latest independently verified baseline entering Batch 14:** `main` commit `e031bd07185bb2675d1ca23619ed91b7b7a73ae0`, CI [42383165095](https://github.com/sahilk267/toolboxgalaxy-rebuild1/actions/runs/42383165095) **SUCCESS**.
+- **Batch 14 (Excel Studio):** Active-sheet cleaning edits in values-only XLSX export, backing-sheet synchronization, and safe Markdown clipboard tables; 15 targeted regression assertions including genuine multi-sheet XLSX save/reopen. See [PR #14](https://github.com/sahilk267/toolboxgalaxy-rebuild1/pull/14) for **live** CI and merge status; this ledger must not be used to assume a pending PR passed.
 
 ---
 
@@ -69,7 +71,7 @@
 | 40 | Enterprise PDF Redaction | `client/src/lib/pdfRedaction.ts` | Overlay fake black boxes (extractable text) | True destructive vector & text redaction | Test suite `verify-pdf-redaction.ts` passed | Interactive redaction box | Standard PDF fonts | HISTORICAL UNIT/SOURCE NOTE; BROWSER E2E PENDING |
 | 41 | PDF Merge & Split | `client/src/components/PdfToolsRunner.tsx` | Corrupted file dropped silently; malformed ranges | Added user alert; strict regex validation (`/^\d+$/`, `/^\d+\s*-\s*\d+$/`) | Verified page range extraction | Multi-file merge tested | Encrypted files require password | HISTORICAL UNIT/SOURCE NOTE; BROWSER E2E PENDING |
 | 42 | Images to PDF Converter | `client/src/components/PdfToolsRunner.tsx` | WebP image embedding throwing fatal error | Added `renderImageToPngBytes` rasterization | Verified with WebP/PNG/JPEG | Export multi-page PDF | Portrait/Landscape options | HISTORICAL UNIT/SOURCE NOTE; BROWSER E2E PENDING |
-| 43 | Excel Studio (XLSX Editor) | `client/src/components/ExcelStudioTool.tsx` | Sheet switch discarded edits; export saved only active sheet | Persist edits to `workbook.Sheets`; export full `workbook` with all sheets | Unit test sheet mutation | Multi-tab editing tested | Standard SheetJS structures | HISTORICAL UNIT/SOURCE NOTE; BROWSER E2E PENDING |
+| 43 | Excel Studio (XLSX Editor) | `client/src/components/ExcelStudioTool.tsx` | Sheet switch discarded edits; export saved only active sheet | Persist edits to `workbook.Sheets`; export full `workbook` with all sheets | Real workbook round-trip, formula integrity and pending edits regression; Batch 14 | Historical UI note (not reverified) | Browser upload/clean/export/reopen still pending | HISTORICAL UNIT/SOURCE NOTE; BROWSER E2E PENDING |
 | 44 | Word DOCX Studio | `client/src/components/WordDocxTool.tsx` | Fake `.doc` HTML fallback; regex parser dropped formatting | True `docx` Packer generation; DOMParser for rich text | Verified `.docx` binary zip | Formatting preserved | Advanced tables text-based | HISTORICAL UNIT/SOURCE NOTE; BROWSER E2E PENDING |
 | 45 | WhatsApp Direct Chat | `client/src/components/RegionalHighDemandTools.tsx` | Duplicate country code bug (e.g. +91 91...) | Normalized phone string stripping leading country prefix | Tested `+91 919876543210` -> `919876543210` | Click to open wa.me tested | International formats | HISTORICAL UNIT/SOURCE NOTE; BROWSER E2E PENDING |
 | 46 | GST Tax Calculator | `client/src/components/RegionalHighDemandTools.tsx` | Division-by-zero on negative rate; rounding discrepancies | Added finite non-negative checks and 2-decimal currency rounding | Tested 0% and 18% slab | Exclusive/Inclusive mode | Indian GST standard slabs | HISTORICAL UNIT/SOURCE NOTE; BROWSER E2E PENDING |
@@ -189,6 +191,7 @@ These are **merged code changes with targeted automated regression checks**. Do 
 | [#11](https://github.com/sahilk267/toolboxgalaxy-rebuild1/pull/11) | Surviv shrinking gas zone, one-time deaths, overkill stats | Real zone/damage engine tests |
 | [#12](https://github.com/sahilk267/toolboxgalaxy-rebuild1/pull/12) | Surviv reload slot tracking, auto-weapon pickup cancellation, non-damaging bandages and medical-use guards | Targeted reload/medical engine tests; consult PR for actual CI result |
 | [#13](https://github.com/sahilk267/toolboxgalaxy-rebuild1/pull/13) | Surviv shot-time weapon attribution; Diep Arena single-death and exhausted projectile collision handling | Direct real engine firing, bullet impact and same-frame elimination assertions; browser E2E pending |
+| [#14](https://github.com/sahilk267/toolboxgalaxy-rebuild1/pull/14) | Excel Studio values-only XLSX reflects pending cleaning edits; trims synchronize workbook; Markdown copy preserves pipes, backslashes and multiline cells | 15 real-function assertions including multi-sheet XLSX save/reopen; browser E2E pending; check PR for CI/merge status |
 
 ### Open functional verification work
 

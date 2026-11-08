@@ -4,7 +4,7 @@
  */
 
 import * as XLSX from "xlsx";
-import { syncDataToWorksheet, workbookHasFormulas, createValuesOnlyWorkbook } from "../client/src/components/ExcelStudioTool";
+import { syncDataToWorksheet, workbookHasFormulas, createValuesOnlyWorkbook, spreadsheetDataToMarkdownTable } from "../client/src/components/ExcelStudioTool";
 import { secureRandomInt, generateUniqueRandomInts, generateUniqueDecimals, generateRandomDecimals } from "../client/src/lib/secureRandom";
 import { formatLocalDate, calendarDaysDifference, ageParts } from "../client/src/components/AdvancedToolRunners";
 import { countWordsUnicode } from "../client/src/pages/ToolWorkspace";
@@ -127,6 +127,78 @@ console.log("\n[P0-01] Testing Excel Structural Row Deletion & Stale Cell Prunin
   assert(!workbookHasFormulas(valuesOnlyWb), "createValuesOnlyWorkbook strips formulas for safe static export");
   assert(valuesOnlyWb.Sheets["Sales"]["B4"].v === 30, "createValuesOnlyWorkbook preserves cell value 30");
   assert(Boolean(formulaWb.Sheets["Sales"]["B4"].f), "Original formula workbook remains 100% intact with formulas");
+}
+
+// -------------------------------------------------------------
+// BATCH 14: Excel live-edits values-only roundtrip and Markdown table correctness
+// -------------------------------------------------------------
+console.log("\n[TOOLS] Verifying Excel values-only export with pending edits and Markdown clipboard fidelity...");
+{
+  const wb = XLSX.utils.book_new();
+  const dataSheet = XLSX.utils.aoa_to_sheet([
+    ["Name", "Comment"],
+    ["  Alice  ", "  task | note  "],
+    ["Bob", "  line one  "],
+  ]);
+  XLSX.utils.book_append_sheet(wb, dataSheet, "Data");
+
+  const formulaSheet = XLSX.utils.aoa_to_sheet([["Metric", "Total"], ["Revenue", 25]]);
+  formulaSheet["B3"] = { t: "n", f: "SUM(B2:B2)", v: 25 };
+  formulaSheet["!ref"] = "A1:B3";
+  XLSX.utils.book_append_sheet(wb, formulaSheet, "Summary");
+  const originalDataA2 = wb.Sheets.Data.A2.v;
+  const pendingRows = [
+    ["Name", "Comment"],
+    ["Alice", "task | note"],
+    ["Bob", "line one"],
+  ];
+
+  const valuesCopy = createValuesOnlyWorkbook(wb, "Data", pendingRows);
+  assert(valuesCopy.SheetNames.join(",") === "Data,Summary",
+    "Excel values-only export retains every sheet in the original order");
+  assert(valuesCopy.Sheets.Data.A2.v === "Alice" && valuesCopy.Sheets.Data.B2.v === "task | note",
+    "Excel values-only export writes pending active-sheet trimming edits");
+  assert(valuesCopy.Sheets.Data.B3.v === "line one",
+    "Excel values-only export also preserves later pending cleaned rows");
+  assert(valuesCopy.Sheets.Summary.B3.v === 25 && !valuesCopy.Sheets.Summary.B3.f,
+    "Excel values-only export preserves cached formula values without formula syntax");
+  assert(wb.Sheets.Data.A2.v === originalDataA2 && Boolean(wb.Sheets.Summary.B3.f),
+    "Excel values-only export leaves original workbook data and formulas untouched");
+  assert(!workbookHasFormulas(valuesCopy) && workbookHasFormulas(wb),
+    "Excel values-only export removes formulas only from its independent copy");
+
+  const roundTripBytes = XLSX.write(valuesCopy, { type: "buffer", bookType: "xlsx" });
+  const reloaded = XLSX.read(roundTripBytes, { type: "buffer", cellFormula: true });
+  assert(reloaded.SheetNames.length === 2 && reloaded.Sheets.Data.A2.v === "Alice",
+    "Reopened real XLSX file retains edited active worksheet and both sheets");
+  assert(reloaded.Sheets.Summary.B3.v === 25 && !reloaded.Sheets.Summary.B3.f,
+    "Reopened values-only XLSX has numeric cached results, not stale formulas");
+
+  const regularExportSheet = XLSX.utils.aoa_to_sheet([["Input", "Formula"], ["  spaced  ", 10]]);
+  regularExportSheet["B3"] = { t: "n", f: "B2*2", v: 20 };
+  regularExportSheet["!ref"] = "A1:B3";
+  syncDataToWorksheet(regularExportSheet, [["Input", "Formula"], ["spaced", 10], [null, 20]]);
+  assert(regularExportSheet.A2.v === "spaced" && regularExportSheet.B3.f === "B2*2",
+    "Excel trimming keeps source worksheet synchronized without overwriting live formula definitions");
+
+  const md = spreadsheetDataToMarkdownTable([
+    ["Name|ID", "Multiline", "Amount"],
+    ["A\\B", "first\nsecond", 0],
+    ["C", null, 25],
+  ]);
+  assert(md.includes("Name\\|ID") && !md.includes("| Name|ID |"),
+    "Excel Markdown clipboard escapes pipe delimiters in headers");
+  assert(md.includes("A\\\\B"),
+    "Excel Markdown clipboard safely escapes literal backslashes");
+  assert(md.includes("first<br>second") && md.split("\n").length === 4,
+    "Excel Markdown clipboard preserves multiline cell values without adding extra table rows");
+  assert(md.includes("| C |  | 25 |") && md.includes("| A\\\\B | first<br>second | 0 |"),
+    "Excel Markdown clipboard preserves numeric zero and blank data cells");
+  const raggedMd = spreadsheetDataToMarkdownTable([["Column"], ["Value", "Trailing"]]);
+  assert(raggedMd.startsWith("| Column |  |") && raggedMd.includes("| --- | --- |"),
+    "Excel Markdown clipboard retains data columns missing from a short header row");
+  assert(spreadsheetDataToMarkdownTable([]) === "",
+    "Excel Markdown clipboard handles an empty worksheet without producing malformed markup");
 }
 
 // -------------------------------------------------------------
