@@ -17,11 +17,11 @@ const respond = (data: Response) => self.postMessage(data);
 env.allowRemoteModels = false;
 env.allowLocalModels = true;
 env.localModelPath = "/models/";
+if (!env.backends.onnx.wasm) throw new Error("ONNX WebAssembly runtime is unavailable");
 env.backends.onnx.wasm.wasmPaths = "/models/wasm/";
 env.useBrowserCache = true;
-env.useWasmCache = true;
 
-let remover: Awaited<ReturnType<typeof pipeline>> | null = null;
+let remover: any = null; // Pipeline task overloads cannot be represented as a single union in TS 5.6.
 
 self.onmessage = async (event: MessageEvent<Request>) => {
   const input = event.data;
