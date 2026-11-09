@@ -92,7 +92,7 @@ try {
     "Actual AI output should have at least one transparent pixel");
   console.log("[browser] real portrait cutout PNG passed", info.width, info.height, "min alpha", minAlpha);
 
-  await page.getByLabel("Background").selectOption("white");
+  await page.getByRole("combobox", { name: /^Background/ }).selectOption("white");
   const [whiteDownload] = await Promise.all([
     page.waitForEvent("download", { timeout: 30_000 }),
     page.getByRole("button", { name: /Download PNG/ }).click(),
