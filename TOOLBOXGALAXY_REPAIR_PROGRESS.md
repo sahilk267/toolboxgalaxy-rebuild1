@@ -216,3 +216,9 @@ These are **merged code changes with targeted automated regression checks**. Do 
 - **Merge gate:** PR #16 stays draft until reproducible CI and genuine browser tests prove functionality. Do not imply that all 62 tools are browser-certified.
 
 Implementation and model/license specifics: [BACKGROUND_REMOVER_IMPLEMENTATION.md](BACKGROUND_REMOVER_IMPLEMENTATION.md).
+
+### Candidate #62 — actual browser smoke evidence
+
+- GitHub Actions [42716930151](https://github.com/sahilk267/toolboxgalaxy-rebuild1/actions/runs/42716930151): headless Linux Chromium E2E **SUCCESS** on pinned local model. Uploaded valid portrait, generated genuine transparent PNG (360 × 450, minimum alpha = 0), tested opaque white background export, corrupt-file rejection, same-origin request constraints and reset.
+- Browser smoke test is in `scripts/verify-background-removal-browser.mjs`; GitHub workflow `.github/workflows/background-browser-smoke.yml`.
+- Still **NOT** validated across mobile Chrome/iOS Safari, real Hostinger production headers, slow/offline devices, 8 MP peak memory, human quality review across difficult images, or all 62 tools. PR #16 is draft, main unaffected.
