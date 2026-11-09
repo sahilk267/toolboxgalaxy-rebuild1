@@ -1,0 +1,28 @@
+name: Background removal Chromium smoke
+on:
+  push:
+    branches: [feat/ai-background-remover]
+  pull_request:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  browser-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Install locked project dependencies
+        run: npm ci
+      - name: Build app and pinned local AI model
+        run: npm run build
+      - name: Install isolated browser test tooling
+        run: |
+          npm install --no-save --no-package-lock --ignore-scripts --no-audit --no-fund playwright@1.65.0
+          npx playwright install --with-deps chromium
+      - name: Browser-local real portrait and PNG alpha smoke
+        run: node scripts/verify-background-removal-browser.mjs
