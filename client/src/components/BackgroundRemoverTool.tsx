@@ -81,12 +81,14 @@ export default function BackgroundRemoverTool() {
     const fileError = backgroundFileError(file.type, file.size);
     if (fileError) { setError(fileError); return; }
     cancel();
+    const selectionId = job.current;
     setOutput(null);
     setError("");
     try {
       const bitmap = await createImageBitmap(file);
       const width = bitmap.width, height = bitmap.height;
       bitmap.close();
+      if (selectionId !== job.current) return;
       const validation = backgroundDimensionError({ width, height });
       if (validation) { setError(validation); return; }
       const url = URL.createObjectURL(file);
@@ -94,6 +96,7 @@ export default function BackgroundRemoverTool() {
       setMode("transparent");
       setCompare(50);
     } catch {
+      if (selectionId !== job.current) return;
       setError("This image could not be decoded. Try another JPG, PNG or WebP.");
     }
   }
