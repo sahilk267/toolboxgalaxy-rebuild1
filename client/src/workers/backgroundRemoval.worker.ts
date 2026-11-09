@@ -20,16 +20,30 @@ env.allowLocalModels = true;
 env.allowRemoteModels = false;
 env.localModelPath = "/models/";
 env.useBrowserCache = true;
+if (!env.backends.onnx.wasm) throw new Error("ONNX WASM runtime is unavailable.");
 env.backends.onnx.wasm.wasmPaths = "/ai-runtime/";
 
-let modelPromise: ReturnType<typeof pipeline> | null = null;
+// The v3.8.1 pipeline overload union is too broad for TypeScript to infer here.
+// Narrow the one documented background-removal contract at the worker boundary.
+type RemoveBackground = (input: RawImage) => Promise<RawImage[]>;
+type BackgroundPipelineFactory = (
+  task: "background-removal",
+  model: string,
+  options: { device: "wasm"; dtype: "uint8"; progress_callback: (info: unknown) => void },
+) => Promise<RemoveBackground>;
+const createBackgroundPipeline = pipeline as unknown as BackgroundPipelineFactory;
+
+let modelPromise: Promise<RemoveBackground> | null = null;
 function loadModel(id: number) {
   if (!modelPromise) {
-    modelPromise = pipeline("background-removal", MODEL, {
+    modelPromise = createBackgroundPipeline("background-removal", MODEL, {
       device: "wasm",
       dtype: "uint8",
-      progress_callback: (item: { progress?: number }) => {
-        if (Number.isFinite(item.progress)) send({ type: "LOADING", id, progress: item.progress });
+      progress_callback: (item: unknown) => {
+        if (item && typeof item === "object" && "progress" in item &&
+            typeof item.progress === "number" && Number.isFinite(item.progress)) {
+          send({ type: "LOADING", id, progress: item.progress });
+        }
       },
     });
   }
