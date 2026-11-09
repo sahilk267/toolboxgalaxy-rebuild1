@@ -95,7 +95,6 @@ async function provisionNotices() {
   // npm packages include their official LICENSE files; fail closed if attribution assets disappear.
   for (const [source, dest] of [
     ["node_modules/@huggingface/transformers/LICENSE", "Apache-2.0.txt"],
-    ["node_modules/onnxruntime-web/LICENSE", "onnxruntime-web-MIT.txt"],
   ]) {
     await copyFile(join(root, source), join(target, dest));
   }
