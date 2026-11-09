@@ -200,3 +200,19 @@ These are **merged code changes with targeted automated regression checks**. Do 
 - **Arcade/3D games:** check live movement, collision, shooting, inventory, game-over/restart, pointer lock, touch joysticks and frame-rate behavior in actual browsers/devices. Existing engine tests are partial coverage.
 - **Evidence:** mark an entry browser-verified only after a reproducible run records the platform, steps, expected/actual outcome, and any artifact/screenshots.
 
+
+
+---
+
+## Candidate Utility #62 — AI Background Remover (PR #16, draft)
+
+- **Scope:** new Create-category image tool, `/tools/background-remover`; preexisting 61-tool historical tracking table above is unchanged. New candidate is **not certified by those 61 historical entries**.
+- **Core implementation:** React upload/preview/export, dedicated ONNX inference Web Worker, optional transparent or solid-color PNG, cancellation/reset.
+- **Privacy:** original JPG/PNG/WebP is not uploaded; pinned Apache-2.0 ORMBG model and ONNX WASM binaries are served from the Toolbox Galaxy origin, not remote inference APIs.
+- **Limits:** 10 MB, 8 MP decoded input, 1280 px maximum inference/output edge, one image at a time.
+- **Supply chain:** `@huggingface/transformers@3.8.1`, model `onnx-community/ormbg-ONNX@034e2d8`, SHA-256 verified `model_uint8.onnx`; transient large model assets built into `dist`, not checked into Git.
+- **CLI coverage:** pure-file validation tests added to `npm run check`; matching `package-lock.json` generated for clean `npm ci`.
+- **Outstanding mandatory QA:** actual browser end-to-end portrait/pet/product extraction, PNG alpha reopen, model cold-start/download failure, Android/iOS Safari compatibility, CPU/memory measurements, deployed WASM MIME/CSP verification and license artifacts audit.
+- **Merge gate:** PR #16 stays draft until reproducible CI and genuine browser tests prove functionality. Do not imply that all 62 tools are browser-certified.
+
+Implementation and model/license specifics: [BACKGROUND_REMOVER_IMPLEMENTATION.md](BACKGROUND_REMOVER_IMPLEMENTATION.md).
