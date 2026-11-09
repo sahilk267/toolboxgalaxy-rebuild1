@@ -263,6 +263,7 @@ export default function BackgroundRemoverTool() {
           <p className="text-sm text-white/60">AI output is limited to {INFERENCE_EDGE}px on the longest edge for safer mobile performance. Fine hair, glass, and complex edges may not cut out perfectly.</p>
         </>
       )}
+      <p className="text-xs text-white/50">Powered by locally loaded open models. <a className="underline" href="/licenses/background-remover-notice.txt" target="_blank" rel="noopener noreferrer">AI model and license notices</a>.</p>
       {error && <p className="image-resizer__error" role="alert">{error}</p>}
     </div>
   );
