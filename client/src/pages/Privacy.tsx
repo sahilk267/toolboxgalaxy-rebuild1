@@ -60,6 +60,17 @@ export default function Privacy() {
           </p>
         </section>
 
+        <section className="policy-ledger-section" aria-labelledby="policy-background-ai">
+          <div className="policy-ledger-head">
+            <span>AI</span>
+            <h2 id="policy-background-ai">AI Background Remover</h2>
+            <b>IMAGE PROCESSING ON DEVICE</b>
+          </div>
+          <p>
+            This optional tool processes one visitor-selected JPG, PNG or WebP on the visitor's device using ONNX inference in a browser worker. No image or output file is uploaded to the Toolbox Galaxy server or sent to an AI API. A pinned, approximately 44 MB AI model and matching runtime files are downloaded from Toolbox Galaxy hosting when first used, and the browser may cache those assets. Only the image file stays in memory while the tab is open; the output is saved only when a visitor downloads it. The AI output is limited to 1,280 pixels on its longest edge, and results may be imperfect on fine hair, glass or busy backgrounds.
+          </p>
+        </section>
+
         <section className="policy-ledger-section" aria-labelledby="policy-share">
           <div className="policy-ledger-head">
             <span>03</span>

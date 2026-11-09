@@ -21,6 +21,8 @@ function dev404Plugin(): Plugin {
           pathname.startsWith("/api/") ||
           pathname.startsWith("/.well-known/") ||
           pathname.startsWith("/assets/") ||
+          pathname.startsWith("/models/") ||
+          pathname.startsWith("/licenses/") ||
           /\.(?:js|mjs|ts|tsx|css|png|jpg|jpeg|gif|svg|ico|json|woff2?|ttf|map|xml|txt|webmanifest)$/i.test(pathname)
         ) {
           return next();

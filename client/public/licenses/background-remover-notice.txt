@@ -1,0 +1,21 @@
+Toolbox Galaxy — AI Background Remover third-party attributions
+
+Transformers.js 3.8.1
+Copyright its respective contributors; Apache License 2.0
+https://github.com/huggingface/transformers.js
+License text: /licenses/Apache-2.0.txt
+
+ORMBG / onnx-community/ormbg-ONNX
+Origin: https://huggingface.co/schirrmacher/ormbg
+ONNX conversion: https://huggingface.co/onnx-community/ormbg-ONNX
+License: Apache License 2.0
+Exact model revision: 034e2d884afbab897e10e78fc5bb566b29533fd6
+Quantized weight SHA-256: ffbcae62a7b675d616e64cb392ee028786c4cf74f83596590fba13733ef00171
+License text: /licenses/Apache-2.0.txt
+
+ONNX Runtime Web
+https://github.com/microsoft/onnxruntime
+License: MIT
+License text: /licenses/onnxruntime-web-MIT.txt
+
+These packages/models are included for inference in your browser. The image itself is not uploaded.
