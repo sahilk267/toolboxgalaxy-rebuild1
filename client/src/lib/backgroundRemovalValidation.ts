@@ -39,7 +39,7 @@ export function inferenceSize({ width, height }: PixelSize): PixelSize {
 
 export function safeOutputFilename(filename: string): string {
   const base = filename.replace(/\.[^.]+$/, "").replace(/[^a-zA-Z0-9._-]+/g, "-")
-    .replace(/^\.+/, "").slice(0, 70) || "image";
+    .replace(/^[.-]+/, "").slice(0, 70) || "image";
   return base + "-no-background.png";
 }
 
