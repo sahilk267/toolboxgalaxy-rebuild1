@@ -20,7 +20,7 @@
   "tools": [
     {
       "name": "search_tools",
-      "description": "Search 61 local in-browser utilities and daily logic puzzles by keyword or category.",
+      "description": "Search 62 local in-browser utilities and daily logic puzzles by keyword or category.",
       "inputSchema": {
         "type": "object",
         "properties": {
