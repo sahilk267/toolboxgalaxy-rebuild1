@@ -69,7 +69,7 @@ try {
     throw new Error("Output dimensions do not match the original file");
 
   // Verify that a solid-color export is still opaque PNG.
-  await page.getByText("Background", { exact: true }).locator("..").getByRole("combobox").selectOption("white");
+  await page.getByRole("combobox").selectOption("white");
   const whitePromise = page.waitForEvent("download");
   await page.getByRole("button", { name: "Download PNG" }).click();
   const whiteDownload = await whitePromise;
