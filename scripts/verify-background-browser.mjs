@@ -68,6 +68,28 @@ try {
   if (size[0] !== 320 || size[1] !== 240)
     throw new Error("Output dimensions do not match the original file");
 
+  const matteRange = await page.evaluate(async (encodedFile) => {
+    const image = new Image();
+    image.src = "data:image/png;base64," + encodedFile;
+    await image.decode();
+    const canvas = document.createElement("canvas");
+    canvas.width = image.naturalWidth;
+    canvas.height = image.naturalHeight;
+    const context = canvas.getContext("2d");
+    context.drawImage(image, 0, 0);
+    const pixels = context.getImageData(0, 0, canvas.width, canvas.height).data;
+    let min = 255, max = 0;
+    for (let pixel = 3; pixel < pixels.length; pixel += 4) {
+      min = Math.min(min, pixels[pixel]);
+      max = Math.max(max, pixels[pixel]);
+    }
+    return { min, max };
+  }, bytes.toString("base64"));
+  console.log("Synthetic portrait AI alpha range:", matteRange);
+  if (matteRange.min >= 200 || matteRange.max <= 50) {
+    throw new Error("AI output has no useful transparent/opaque alpha separation");
+  }
+
   // Verify that a solid-color export is still opaque PNG.
   await page.getByRole("combobox").selectOption("white");
   const whitePromise = page.waitForEvent("download");
