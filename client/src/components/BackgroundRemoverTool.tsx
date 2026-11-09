@@ -69,7 +69,7 @@ export default function BackgroundRemoverTool() {
   const worker = useRef<Worker | null>(null);
   const generation = useRef(0);
 
-  useEffect(() => () => { worker.current?.terminate(); worker.current = null; }, []);
+  useEffect(() => () => { generation.current += 1; worker.current?.terminate(); worker.current = null; }, []);
   useEffect(() => () => { if (source) URL.revokeObjectURL(source.url); }, [source]);
   useEffect(() => () => { if (result) URL.revokeObjectURL(result.url); }, [result]);
 
@@ -87,7 +87,9 @@ export default function BackgroundRemoverTool() {
     event.target.value = "";
     if (!file) return;
     stop();
+    const selectionId = generation.current;
     setResult(null);
+    setSource(null);
     setError("");
     const initialError = validateBackgroundFile(file);
     if (initialError) { setError(initialError); return; }
@@ -96,12 +98,13 @@ export default function BackgroundRemoverTool() {
       const bitmap = await createImageBitmap(file);
       const { width, height } = bitmap;
       bitmap.close();
+      if (selectionId !== generation.current) return;
       const dimensionsError = validateBackgroundDimensions(width, height);
       if (dimensionsError) { setError(dimensionsError); return; }
       const url = URL.createObjectURL(file);
       setSource({ file, url, width, height });
     } catch {
-      setError("Your browser could not decode this file as a supported image.");
+      if (selectionId === generation.current) setError("Your browser could not decode this file as a supported image.");
     }
   };
 
