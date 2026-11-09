@@ -59,7 +59,7 @@ export default function Home() {
             type="search"
             name="q"
             aria-label="Search tools and games"
-            placeholder="Search 61 offline tools (PDF, JSON, Regex, Wordle)..."
+            placeholder="Search 62 offline tools (PDF, JSON, Regex, Wordle)..."
             className="w-full bg-transparent px-2 py-1.5 text-sm text-white placeholder-white/40 outline-none"
           />
           <button
