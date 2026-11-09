@@ -60,7 +60,8 @@ export type ToolKind =
   | "seoMeta"
   | "usernameGen"
   | "ogImageBuilder"
-  | "fakeDataGen";
+  | "fakeDataGen"
+  | "backgroundRemoval";
 
 export type ToolDefinition = {
   slug: string;
@@ -661,5 +662,14 @@ export const tools: ToolDefinition[] = [
     hindiName: "मॉक और फेक डेटा जनरेटर",
     hindiDescription: "डेवलपमेंट और टेस्टिंग के लिए जेसन, सीएसवी और एसक्यूएल फॉर्मेट में रियलिस्टिक मॉक यूज़र्स और रिकॉर्ड्स जनरेट करें।",
     hindiKeywords: ["mock data generator", "fake user data", "dummy json data", "test data generator", "fake dataset"],
+  },
+  {
+    slug: "background-remover",
+    name: "Free AI Background Remover",
+    category: "Create",
+    description: "Remove photo backgrounds in your browser and download a transparent PNG. No image upload required.",
+    kind: "backgroundRemoval",
+    accent: "sky",
+    tags: ["Local", "Private", "AI", "Image", "Popular"],
   },
 ];
