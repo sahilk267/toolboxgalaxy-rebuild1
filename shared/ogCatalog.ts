@@ -93,6 +93,7 @@ export const TOOL_CATEGORY_OG: Record<string, OgImageDefinition> = {
 export const TOOL_SLUG_TO_CATEGORY: Record<string, string> = {
   // Image Tools
   "image-resizer": "image-tools",
+  "background-remover": "image-tools",
   "favicon-generator": "image-tools",
   "image-crop-rotate-convert": "image-tools",
   "image-metadata-remover": "image-tools",
