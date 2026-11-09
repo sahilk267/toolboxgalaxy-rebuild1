@@ -54,3 +54,10 @@ CI must run clean `npm ci` with matching package-lock.json, then TypeScript, exi
 - Review Apache-2.0 and MIT redistribution/NOTICE obligations with the production artifact
 
 Until completed, catalog addition is a **draft functionality under test**; passing CLI validation alone does not mean feature production ready.
+
+## Confirmed Chromium proof (10 Nov 2026)
+
+- GitHub Actions Chromium smoke: [Run 42716930151](https://github.com/sahilk267/toolboxgalaxy-rebuild1/actions/runs/42716930151) **SUCCESS**.
+- Genuine portrait (360 × 450): model inference, transparent PNG download, inspected PNG alpha min=0.
+- Corrupt-image rejection, same-origin AI asset requests, white-background opaque PNG export, and UI reset were exercised successfully.
+- This confirms a **headless Linux Chromium smoke only**, not cross-browser, touch, accessibility, performance, or production-Hostinger certification. Feature PR #16 remains draft until remaining evidence is collected.
