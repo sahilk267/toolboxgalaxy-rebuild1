@@ -111,3 +111,7 @@ temp/
 # Manus version file (auto-generated, not part of source)
 client/public/__manus__/version.json
 .project-config.json
+
+# Generated, checksum-verified large AI model and ONNX WASM assets (prepared at build)
+client/public/models/onnx-community/ormbg-ONNX/
+client/public/models/wasm/
