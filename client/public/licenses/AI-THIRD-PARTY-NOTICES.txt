@@ -1,0 +1,21 @@
+ToolBoxGalaxy AI Background Remover — Third-Party Notices
+
+Runtime: @huggingface/transformers version 3.8.1
+License: Apache License 2.0
+Source: https://github.com/huggingface/transformers.js
+Copyright: Hugging Face, Inc. and contributors
+
+Model: onnx-community/ormbg-ONNX (IS-Net / ORMBG conversion)
+Model revision: 034e2d884afbab897e10e78fc5bb566b29533fd6
+License: Apache License 2.0, as indicated by the official Hugging Face model card
+Source: https://huggingface.co/onnx-community/ormbg-ONNX
+Base model: https://huggingface.co/schirrmacher/ormbg
+Credit: the base model author and ONNX community conversion contributors.
+
+ONNX runtime: onnxruntime-web, version installed by the pinned npm lockfile
+Source: https://github.com/microsoft/onnxruntime
+Review the ONNX runtime package LICENSE/NOTICE for its own requirements.
+
+A copy of Apache-2.0 is included at /licenses/Apache-2.0.txt.
+Model weights and WASM runtime are retrieved for same-origin hosting during the build.
+Your input image is not transmitted to either upstream site for inference.
