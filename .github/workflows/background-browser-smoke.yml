@@ -2,8 +2,27 @@ name: Background removal Chromium smoke
 on:
   push:
     branches: [feat/ai-background-remover]
+    paths:
+      - client/src/components/BackgroundRemoverTool.tsx
+      - client/src/workers/backgroundRemoval.worker.ts
+      - client/src/lib/backgroundRemovalValidation.ts
+      - scripts/prepare-background-removal.mjs
+      - scripts/verify-background-removal-browser.mjs
+      - package.json
+      - package-lock.json
+      - .github/workflows/background-browser-smoke.yml
   pull_request:
     branches: [main]
+    paths:
+      - client/src/components/BackgroundRemoverTool.tsx
+      - client/src/workers/backgroundRemoval.worker.ts
+      - client/src/lib/backgroundRemovalValidation.ts
+      - scripts/prepare-background-removal.mjs
+      - scripts/verify-background-removal-browser.mjs
+      - package.json
+      - package-lock.json
+      - .github/workflows/background-browser-smoke.yml
+  workflow_dispatch:
 permissions:
   contents: read
 jobs:
