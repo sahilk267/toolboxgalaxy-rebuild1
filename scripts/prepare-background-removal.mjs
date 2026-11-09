@@ -89,8 +89,21 @@ async function provisionWasm() {
   console.log(`[background model] copied ${count} WASM/runtime assets`);
 }
 
+async function provisionNotices() {
+  const target = join(root, "client/public/licenses");
+  await mkdir(target, { recursive: true });
+  // npm packages include their official LICENSE files; fail closed if attribution assets disappear.
+  for (const [source, dest] of [
+    ["node_modules/@huggingface/transformers/LICENSE", "Apache-2.0.txt"],
+    ["node_modules/onnxruntime-web/LICENSE", "onnxruntime-web-MIT.txt"],
+  ]) {
+    await copyFile(join(root, source), join(target, dest));
+  }
+}
+
 await provision("config.json");
 await provision("preprocessor_config.json");
 await provision("onnx/model_uint8.onnx", modelSha256);
 await provisionWasm();
+await provisionNotices();
 console.log("[background model] local assets ready; external model requests disabled at runtime");
