@@ -1,5 +1,9 @@
 # ToolboxGalaxy Repair & Verification Progress Ledger
 
+## Candidate Tool #62 — AI Background Remover (10 November 2026)
+
+This is a **separate draft addition**, not part of the historical 61-tool browser-QA table below. PR [#15](https://github.com/sahilk267/toolboxgalaxy-rebuild1/pull/15) adds browser-local ORMBG background removal with pinned Apache-2.0 model/runtime, original-dimension PNG composition, and upload/memory limits. The core main CI has passed (e.g. [run 42714460236](https://github.com/sahilk267/toolboxgalaxy-rebuild1/actions/runs/42714460236)). A real Chrome/Chromium smoke passed [run 42715470051](https://github.com/sahilk267/toolboxgalaxy-rebuild1/actions/runs/42715470051), demonstrating local model execution, image-to-PNG workflow and full-resolution output. Further alpha-mask assertions, performance measurements, Safari/mobile QA and actual Hostinger production deployment remain required. **PR #15 is draft; tool is not universally certified or merged.** Details in `docs/AI_BACKGROUND_REMOVER_RELEASE.md`.
+
 ## Current verification standard — 8 November 2026
 
 **Scope:** improve and validate the existing **61 utility-tool registrations** and **18 game catalog entries** only. Work on SEO, marketing, analytics, hosting, or unrelated infrastructure is not part of this repair scope.
