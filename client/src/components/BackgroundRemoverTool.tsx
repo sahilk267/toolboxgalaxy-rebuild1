@@ -249,6 +249,7 @@ export default function BackgroundRemoverTool() {
       )}
       {error && <p role="alert" className="rounded-lg border border-red-400/50 bg-red-500/10 p-3 text-sm text-red-200">{error}</p>}
       <p className="tool-disclaimer">AI edges are approximate. Background-removal results can be less accurate for hair, glass, pets and complex scenes. No signup and no server-side image upload.</p>
+      <p className="text-xs text-white/60">Apache-2.0 model/runtime notices: <a className="underline" href="/licenses/AI-THIRD-PARTY-NOTICES.txt" target="_blank" rel="noopener noreferrer">view third-party licenses</a></p>
     </div>
   );
 }
