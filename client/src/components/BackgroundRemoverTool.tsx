@@ -222,8 +222,8 @@ export default function BackgroundRemoverTool() {
             <button className="quiet-button" type="button" onClick={clear}><RotateCcw size={16} /> Reset</button>
           </div>
           <div className="relative mx-auto w-full max-w-3xl overflow-hidden rounded-xl border border-white/15" style={{ aspectRatio: source.width + " / " + source.height, maxHeight: "520px", backgroundColor: previewBackground, backgroundImage: mode === "transparent" ? "linear-gradient(45deg,#64748b33 25%,transparent 25%),linear-gradient(-45deg,#64748b33 25%,transparent 25%),linear-gradient(45deg,transparent 75%,#64748b33 75%),linear-gradient(-45deg,transparent 75%,#64748b33 75%)" : undefined, backgroundSize: "24px 24px", backgroundPosition: "0 0,0 12px,12px -12px,-12px 0" }}>
-            <img src={source.url} alt="Original photo" className="absolute inset-0 h-full w-full object-contain" />
-            {output && <img src={output.url} alt="Photo with background removed" className="absolute inset-0 h-full w-full object-contain" style={{ clipPath: "inset(0 " + (100 - compare) + "% 0 0)" }} />}
+            <img src={source.url} alt="Original photo" className="absolute inset-0 h-full w-full object-contain" style={output ? { clipPath: "inset(0 " + (100 - compare) + "% 0 0)" } : undefined} />
+            {output && <img src={output.url} alt="Photo with background removed" className="absolute inset-0 h-full w-full object-contain" style={{ clipPath: "inset(0 0 0 " + compare + "%)" }} />}
             {output && <div aria-hidden="true" className="absolute bottom-0 top-0 w-px bg-white shadow-lg" style={{ left: compare + "%" }} />}
           </div>
           {output && <label className="block text-sm">Compare original and removed background
