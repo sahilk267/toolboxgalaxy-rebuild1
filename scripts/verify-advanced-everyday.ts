@@ -99,7 +99,7 @@ for (const category of UNIT_CATEGORIES) {
 
 // Preserve existing word/character/line counters; add Unicode, sentence and frequency tests.
 const sample = analyzeTextStatistics("Write something useful. Then take a quick break.");
-assert(sample.words === 9, "legacy sample word count");
+assert(sample.words === 8, "legacy sample word count");
 assert(sample.characters === "Write something useful. Then take a quick break.".length, "legacy JS-character count");
 assert(sample.lines === 1, "legacy single-line count");
 assert(sample.readingMinutes === 1, "legacy reading estimate");
