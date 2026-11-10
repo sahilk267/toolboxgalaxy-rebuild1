@@ -130,7 +130,8 @@ export function assessPassword(value: string): PasswordAssessment {
   if (length < 16) tips.push("Consider a unique 16+ character random password or a long random passphrase.");
   tips.push("This local heuristic cannot check password reuse or known data breaches.");
   let score = length < 8 ? 0 : length < 12 ? 1 : length < 16 ? 2 : length < 24 ? 3 : 4;
-  if (common || issues.some(i => i.includes("repeated"))) score = Math.min(score, 1);
+  if (common) score = 0;
+  else if (issues.some(i => i.includes("repeated"))) score = Math.min(score, 1);
   else if (issues.some(i => i.includes("sequence") || i.includes("pattern"))) score = Math.min(score, 2);
   const names = ["Very weak","Weak","Fair","Good","Stronger"] as const;
   return { score: score as PasswordAssessment["score"], label: names[score], issues, tips, length };
