@@ -41,6 +41,8 @@ jobs:
           done
           curl -fsS http://127.0.0.1:3000/api/health
           node scripts/verify-advanced-core-browser.mjs
+          node scripts/verify-advanced-qr-browser.mjs
+          node scripts/verify-advanced-everyday-browser.mjs
       - name: Server log after failure
         if: failure()
         run: tail -n 100 /tmp/tbg-advanced-core.log || true
