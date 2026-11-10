@@ -206,7 +206,8 @@ function wordTokens(text: string): string[] {
         .map(segment => segment.segment.toLocaleLowerCase());
     } catch { /* use deterministic Unicode fallback */ }
   }
-  return (text.match(/[\p{L}\p{M}\p{N}]+(?:['’-][\p{L}\p{M}\p{N}]+)*/gu) ?? [])
+  const fallbackWords = new RegExp("[\\p{L}\\p{M}\\p{N}]+(?:['’-][\\p{L}\\p{M}\\p{N}]+)*", "gu");
+  return (text.match(fallbackWords) ?? [])
     .map(word => word.toLocaleLowerCase());
 }
 
@@ -217,19 +218,20 @@ export function analyzeTextStatistics(text: string): TextReport {
   const counts = new Map<string, number>();
   tokens.forEach(token => counts.set(token, (counts.get(token) ?? 0) + 1));
   let sentences = 0;
+  const hasLetters = new RegExp("[\\p{L}\\p{N}]", "u");
   if (trimmed) {
     if (typeof Intl !== "undefined" && "Segmenter" in Intl) {
       try {
         const segmenter = new Intl.Segmenter(undefined, { granularity: "sentence" });
-        sentences = Array.from(segmenter.segment(trimmed)).filter(s => /[\p{L}\p{N}]/u.test(s.segment)).length;
+        sentences = Array.from(segmenter.segment(trimmed)).filter(s => hasLetters.test(s.segment)).length;
       } catch { sentences = 0; }
     }
-    if (!sentences) sentences = trimmed.split(/(?<=[.!?。！？])\s+/u).filter(x => /[\p{L}\p{N}]/u.test(x)).length;
+    if (!sentences) sentences = trimmed.split(new RegExp("(?<=[.!?。！？])\\s+")).filter(x => hasLetters.test(x)).length;
   }
   return {
     words: tokens.length,
     characters: text.length, // Preserve existing JavaScript string-length behavior.
-    withoutWhitespace: text.replace(/\s/gu, "").length,
+    withoutWhitespace: text.replace(/\s/g, "").length,
     lines: text ? text.split(/\r\n|\r|\n/).length : 0,
     sentences,
     paragraphs: trimmed ? trimmed.split(/(?:\r\n|\r|\n)[\t ]*(?:\r\n|\r|\n)/).filter(p => p.trim()).length : 0,
