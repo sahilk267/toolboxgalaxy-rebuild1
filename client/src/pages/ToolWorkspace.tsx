@@ -5,7 +5,7 @@ import ImageResizerTool from "@/components/ImageResizerTool";
 import ImageTransformTool from "@/components/ImageTransformTool";
 import ImageMetadataTool from "@/components/ImageMetadataTool";
 import { LineSorterTool } from "@/components/LineToolRunner";
-import { FaviconGeneratorTool, HashGeneratorTool, PasswordStrengthTool } from "@/components/LocalSecurityTools";
+import { HashGeneratorTool } from "@/components/LocalSecurityTools";
 import { ContrastCheckerTool, MarkdownWorkspaceTool } from "@/components/ContentTools";
 import { BusinessDaysTool, FindReplaceTool, LoanEmiTool, SplitBillTool, TextDiffTool, TimeZonePlannerTool, TimestampConverterTool, WorkShiftTool } from "@/components/DailyToolRunners";
 import { CsvViewerCleanerTool, JsonCsvConverterTool } from "@/components/StructuredDataRunners";
@@ -50,7 +50,6 @@ import { Check, Clipboard, RotateCcw, ShieldCheck, X } from "lucide-react";
 import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import { Link, useRoute } from "wouter";
 import { cleanUserName } from "@shared/userParam";
-import { secureRandomInt } from "@/lib/secureRandom";
 import { AdvancedPercentageTool, AdvancedUnitConverterTool, AdvancedTextStatisticsTool } from "@/components/AdvancedEverydayTools";
 
 export function countWordsUnicode(text: string): number {
@@ -128,55 +127,16 @@ function Calculator() {
 
 function Base64() { const [mode, setMode] = useState("encode"); const [input, setInput] = useState("Hello, Galaxy."); const { output, error } = useMemo(() => { try { return { output: mode === "encode" ? btoa(unescape(encodeURIComponent(input))) : decodeURIComponent(escape(atob(input))), error: "" }; } catch { return { output: "", error: "That text is not valid Base64." }; } }, [input, mode]); return <div className="runner-stack"><label className="wide-field">Mode<select value={mode} onChange={(e) => setMode(e.target.value)}><option value="encode">Encode UTF-8 text</option><option value="decode">Decode Base64 text</option></select></label><label className="wide-field">Input<textarea value={input} onChange={(e) => setInput(e.target.value)} rows={7} /></label><Result value={output} error={error} /></div>; }
 
-function JsonStation() { const [input, setInput] = useState('{"mission":"tools","status":"verified"}'); const [minify, setMinify] = useState(false); const { output, error } = useMemo(() => { try { return { output: JSON.stringify(JSON.parse(input), null, minify ? 0 : 2), error: "" }; } catch (e) { return { output: "", error: e instanceof Error ? e.message : "Invalid JSON." }; } }, [input, minify]); return <div className="runner-stack"><div className="toggle-row"><button className={!minify ? "toggle-button toggle-button--active" : "toggle-button"} onClick={() => { setMinify(false); trackPageView(undefined, undefined, "text-formatted", { format: "json-beautify", tool_slug: "json" }); }}>Format</button><button className={minify ? "toggle-button toggle-button--active" : "toggle-button"} onClick={() => { setMinify(true); trackPageView(undefined, undefined, "text-formatted", { format: "json-minify", tool_slug: "json" }); }}>Minify</button></div><label className="wide-field">JSON input<textarea value={input} onChange={(e) => setInput(e.target.value)} rows={9} spellCheck="false" /></label><Result value={output} error={error} /></div>; }
-
-function Password() {
-  const [length, setLength] = useState(18);
-  const [value, setValue] = useState("");
-  const generate = () => {
-    try {
-      const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%&*?";
-      const chars: string[] = [];
-      for (let i = 0; i < length; i++) {
-        const idx = secureRandomInt(0, alphabet.length - 1);
-        chars.push(alphabet[idx]);
-      }
-      setValue(chars.join(""));
-    } catch {
-      setValue("");
-    }
-  };
-  return (
-    <div className="runner-stack">
-      <label className="range-field">
-        Length <strong>{length}</strong>
-        <input
-          type="range"
-          min="12"
-          max="48"
-          value={length}
-          onChange={(e) => setLength(Number(e.target.value))}
-        />
-      </label>
-      <div className="flex gap-3">
-        <button className="signal-button" onClick={generate}>
-          Generate password
-        </button>
-        <button className="reset-button" onClick={() => setValue("")}>
-          <RotateCcw size={15} /> Clear
-        </button>
-      </div>
-      <Result value={value} />
-    </div>
-  );
-}
-
 function ColorSignal() { const [value, setValue] = useState("#c7f36b"); const parsed = useMemo(() => /^#?[0-9a-fA-F]{6}$/.test(value) ? `#${value.replace("#", "").toUpperCase()}` : "", [value]); const rgb = parsed ? `${parseInt(parsed.slice(1, 3), 16)}, ${parseInt(parsed.slice(3, 5), 16)}, ${parseInt(parsed.slice(5, 7), 16)}` : ""; return <div className="runner-stack"><div className="color-layout"><div className="color-preview" style={{ background: parsed || "#1f2937" }} /><label>HEX color<input value={value} onChange={(e) => setValue(e.target.value)} /></label></div><Result value={parsed ? `HEX ${parsed}\nRGB ${rgb}` : "Use a six-digit HEX colour, e.g. #C7F36B."} /></div>; }
 
 const BackgroundRemoverTool = lazy(() => import("@/components/BackgroundRemoverTool"));
+const AdvancedFaviconTool = lazy(() => import("@/components/AdvancedFaviconTool"));
+const AdvancedJsonStation = lazy(() => import("@/components/AdvancedJsonStation"));
+const AdvancedPasswordGenerator = lazy(() => import("@/components/AdvancedPasswordTools").then(module => ({ default: module.AdvancedPasswordGenerator })));
+const AdvancedPasswordAuditor = lazy(() => import("@/components/AdvancedPasswordTools").then(module => ({ default: module.AdvancedPasswordAuditor })));
 const AdvancedQrTool = lazy(() => import("@/components/AdvancedQrTool"));
 
-const runnerByKind = { calculator: Calculator, percentage: AdvancedPercentageTool, unit: AdvancedUnitConverterTool, base64: Base64, json: JsonStation, password: Password, textStats: AdvancedTextStatisticsTool, color: ColorSignal, bmi: BmiTool, discount: DiscountTool, age: AgeTool, dateDiff: DateDifferenceTool, url: UrlTool, html: HtmlTool, textCase: TextCaseTool, uuid: UuidTool, gradient: GradientTool, qr: AdvancedQrTool, imageResize: ImageResizerTool, imageTransform: ImageTransformTool, imageMetadata: ImageMetadataTool, favicon: FaviconGeneratorTool, hash: HashGeneratorTool, passwordAudit: PasswordStrengthTool, markdown: MarkdownWorkspaceTool, contrast: ContrastCheckerTool, businessDays: BusinessDaysTool, timeZone: TimeZonePlannerTool, timestamp: TimestampConverterTool, textDiff: TextDiffTool, findReplace: FindReplaceTool, splitBill: SplitBillTool, loanEmi: LoanEmiTool, workShift: WorkShiftTool, jsonCsv: JsonCsvConverterTool, csvViewer: CsvViewerCleanerTool, lineSorter: LineSorterTool, pdfEditor: PdfEditorTool, pdfCompress: PdfCompressTool, enterprisePdf: EnterprisePdfTool, pdfMergeSplit: PdfMergeSplitTool, imagesToPdf: ImagesToPdfTool, excelStudio: ExcelStudioTool, wordDocx: WordDocxTool, whatsappDirect: WhatsappDirectTool, gstTax: GstCalculatorTool, passportPhoto: PassportPhotoResizerTool, landArea: LandAreaConverterTool, numberToWords: NumberToWordsTool, jsonToZod: JsonToZodTool, cleanUrl: TrackingUrlCleanerTool, jwtDebugger: JwtDebuggerTool, cronSchedule: CronScheduleTool, regexTester: RegexTesterTool, curlToCode: CurlToCodeTool, loremIpsum: LoremIpsumTool, randomNumber: RandomNumberTool, seoMeta: SeoMetaTool, usernameGen: UsernameGeneratorTool, ogImageBuilder: OgImageBuilderTool, fakeDataGen: FakeDataGeneratorTool, backgroundRemoval: BackgroundRemoverTool };
+const runnerByKind = { calculator: Calculator, percentage: AdvancedPercentageTool, unit: AdvancedUnitConverterTool, base64: Base64, json: AdvancedJsonStation, password: AdvancedPasswordGenerator, textStats: AdvancedTextStatisticsTool, color: ColorSignal, bmi: BmiTool, discount: DiscountTool, age: AgeTool, dateDiff: DateDifferenceTool, url: UrlTool, html: HtmlTool, textCase: TextCaseTool, uuid: UuidTool, gradient: GradientTool, qr: AdvancedQrTool, imageResize: ImageResizerTool, imageTransform: ImageTransformTool, imageMetadata: ImageMetadataTool, favicon: AdvancedFaviconTool, hash: HashGeneratorTool, passwordAudit: AdvancedPasswordAuditor, markdown: MarkdownWorkspaceTool, contrast: ContrastCheckerTool, businessDays: BusinessDaysTool, timeZone: TimeZonePlannerTool, timestamp: TimestampConverterTool, textDiff: TextDiffTool, findReplace: FindReplaceTool, splitBill: SplitBillTool, loanEmi: LoanEmiTool, workShift: WorkShiftTool, jsonCsv: JsonCsvConverterTool, csvViewer: CsvViewerCleanerTool, lineSorter: LineSorterTool, pdfEditor: PdfEditorTool, pdfCompress: PdfCompressTool, enterprisePdf: EnterprisePdfTool, pdfMergeSplit: PdfMergeSplitTool, imagesToPdf: ImagesToPdfTool, excelStudio: ExcelStudioTool, wordDocx: WordDocxTool, whatsappDirect: WhatsappDirectTool, gstTax: GstCalculatorTool, passportPhoto: PassportPhotoResizerTool, landArea: LandAreaConverterTool, numberToWords: NumberToWordsTool, jsonToZod: JsonToZodTool, cleanUrl: TrackingUrlCleanerTool, jwtDebugger: JwtDebuggerTool, cronSchedule: CronScheduleTool, regexTester: RegexTesterTool, curlToCode: CurlToCodeTool, loremIpsum: LoremIpsumTool, randomNumber: RandomNumberTool, seoMeta: SeoMetaTool, usernameGen: UsernameGeneratorTool, ogImageBuilder: OgImageBuilderTool, fakeDataGen: FakeDataGeneratorTool, backgroundRemoval: BackgroundRemoverTool };
 
 export default function ToolWorkspace() {
   const [, params] = useRoute("/tools/:slug");
