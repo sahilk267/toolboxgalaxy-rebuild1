@@ -1,5 +1,15 @@
 # ToolboxGalaxy Repair & Verification Progress Ledger
 
+## Candidate upgrade batch — Percentage, Units and Text Statistics (10 November 2026)
+
+**Branch:** `feat/advanced-percentage-units-text-stats` based on the user's deployed `feat/browser-ai-background-remover` branch. **Do not merge or deploy without CI and browser regression review.** Existing URLs and shared catalog tool identifiers are preserved.
+
+- Percentage Calculator retains its 18 / 120 = 15% default and adds percentage-of, increase/decrease, symmetric difference, reverse increase/discount and percentage-point modes, each with explicit formula and zero-denominator guards.
+- Unit Converter retains 1 kilometre to mile as its default and adds length, mass, temperatures, area, US customary volume/cooking, speed, pressure and explicitly separated decimal/binary data units. Uses fixed conversion constants and no network rates. Rejects incompatible units, negative physical quantities and below-absolute-zero temperatures.
+- Text Statistics preserves legacy word/character/line counters and adds sentences, paragraphs, unique words, reading/speaking time, top word frequencies, copy/export and 200,000-character input bounds. Unicode word/sentence boundaries follow Intl.Segmenter where available.
+- `scripts/verify-advanced-everyday.ts` exercises the actual pure engines and is wired to `npm run check`; `npm run verify:everyday` runs the focused suite. Tests and fresh Chrome/device evidence must pass before these upgrades are treated as verified.
+
+
 ## Candidate Tool #62 — AI Background Remover (10 November 2026)
 
 This is a **separate draft addition**, not part of the historical 61-tool browser-QA table below. PR [#15](https://github.com/sahilk267/toolboxgalaxy-rebuild1/pull/15) adds browser-local ORMBG background removal with pinned Apache-2.0 model/runtime, original-dimension PNG composition, and upload/memory limits. The core main CI has passed (e.g. [run 42714460236](https://github.com/sahilk267/toolboxgalaxy-rebuild1/actions/runs/42714460236)). A real Chrome/Chromium smoke passed [run 42715470051](https://github.com/sahilk267/toolboxgalaxy-rebuild1/actions/runs/42715470051), demonstrating local model execution, image-to-PNG workflow and full-resolution output. Further alpha-mask assertions, performance measurements, Safari/mobile QA and actual Hostinger production deployment remain required. **PR #15 is draft; tool is not universally certified or merged.** Details in `docs/AI_BACKGROUND_REMOVER_RELEASE.md`.
