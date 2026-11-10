@@ -49,7 +49,7 @@ export function passwordCharset(options: PasswordOptions): { groups: string[]; p
   for (const key of ["uppercase", "lowercase", "numbers", "symbols"] as const) {
     if (!options[key]) continue;
     let chars: string = CHAR_GROUPS[key];
-    if (options.excludeAmbiguous) chars = [...chars].filter(c => !AMBIGUOUS.includes(c)).join("");
+    if (options.excludeAmbiguous) chars = Array.from(chars).filter(c => !AMBIGUOUS.includes(c)).join("");
     if (chars) groups.push(chars);
   }
   return { groups, pool: groups.join("") };
@@ -123,7 +123,7 @@ export function assessPassword(value: string): PasswordAssessment {
   const common = COMMON.has(lower) || /^(password|qwerty|admin|welcome|letmein|iloveyou)/i.test(value);
   if (common) issues.push("Starts with or matches an easily guessed password.");
   if (length < 12) issues.push("Shorter than the recommended 12-character baseline.");
-  if (/^(.)\1{3,}$/u.test(value)) issues.push("Mostly a single repeated character.");
+  if (/^(.)\1{3,}$/.test(value)) issues.push("Mostly a single repeated character.");
   if (/(123456|abcdef|qwerty|asdfgh|098765|654321)/i.test(value)) issues.push("Contains a common keyboard or number sequence.");
   if (/^(?:\d{4,}|[a-z]{1,3}\d{4,})$/i.test(value)) issues.push("Simple digit or short-prefix pattern.");
   if (length >= 16 && !common && !issues.length) tips.push("Long, unique passwords are generally preferable; avoid reuse.");
