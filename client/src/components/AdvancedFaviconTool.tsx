@@ -63,12 +63,17 @@ export default function AdvancedFaviconTool() {
     const next = event.target.files?.[0];
     event.target.value = "";
     if (!next) return;
+    invalidate();
+    setFile(null);
+    setPreview("");
+    const currentSelection = generation.current;
     let problem = faviconFileError(next.type, next.size);
     if (problem) { setError(problem); return; }
     try {
       const bitmap = await createImageBitmap(next);
       problem = faviconFileError(next.type, next.size, bitmap.width, bitmap.height);
       bitmap.close();
+      if (generation.current !== currentSelection) return;
       if (problem) { setError(problem); return; }
       invalidate();
       setFile(next);
