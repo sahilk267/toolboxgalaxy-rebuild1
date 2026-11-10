@@ -1,5 +1,17 @@
 # ToolboxGalaxy Repair & Verification Progress Ledger
 
+## Combined advanced-tool implementation batch — User manual QA deferred
+
+**Source of truth:** One-shot QA instructions in [docs/CONSOLIDATED_ADVANCED_TOOLS_QA.md](docs/CONSOLIDATED_ADVANCED_TOOLS_QA.md). The user requests completing previously prioritized upgrades together, then performing a single later manual/real-device test; production must remain unchanged in the meantime.
+
+- PR [#17](https://github.com/sahilk267/toolboxgalaxy-rebuild1/pull/17) was already merged into the user's deployed `feat/browser-ai-background-remover` branch (advanced Percentage, Unit, Text Statistics).
+- PR [#18](https://github.com/sahilk267/toolboxgalaxy-rebuild1/pull/18) is **draft, unmerged**, targeting the deployed branch. Adds Advanced QR Generator (all 3 head CI/browser checks previously passed). Real iOS/Android scan validation remains deferred.
+- PR [#19](https://github.com/sahilk267/toolboxgalaxy-rebuild1/pull/19) is **draft, unmerged**, stacked on the PR #18 branch. Adds full Favicon Kit (multi-frame ICO/ZIP/manifest), configurable CSPRNG passwords and passphrases, length-first auditor, and JSON Station tree/path/compare/export without changing slugs.
+- Existing preview behavior and original default calculations are preserved. Pure-engine regressions are in `scripts/verify-advanced-core-tools.ts` and run within `npm run check`; Chromium smoke is `scripts/verify-advanced-core-browser.mjs`.
+- Early successful evidence: [full CI run 42877213743](https://github.com/sahilk267/toolboxgalaxy-rebuild1/actions/runs/42877213743) passed 126 new core engine assertions, 80 QR engine assertions, 153 everyday tool assertions and production build. [Chromium run 42876948301](https://github.com/sahilk267/toolboxgalaxy-rebuild1/actions/runs/42876948301) passed 40 browser assertions including actual downloaded ZIP/ICO/JSON outputs and UI controls. Follow-on correctness/metadata improvements require checks on final branch head; prior passing runs do not certify subsequent commits.
+- Manual QA, phone scanning, Safari/Firefox, older devices, security/hosting reviews, deployment and `main` sync are **not completed**. Do not merge PRs or claim production certification until joint QA and explicit approval.
+
+
 ## Candidate upgrade batch — Percentage, Units and Text Statistics (10 November 2026)
 
 **Branch:** `feat/advanced-percentage-units-text-stats` based on the user's deployed `feat/browser-ai-background-remover` branch. **Do not merge or deploy without CI and browser regression review.** Existing URLs and shared catalog tool identifiers are preserved.
