@@ -9,7 +9,7 @@ export function faviconFileError(type: string, size: number, width?: number, hei
     return "Choose an image smaller than 5 MB.";
   if (width !== undefined || height !== undefined) {
     if (!Number.isSafeInteger(width) || !Number.isSafeInteger(height) ||
-        !width || !height || width * height > FAVICON_MAX_PIXELS)
+        width <= 0 || height <= 0 || width * height > FAVICON_MAX_PIXELS)
       return "Image dimensions exceed the 20-megapixel safety limit.";
   }
   return null;
