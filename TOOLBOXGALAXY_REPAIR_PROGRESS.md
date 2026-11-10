@@ -7,7 +7,9 @@
 - Percentage Calculator retains its 18 / 120 = 15% default and adds percentage-of, increase/decrease, symmetric difference, reverse increase/discount and percentage-point modes, each with explicit formula and zero-denominator guards.
 - Unit Converter retains 1 kilometre to mile as its default and adds length, mass, temperatures, area, US customary volume/cooking, speed, pressure and explicitly separated decimal/binary data units. Uses fixed conversion constants and no network rates. Rejects incompatible units, negative physical quantities and below-absolute-zero temperatures.
 - Text Statistics preserves legacy word/character/line counters and adds sentences, paragraphs, unique words, reading/speaking time, top word frequencies, copy/export and 200,000-character input bounds. Unicode word/sentence boundaries follow Intl.Segmenter where available.
-- `scripts/verify-advanced-everyday.ts` exercises the actual pure engines and is wired to `npm run check`; `npm run verify:everyday` runs the focused suite. Tests and fresh Chrome/device evidence must pass before these upgrades are treated as verified.
+- `scripts/verify-advanced-everyday.ts` exercises the actual pure engines and is wired to `npm run check`; `npm run verify:everyday` runs the focused suite.
+- **Verified automated evidence:** [CI run 42729443088](https://github.com/sahilk267/toolboxgalaxy-rebuild1/actions/runs/42729443088) passed locked npm install, TypeScript, existing suites, **153 new deterministic engine assertions**, and production build. [Chromium run 42729442403](https://github.com/sahilk267/toolboxgalaxy-rebuild1/actions/runs/42729442403) passed **15 real UI assertions**, including output conversion, reset, validation, word frequency and downloaded TXT report.
+- **Not certified:** Actual Safari/Firefox, iOS/Android device QA and extended accessibility/performance tests are still separate release gates. Neither smoke suite establishes universal browser/device support.
 
 
 ## Candidate Tool #62 — AI Background Remover (10 November 2026)
