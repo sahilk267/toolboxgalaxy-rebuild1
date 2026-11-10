@@ -82,8 +82,9 @@ export function generatePasswords(options: PasswordOptions): string[] {
 }
 
 export function generatedPasswordEntropy(options: PasswordOptions): number {
-  const { pool } = passwordCharset(options);
-  return pool ? options.length * Math.log2(pool.length) : 0;
+  const { pool, groups } = passwordCharset(options);
+  return pool ? groups.reduce((sum, group) => sum + Math.log2(group.length), 0) +
+    Math.max(0, options.length - groups.length) * Math.log2(pool.length) : 0;
 }
 
 export function generatePassphrases(wordCount: number, count: number, separator: "-" | " " | "."): string[] {
