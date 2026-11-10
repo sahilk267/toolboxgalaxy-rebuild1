@@ -234,7 +234,7 @@ export function analyzeTextStatistics(text: string): TextReport {
     withoutWhitespace: text.replace(/\s/g, "").length,
     lines: text ? text.split(/\r\n|\r|\n/).length : 0,
     sentences,
-    paragraphs: trimmed ? trimmed.split(/(?:\r\n|\r|\n)[\t ]*(?:\r\n|\r|\n)/).filter(p => p.trim()).length : 0,
+    paragraphs: trimmed ? trimmed.replace(/\r\n?/g, "\n").split(/\n[\t ]*\n+/).filter(p => p.trim()).length : 0,
     uniqueWords: counts.size,
     readingMinutes: tokens.length ? Math.ceil(tokens.length / 200) : 0,
     speakingMinutes: tokens.length ? Math.ceil(tokens.length / 130) : 0,
