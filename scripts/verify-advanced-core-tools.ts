@@ -74,6 +74,7 @@ const manifest = JSON.parse(faviconManifest("Example Studio", "#00aa77"));
 equal(manifest.name, "Example Studio", "webmanifest app name");
 equal(manifest.icons.length, 2, "webmanifest required Android icon sizes");
 equal(manifest.icons[0].sizes, "192x192", "webmanifest 192px icon");
+equal(manifest.icons[0].purpose, "any", "no unsupported maskable-safe claim");
 equal(manifest.icons[1].sizes, "512x512", "webmanifest 512px icon");
 check(Boolean(manifest.icons[0].src.includes("android-chrome")), "manifest filenames match download");
 check(errorFrom(() => faviconManifest("test", "not-a-color")), "invalid theme rejected");
