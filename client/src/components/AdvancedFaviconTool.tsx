@@ -57,7 +57,7 @@ export default function AdvancedFaviconTool() {
   const generation = useRef(0);
   useEffect(() => () => { if (preview) URL.revokeObjectURL(preview); }, [preview]);
   useEffect(() => () => { if (generatedPreview) URL.revokeObjectURL(generatedPreview); }, [generatedPreview]);
-  const invalidate = () => { generation.current++; setGenerated(null); setGeneratedPreview(""); setStatus(""); };
+  const invalidate = () => { generation.current++; setGenerated(null); setGeneratedPreview(""); setStatus(""); setWorking(false); };
 
   async function chooseFile(event: ChangeEvent<HTMLInputElement>) {
     const next = event.target.files?.[0];
