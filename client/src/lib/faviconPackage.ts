@@ -57,8 +57,8 @@ export function faviconManifest(appName: string, themeColor: string): string {
     name,
     short_name: name.slice(0, 24),
     icons: [
-      { src: "/android-chrome-192x192.png", sizes: "192x192", type: "image/png", purpose: "any maskable" },
-      { src: "/android-chrome-512x512.png", sizes: "512x512", type: "image/png", purpose: "any maskable" },
+      { src: "/android-chrome-192x192.png", sizes: "192x192", type: "image/png", purpose: "any" },
+      { src: "/android-chrome-512x512.png", sizes: "512x512", type: "image/png", purpose: "any" },
     ],
     theme_color: themeColor,
     background_color: themeColor,
