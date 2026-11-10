@@ -1,16 +1,16 @@
 # ToolboxGalaxy Repair & Verification Progress Ledger
 
-## Combined advanced-tool implementation batch — User manual QA deferred
+## Combined advanced-tool implementation batch — Merged into feature branch (11 November 2026)
 
-**Source of truth:** One-shot QA instructions in [docs/CONSOLIDATED_ADVANCED_TOOLS_QA.md](docs/CONSOLIDATED_ADVANCED_TOOLS_QA.md). The user requests completing previously prioritized upgrades together, then performing a single later manual/real-device test; production must remain unchanged in the meantime.
+**Source of truth:** [docs/CONSOLIDATED_ADVANCED_TOOLS_QA.md](docs/CONSOLIDATED_ADVANCED_TOOLS_QA.md). User requested the PRs merged into the existing `feat/browser-ai-background-remover` branch and opted to defer one combined manual/real-device QA pass. Merge into that branch is **not** proof that live hosting has deployed the changes.
 
-- PR [#17](https://github.com/sahilk267/toolboxgalaxy-rebuild1/pull/17) was already merged into the user's deployed `feat/browser-ai-background-remover` branch (advanced Percentage, Unit, Text Statistics).
-- PR [#18](https://github.com/sahilk267/toolboxgalaxy-rebuild1/pull/18) is **draft, unmerged**, targeting the deployed branch. Adds Advanced QR Generator (all 3 head CI/browser checks previously passed). Real iOS/Android scan validation remains deferred.
-- PR [#19](https://github.com/sahilk267/toolboxgalaxy-rebuild1/pull/19) is **draft, unmerged**, stacked on the PR #18 branch. Adds full Favicon Kit (multi-frame ICO/ZIP/manifest), configurable CSPRNG passwords and passphrases, length-first auditor, and JSON Station tree/path/compare/export without changing slugs.
-- Existing preview behavior and original default calculations are preserved. Pure-engine regressions are in `scripts/verify-advanced-core-tools.ts` and run within `npm run check`; Chromium smoke is `scripts/verify-advanced-core-browser.mjs`.
-- Early successful evidence: [full CI run 42877213743](https://github.com/sahilk267/toolboxgalaxy-rebuild1/actions/runs/42877213743) passed 126 new core engine assertions, 80 QR engine assertions, 153 everyday tool assertions and production build. [Chromium run 42876948301](https://github.com/sahilk267/toolboxgalaxy-rebuild1/actions/runs/42876948301) passed 40 browser assertions including actual downloaded ZIP/ICO/JSON outputs and UI controls. Follow-on correctness/metadata improvements require checks on final branch head; prior passing runs do not certify subsequent commits.
-- Manual QA, phone scanning, Safari/Firefox, older devices, security/hosting reviews, deployment and `main` sync are **not completed**. Do not merge PRs or claim production certification until joint QA and explicit approval.
-
+- PR [#17](https://github.com/sahilk267/toolboxgalaxy-rebuild1/pull/17): **merged** previously (advanced Percentage Calculator, Unit Converter and Text Statistics).
+- PR [#18](https://github.com/sahilk267/toolboxgalaxy-rebuild1/pull/18): **merged** at `d529e0ba4961` (Advanced QR Generator; QR contrast, payload validation, optional logo, PNG/SVG).
+- PR [#19](https://github.com/sahilk267/toolboxgalaxy-rebuild1/pull/19): **merged** after retargeting at `04957e1c49c5` (Favicon ICO/ZIP/manifest, secure bulk passwords and passphrases, strength auditor, JSON tree/query/compare/export).
+- Final pre-merge PR #19 [full CI](https://github.com/sahilk267/toolboxgalaxy-rebuild1/actions/runs/42878144207): **success**, including 126 core-engine, 80 QR-engine and 153 everyday-engine assertions, existing checks and production build.
+- Final pre-merge PR #19 [consolidated Chromium QA](https://github.com/sahilk267/toolboxgalaxy-rebuild1/actions/runs/42878144213): **success**, 40 Favicon/Password/JSON + 25 QR + 15 Percentage/Unit/Text browser assertions (80 total).
+- **Still pending:** Verify live hosting deployment state, one combined Android/iPhone/Safari/Firefox and real-file manual QA, security/hosting review and eventual `main` synchronization (separate draft PR #15). Do not claim production/mobile certification. `main` remained unchanged by PRs #17–#19.
+- Original tool slugs preserved; no game changes in this batch.
 
 ## Candidate upgrade batch — Percentage, Units and Text Statistics (10 November 2026)
 
