@@ -52,7 +52,7 @@ export const QR_LIMITS = {
 const escapeWifi = (s: string) => s.replace(/([\\;,:"])/g, "\\$1");
 const escapeVcard = (s: string) => s.replace(/\\/g, "\\\\").replace(/\r\n?|\n/g, "\\n")
   .replace(/;/g, "\\;").replace(/,/g, "\\,");
-const emailValid = (email: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) && email.length <= 254;
+const emailValid = (email: string) => /^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$/i.test(email) && email.length <= 254;
 const phoneValid = (phone: string) => /^\+?[0-9()\s.-]{3,25}$/.test(phone);
 
 export function makeQrPayload(mode: QrMode, values: QrFields):
@@ -82,7 +82,12 @@ export function makeQrPayload(mode: QrMode, values: QrFields):
       const email = values.contactEmail.trim();
       if (phone && !phoneValid(phone)) return { error: "Enter a valid contact phone number." };
       if (email && !emailValid(email)) return { error: "Enter a valid contact email address." };
-      const parts = ["BEGIN:VCARD", "VERSION:3.0", "FN:" + escapeVcard(name)];
+      const nameParts = name.split(/\s+/);
+      const family = nameParts.length > 1 ? nameParts.pop()! : "";
+      const given = nameParts.join(" ");
+      const parts = ["BEGIN:VCARD", "VERSION:3.0",
+        "N:" + escapeVcard(family) + ";" + escapeVcard(given) + ";;;",
+        "FN:" + escapeVcard(name)];
       if (phone) parts.push("TEL;TYPE=CELL:" + escapeVcard(phone));
       if (email) parts.push("EMAIL:" + escapeVcard(email));
       if (values.contactOrganization.trim()) parts.push("ORG:" + escapeVcard(values.contactOrganization.trim()));
@@ -102,7 +107,7 @@ export function makeQrPayload(mode: QrMode, values: QrFields):
     case "sms": {
       const phone = values.smsNumber.trim();
       if (!phoneValid(phone)) return { error: "Enter a valid SMS phone number." };
-      payload = "sms:" + phone + (values.smsBody ? "?body=" + encodeURIComponent(values.smsBody) : "");
+      payload = "sms:" + phone.replace(/[\s().-]/g, "") + (values.smsBody ? "?body=" + encodeURIComponent(values.smsBody) : "");
       break;
     }
     case "phone": {
