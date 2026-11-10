@@ -3,7 +3,7 @@
 **Feature branch:** feat/advanced-qr-generator
 **Review PR:** https://github.com/sahilk267/toolboxgalaxy-rebuild1/pull/18
 **Target:** feat/browser-ai-background-remover (user-reported production deployment)
-**State:** Candidate feature; not merged or automatically deployed.
+**State (11 November 2026):** PR #18 merged into `feat/browser-ai-background-remover` at commit `d529e0ba4961`; live hosting deployment not independently verified. User-requested joint manual/device QA is pending.
 
 ## Implemented
 - Preserves /tools/qr-code-generator, the original URL input, 320px styling, and PNG filename.
@@ -19,7 +19,7 @@
 - .github/workflows/advanced-qr-browser.yml runs Chromium against the production build: QR route, real downloaded PNG/SVG, 512px output, Wi-Fi input, weak color contrast, branded PNG, H correction, SVG restrictions and reset.
 - Initial CI https://github.com/sahilk267/toolboxgalaxy-rebuild1/actions/runs/42839598651 passed: 76 QR assertions, 153 earlier everyday assertions and production build.
 - Initial browser QA https://github.com/sahilk267/toolboxgalaxy-rebuild1/actions/runs/42839598924 passed: 25 Chromium UI/export assertions.
-- Additional vCard name, mailto safety, SMS phone normalization tests were added afterward. Final PR-head workflows must pass before review-ready.
+- Final PR-head checks passed: CI https://github.com/sahilk267/toolboxgalaxy-rebuild1/actions/runs/42840350864 (80 QR regression assertions); QR Chromium https://github.com/sahilk267/toolboxgalaxy-rebuild1/actions/runs/42840350865; everyday tools Chromium https://github.com/sahilk267/toolboxgalaxy-rebuild1/actions/runs/42840350824. The parent PR is now merged.
 
 ## Manual release approval gates
 1. Scan static QR codes on physical iOS and Android devices for URL, test Wi-Fi, vCard, email and SMS.
