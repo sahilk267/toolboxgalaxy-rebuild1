@@ -1,11 +1,11 @@
 # Consolidated Advanced Tools Batch — Release & Manual QA
 
-**Status:** Two stacked draft pull requests. Do **not** merge/deploy before user-approved joint manual QA.
+**Status (11 November 2026):** PR #18 and PR #19 were both merged into `feat/browser-ai-background-remover` on explicit user request. Automated head CI/Chromium passed; live deployment and joint iOS/Android/manual QA remain unverified.
 
 - QR / parent PR #18: https://github.com/sahilk267/toolboxgalaxy-rebuild1/pull/18
 - Favicon + password + JSON / PR #19: https://github.com/sahilk267/toolboxgalaxy-rebuild1/pull/19
-- Latest combined branch for **one manual QA session**: feat/advanced-favicon-password-json
-- PR #19 base is feat/advanced-qr-generator (PR #18 branch), which is based on deployed feat/browser-ai-background-remover. PR #17 already merged into deployed branch.
+- Current integrated branch for **one manual QA session**: feat/browser-ai-background-remover
+- PR #18 merged at `d529e0ba4961`; PR #19 was retargeted and merged at `04957e1c49c5`. PR #17 had already merged. `main` remains unchanged.
 - Tool count/slug registry **unchanged**. No new games or unrelated site features.
 
 ## Implemented upgrades
@@ -16,12 +16,12 @@
 5. **JSON Station:** Default formatting/minification preserved; add Unicode input, sorted object keys, inspectable tree, safe $ property/index paths, comparison, local file import and downloadable JSON. No JS evaluation.
 6. **Percentage Calculator, Unit Converter, Text Statistics:** Upgrades from PR #17 are already merged into the deployed branch and are included in combined release QA.
 
-## Automated checks (must pass on final PR head)
+## Automated checks (passed before merge)
 - Full repo npm ci, npm run check (existing tools/games + extended pure regression) and npm run build.
 - QR Chromium production build smoke: actual PNG/SVG, logo, ECC, input validation.
 - Core Chromium production build smoke: real downloaded favicon ZIP/ICO assets, password/phrase generation, auditor, JSON formatting/path/compare/exports.
 - Regression tests deliberately invoke production engines, not duplicated test-only implementations.
-- Keep live production branch stable until manual QA.
+- No manual phone/device tests or live-hosting deployment verification has been performed. Branch merges may trigger external auto-deployment depending on hosting configuration.
 
 ## One-shot manual QA checklist for user (after coding)
 1. On Android and iPhone, scan regular QR, Wi-Fi QR and QR with logo. Check offline QR generation and no uploaded data.
@@ -35,11 +35,11 @@
 9. Desktop Chromium/Firefox/Safari and phone tap/keyboard interactions; check actual mobile performance and downloads.
 10. Look at browser console/network errors; test with limited memory or slow connection where practical.
 
-## Merge sequence only after user approves manual QA
-A. Merge PR #18 into feat/browser-ai-background-remover.
-B. Retarget PR #19 base to feat/browser-ai-background-remover once PR #18 is merged, re-run CI, merge PR #19.
-C. Redeploy the merged tested build and smoke test all upgraded tool slugs.
-D. Subsequently plan merging deployed branch to main (PR #15) after its independent security/mobile QA; main is currently not synced by default.
+## Completed merges and remaining release gates
+A. DONE: PR #18 merged into feat/browser-ai-background-remover (`d529e0ba4961`).
+B. DONE: PR #19 retargeted and merged into feat/browser-ai-background-remover (`04957e1c49c5`).
+C. PENDING: Confirm whether hosting auto-deployed the updated branch; perform one combined phone/desktop/manual smoke after a staging or production build is available.
+D. PENDING: Separately review PR #15 and synchronize the deployed branch with main when safe. Main is unchanged.
 
 ## Important limitations
 - No universal phone QR scanning guarantee. QR logos impair robustness; print tests still needed.
