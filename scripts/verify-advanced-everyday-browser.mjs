@@ -45,7 +45,7 @@ try {
   await unit.locator('[data-field="unit-value"]').fill("100");
   await contains(unit, "212 Fahrenheit", "100 C equals 212 F");
   await unit.locator('[data-field="unit-category"]').selectOption("volume");
-  await contains(unit, "US gallons", "US customary volume mode");
+  await contains(unit.locator(".result-block"), "US gallons", "US customary volume mode");
   await unit.getByRole("button", { name: "Reset" }).click();
   await contains(unit, "0.621371", "unit reset preserves original km/mi default");
 
