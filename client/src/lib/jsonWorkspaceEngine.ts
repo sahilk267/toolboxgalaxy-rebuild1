@@ -132,7 +132,7 @@ export function compareJson(left: string, right: string): { changes?: JsonDiff[]
     }
     const xObject = x as Record<string, JsonValue>, yObject = y as Record<string, JsonValue>;
     const keys = new Set([...Object.keys(xObject), ...Object.keys(yObject)]);
-    for (const key of keys) {
+    for (const key of Array.from(keys)) {
       if (changes.length >= MAX_DIFFS) return;
       const node = Array.isArray(x) ? path + "[" + key + "]" : keyPath(path, key);
       if (!Object.prototype.hasOwnProperty.call(xObject, key))
