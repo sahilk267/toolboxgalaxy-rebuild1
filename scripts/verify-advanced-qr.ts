@@ -40,6 +40,8 @@ check(payload("wifi", { ssid: "Home;Office", wifiPassword: "hello:there,ok\"!" }
 check(payload("wifi", { ssid: "Office", wifiSecurity: "nopass", wifiHidden: true }).includes("H:true;"), "Wi-Fi hidden network");
 reject("wifi", { wifiSecurity: "WPA", wifiPassword: "p".repeat(129) }, "Wi-Fi long password rejected");
 check(payload("contact").startsWith("BEGIN:VCARD\r\nVERSION:3.0\r\n"), "vCard 3.0 format");
+check(payload("contact").includes("\r\nN:Example;Alex;;;\r\n"), "vCard 3.0 required structured N field");
+check(payload("contact", { contactName: "Plato" }).includes("\r\nN:;Plato;;;\r\n"), "vCard mononym has safe structured name");
 check(payload("contact").endsWith("\r\nEND:VCARD"), "vCard ending");
 check(payload("contact", { contactName: "Alex, Example; Jr." }).includes("FN:Alex\\, Example\\; Jr."), "vCard escaped name");
 check(payload("contact", { contactName: "Alex\nBob" }).includes("FN:Alex\\nBob"), "vCard newline escaped");
@@ -54,8 +56,10 @@ check(payload("email", { emailSubject: "Hi & welcome!" }).includes("subject=Hi+%
 check(payload("email", { emailBody: "Line one\nLine two" }).includes("body=Line+one%0ALine+two"), "email newline encoding");
 reject("email", { emailAddress: "" }, "email required");
 reject("email", { emailAddress: "invalid" }, "invalid email syntax rejected");
+reject("email", { emailAddress: "example?bcc=evil@example.com" }, "mailto query injection rejected");
 check(payload("sms").startsWith("sms:+15551234567?body="), "SMS URI");
 check(payload("sms", { smsBody: "Meet @ 5?" }).includes("body=Meet%20%40%205%3F"), "SMS URI encoding");
+check(payload("sms", { smsNumber: "(555) 123-4567" }).startsWith("sms:5551234567"), "SMS phone is normalized for device compatibility");
 reject("sms", { smsNumber: "Invalid!" }, "reject invalid SMS phone");
 check(payload("phone") === "tel:+15551234567", "tel URI");
 check(payload("phone", { phoneNumber: "(555) 123-4567" }) === "tel:5551234567", "phone punctuation stripped");
