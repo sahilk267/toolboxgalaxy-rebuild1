@@ -234,7 +234,7 @@ export const tools: ToolDefinition[] = [
     slug: "qr-code-generator",
     name: "QR Code Generator",
     category: "Create",
-    description: "Generate a shareable QR image locally from text or a link.",
+    description: "Create private Wi-Fi, vCard, email, SMS and URL QR codes with logo, colors, PNG/SVG export and scan checks.",
     kind: "qr",
     accent: "ember",
     tags: ["Local", "Private"],
