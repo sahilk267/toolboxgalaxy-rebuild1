@@ -61,6 +61,7 @@ try {
   check(true,"Combined category and search empty state appears");
   await search.fill("");
   check(await page.locator(".logic-lab__grid article").count()>2,"Category filter displays multiple word games");
+  check(await page.locator('a[href="/games/mini-crossword"]').count()>=1,"Mini Crossword discoverable in Logic Lab puzzle launcher");
 
   // Full-screen arcade controls and WebGL require real devices for final QA;
   // these checks assert routes render without crashing the React application.
