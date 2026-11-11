@@ -1461,6 +1461,12 @@ export class DiepEngine {
     }
   }
 
+  public renderPreview() {
+    this.render();
+    this.callbacks.onPlayerUpdate(this.player);
+    this.updateLeaderboard();
+  }
+
   public getOpeningProtectionRemaining() {
     return arcadePressure(this.elapsedSeconds,this.difficulty).protectionRemaining;
   }
