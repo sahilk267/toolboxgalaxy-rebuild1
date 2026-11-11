@@ -1,3 +1,4 @@
+import { advanceGameClock } from "../client/src/game/visibleGameTimer";
 /** Actual generated practice puzzles must retain uniqueness after every symmetry. */
 import {
   generatePractice, countPracticeSolutions, practiceSeedError,
@@ -8,6 +9,13 @@ import { solvedQueens, countQueensSolutionsFor, type QueenState } from "../clien
 import { solvedTango, countTangoSolutions, type TangoGrid } from "../client/src/game/logicPuzzles/tango";
 
 let count=0;
+const clockStart = {lastTick:1000,remainderMs:0};
+const tickA = advanceGameClock(clockStart,1750,true);
+const tickB = advanceGameClock(tickA.state,2250,true);
+const hidden = advanceGameClock(tickB.state,12_250,false);
+const resumed = advanceGameClock(hidden.state,12_750,true);
+const invalidTime = advanceGameClock(resumed.state,10,true);
+
 function check(actual:unknown, name:string) {
   if(!actual)throw new Error("Games practice regression: "+name);
   count++;
@@ -15,6 +23,12 @@ function check(actual:unknown, name:string) {
 function eq(actual:unknown,expected:unknown,name:string) {
   check(actual===expected,name+" ("+JSON.stringify(actual)+" vs "+JSON.stringify(expected)+")");
 }
+eq(tickA.seconds,0,"subsecond active time accumulated");
+eq(tickB.seconds,1,"active elapsed seconds increment correctly");
+eq(hidden.seconds,0,"hidden tab does not accrue 10 seconds");
+eq(resumed.seconds,0,"first 500ms after tab restore does not fast-forward");
+eq(invalidTime.seconds,0,"clock rollback does not create negative time");
+check(Number.isFinite(invalidTime.state.lastTick),"clock remains finite after rollback");
 for(const value of ["","  ","invalid seed","a".repeat(65),"x!","💡"]){
   check(Boolean(practiceSeedError(value)),"seed rejects invalid string "+JSON.stringify(value).slice(0,15));
 }
