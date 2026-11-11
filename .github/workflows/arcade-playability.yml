@@ -1,0 +1,50 @@
+name: Arcade Playability Safety QA
+on:
+  pull_request:
+    branches: [feat/games-upgrade-phase]
+    paths:
+      - .github/workflows/arcade-playability.yml
+      - client/src/game/**
+      - client/src/components/DiepCanvas.tsx
+      - client/src/components/SurvivCanvas.tsx
+      - client/src/components/GameCanvas.tsx
+      - client/src/components/KrunkerCanvas.tsx
+      - client/src/pages/DiepArena.tsx
+      - client/src/pages/SurvivBattleRoyale.tsx
+      - client/src/pages/OrbitDash.tsx
+      - scripts/verify-gameplay-safety.ts
+      - scripts/verify-arcade-playability-browser.mjs
+      - package.json
+jobs:
+  test-and-browser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Locked dependency install
+        run: npm ci
+      - name: Full TypeScript and deterministic regression suite
+        run: npm run check
+      - name: Actual production bundle
+        run: npm run build
+      - name: Real Chromium browser
+        run: |
+          npm install --no-save --package-lock=false --ignore-scripts --no-audit --no-fund playwright@1.65.0
+          npx --no-install playwright install --with-deps chromium
+      - name: Start and verify four playable arcade games
+        run: |
+          nohup npm run start > /tmp/tbg-arcade-playability.log 2>&1 &
+          for attempt in $(seq 1 60); do
+            if curl -fsS http://127.0.0.1:3000/api/health >/dev/null; then break; fi
+            sleep 1
+          done
+          curl -fsS http://127.0.0.1:3000/api/health
+          node scripts/verify-arcade-playability-browser.mjs
+          node scripts/verify-games-upgrade-browser.mjs
+      - name: Dump server output on failure
+        if: failure()
+        run: tail -n 120 /tmp/tbg-arcade-playability.log || true
