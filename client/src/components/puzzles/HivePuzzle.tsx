@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from "react";
+import { subscribeVisibleGameSeconds } from "@/game/visibleGameTimer";
 import { Link } from "wouter";
 import confetti from "canvas-confetti";
 import { OrbitAudio } from "@/game/audio";
@@ -74,11 +75,9 @@ export default function HivePuzzle() {
 
   // Timer
   useEffect(() => {
-    const interval = window.setInterval(() => {
-      setSeconds((s) => s + 1);
-    }, 1000);
-    return () => window.clearInterval(interval);
-  }, []);
+    if (showVictoryModal) return;
+    return subscribeVisibleGameSeconds(delta => setSeconds(s => s + delta));
+  }, [showVictoryModal]);
 
   // Peer-to-Peer Automated Challenge System
   const challengeInfo = useMemo(() => {
