@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useMemo } from "react";
+import { subscribeVisibleGameSeconds } from "@/game/visibleGameTimer";
 import { Link } from "wouter";
 import confetti from "canvas-confetti";
 import { Chess, type Square } from "chess.js";
@@ -94,8 +95,7 @@ export default function ChessPuzzle() {
   // Live Timer
   useEffect(() => {
     if (isSolved) return;
-    const interval = window.setInterval(() => setSeconds((s) => s + 1), 1000);
-    return () => window.clearInterval(interval);
+    return subscribeVisibleGameSeconds(delta => setSeconds(s => s + delta));
   }, [isSolved]);
 
   const handleReset = () => {
