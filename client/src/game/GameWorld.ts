@@ -6,7 +6,7 @@ import { StandardMaterial } from "@babylonjs/core/Materials/standardMaterial";
 import { TransformNode } from "@babylonjs/core/Meshes/transformNode";
 import type { Scene } from "@babylonjs/core/scene";
 import type { SoundEvent } from "@/game/audio";
-import { arcadePressure, isOpeningProtected, type ArcadeDifficulty } from "@/game/playability";
+import { arcadePressure, isOpeningProtected, orbitGatePace, type ArcadeDifficulty } from "@/game/playability";
 
 type GameCallbacks = { onScore: (score: number, best: number) => void; onStatus: (status: "ready" | "playing" | "over") => void; onSound: (event: SoundEvent) => void };
 type Gate = { root: TransformNode; x: number; gapY: number; scored: boolean; fragmentCollected: boolean; fragment: ReturnType<typeof MeshBuilder.CreatePolyhedron> };
@@ -115,9 +115,9 @@ export class GameWorld {
     this.player.position.y += (this.playerY - this.player.position.y) * Math.min(1, delta * 9);
     this.player.rotation.y = Math.sin(this.elapsed * 5) * 0.16;
     this.spawnClock -= delta;
-    const ramp=arcadePressure(this.elapsed,this.difficulty);
-    const gateSpeed=2.25 + ramp.enemyPressure * 2.85;
-    if (this.spawnClock <= 0) { this.spawnGate(); this.spawnClock = 3.5 - ramp.rampFraction * 1.75; }
+    const pace=orbitGatePace(this.elapsed,this.difficulty);
+    const gateSpeed=pace.speed;
+    if (this.spawnClock <= 0) { this.spawnGate(); this.spawnClock = pace.spawnInterval; }
     for (let index = this.gates.length - 1; index >= 0; index -= 1) {
       const gate = this.gates[index]; gate.x -= delta * gateSpeed; gate.root.position.x = gate.x;
       const yDistance = Math.abs(this.player.position.y - gate.gapY);
@@ -131,7 +131,7 @@ export class GameWorld {
 
   private spawnGate() {
     const ramp=arcadePressure(this.elapsed,this.difficulty);
-    const gapRange=0.4+2.3*ramp.rampFraction;
+    const gapRange=orbitGatePace(this.elapsed,this.difficulty).gapRange;
     const gapY = this.demo ? Math.sin((this.elapsed + 0.6) * 1.22) * 2.1 :
       Math.max(-gapRange, Math.min(gapRange, Math.sin(this.elapsed * (0.55+1.0*ramp.rampFraction)) * gapRange));
     const root = new TransformNode(`gate-${this.elapsed.toFixed(2)}`, this.scene);
