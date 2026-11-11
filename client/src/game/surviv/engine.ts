@@ -1130,7 +1130,8 @@ export class SurvivEngine {
   }
 
   public dispose() {
+    // The page owns the shared audio instance; disposing a round must not
+    // destroy sound playback for the next in-place replay.
     this.stop();
-    this.audio.dispose();
   }
 }
