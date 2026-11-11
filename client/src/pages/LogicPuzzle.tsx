@@ -101,6 +101,7 @@ function PuzzleFrame({
   extraControls
 }: PuzzleFrameProps) {
   const [seconds, setSeconds] = useState(0);
+  const [runRevision, setRunRevision] = useState(0);
   const [copied, setCopied] = useState(false);
   const [showRules, setShowRules] = useState(false);
 
@@ -128,9 +129,10 @@ function PuzzleFrame({
       window.clearInterval(interval);
       document.removeEventListener("visibilitychange", onVisibility);
     };
-  }, [solved]);
+  }, [solved, runRevision]);
 
   const resetRun = () => {
+    setRunRevision(n => n + 1);
     setSeconds(0);
     setCopied(false);
     setShowRules(false);
