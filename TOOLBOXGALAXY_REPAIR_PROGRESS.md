@@ -1,5 +1,17 @@
 # ToolboxGalaxy Repair & Verification Progress Ledger
 
+## Next-best development batch — Ten existing tools (11 November 2026)
+
+- **Branch:** `feat/advanced-remaining-everyday-dev-tools` from the user's working `feat/browser-ai-background-remover` branch.
+- **Review PR:** [#20](https://github.com/sahilk267/toolboxgalaxy-rebuild1/pull/20), initially draft and **unmerged**. Do not modify `main` or Hostinger without a separate deliberate decision.
+- **Actual code changes:** Discount Calculator, Loan / EMI Estimate, Business Days Calculator, Time Zone Meeting Planner, Color Signal, Gradient Forge, Text Case Tool, Base64 Workbench, UUID Generator and Basic Calculator, all using original slugs and defaults.
+- **Implementation notes:** [docs/NEXT_PRIORITY_TOOLS_RELEASE.md](docs/NEXT_PRIORITY_TOOLS_RELEASE.md), including limits, nonofficial fixed-holiday examples, DST fold ambiguities, numeric-parser safety and manual QA.
+- **Regression:** `scripts/verify-next-priority-tools.ts` runs real production engines in `npm run check` and verifies 165 cases on the first successful CI candidate; Chromium E2E uses actual production build and real CSV/HTML/TXT downloads for all ten tool URLs.
+- **First evidence:** [successful CI](https://github.com/sahilk267/toolboxgalaxy-rebuild1/actions/runs/42928041033) and [successful Chromium](https://github.com/sahilk267/toolboxgalaxy-rebuild1/actions/runs/42927942087) (51 assertions). Reverify the final code/documentation PR head as those runs precede the final documentation commit.
+- **Games:** no gameplay change included; do not conflate a generic "improvements" roadmap item with a verified game defect.
+- **Unverified:** mobile iOS/Android, Safari/Firefox, production deployment and main-branch synchronization. Previously merged QR, Favicon, Password and JSON tool behavior remains regression-covered.
+
+
 ## Combined advanced-tool implementation batch — Merged into feature branch (11 November 2026)
 
 **Source of truth:** [docs/CONSOLIDATED_ADVANCED_TOOLS_QA.md](docs/CONSOLIDATED_ADVANCED_TOOLS_QA.md). User requested the PRs merged into the existing `feat/browser-ai-background-remover` branch and opted to defer one combined manual/real-device QA pass. Merge into that branch is **not** proof that live hosting has deployed the changes.
