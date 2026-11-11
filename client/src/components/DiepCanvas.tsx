@@ -47,7 +47,7 @@ export default function DiepCanvas({ callbacks, engineRef, audio }: DiepCanvasPr
     // Initialize Engine
     const engine = new DiepEngine(canvas, audio, callbacks);
     engineRef.current = engine;
-    engine.start();
+    engine.renderPreview();
 
     // KEYBOARD INPUTS
     const onKeyDown = (e: KeyboardEvent) => {
