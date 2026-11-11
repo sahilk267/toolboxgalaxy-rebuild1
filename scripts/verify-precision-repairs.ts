@@ -1573,6 +1573,9 @@ console.log("\n[GAMES] Testing Surviv in-flight weapon names and Diep eliminatio
 
   // When a player dies from the first of two colliding shapes,
   // further shapes and ramming in the same frame must not damage them again.
+  // The new opening shield intentionally prevents a game-over in the first
+  // seconds; exercise collision lethality AFTER the protected learning phase.
+  diep.elapsedSeconds = 30;
   player.active = true;
   player.health = 1;
   player.x = 100; player.y = 100;

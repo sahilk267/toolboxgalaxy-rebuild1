@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useMemo } from "react";
+import { subscribeVisibleGameSeconds } from "@/game/visibleGameTimer";
 import { Link } from "wouter";
 import { OrbitAudio } from "@/game/audio";
 import { connectionsEditionForDate, CONNECTIONS_LEVEL_CONFIG, type ConnectionGroup, type ConnectionsEdition } from "@/game/logicPuzzles/connectionsBank";
@@ -81,8 +82,7 @@ export default function ConnectionsPuzzle() {
   // Timer
   useEffect(() => {
     if (isSolved || isGameOver) return;
-    const interval = window.setInterval(() => setSeconds((s) => s + 1), 1000);
-    return () => window.clearInterval(interval);
+    return subscribeVisibleGameSeconds(delta => setSeconds(s => s + delta));
   }, [isSolved, isGameOver]);
 
   // Peer-to-Peer Automated Challenge System
@@ -257,7 +257,7 @@ export default function ConnectionsPuzzle() {
   };
 
   return (
-    <div className="logic-game-page flex flex-col h-screen max-h-screen overflow-hidden select-none bg-[#090d16] text-[#f4f2ea]">
+    <div className="logic-game-page flex flex-col min-h-[100dvh] h-auto overflow-y-auto md:h-screen md:max-h-screen md:overflow-hidden select-none bg-[#090d16] text-[#f4f2ea]">
       {/* Compact Standard Header Bar matching Queens/Mini-Sudoku */}
       <header className="shrink-0 h-14 border-b border-white/10 bg-slate-950/80 backdrop-blur-md px-3 sm:px-6 flex items-center justify-between z-30">
         <div className="flex items-center gap-2 sm:gap-3">

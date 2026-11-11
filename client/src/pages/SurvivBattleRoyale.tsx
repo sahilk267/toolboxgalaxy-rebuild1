@@ -18,6 +18,7 @@ import {
   Clock
 } from "lucide-react";
 import SurvivCanvas from "@/components/SurvivCanvas";
+import { arcadePressure, arcadePhaseLabel, type ArcadeDifficulty } from "@/game/playability";
 import { SurvivAudio } from "@/game/surviv/audio";
 import { SurvivEngine } from "@/game/surviv/engine";
 import {
@@ -54,6 +55,11 @@ export default function SurvivBattleRoyale() {
   }>({ over: false, won: false, rank: 0, kills: 0, damage: 0 });
 
   const [copied, setCopied] = useState(false);
+  const [elapsedSeconds,setElapsedSeconds] = useState(0);
+  const [started,setStarted] = useState(false);
+  const [paused,setPaused] = useState(false);
+  const [round,setRound] = useState(0);
+  const [difficulty,setDifficulty] = useState<ArcadeDifficulty>("normal");
 
   // Best Wins & High Kills Persistence
   const [bestStats, setBestStats] = useState<{ wins: number; bestKills: number }>(() => {
@@ -85,6 +91,7 @@ export default function SurvivBattleRoyale() {
   };
 
   const handlePlayerUpdate = useCallback((p: PlayerEntity) => {
+    setElapsedSeconds(Math.floor(engineRef.current?.elapsedSeconds || 0));
     setPlayer({
       ...p,
       weapons: [...p.weapons] as [any, any, any],
@@ -134,10 +141,33 @@ export default function SurvivBattleRoyale() {
 
   const handleRestart = () => {
     setMatchResult({ over: false, won: false, rank: 0, kills: 0, damage: 0 });
-    if (engineRef.current) {
-      engineRef.current.dispose();
-      window.location.reload();
+    setStarted(false);
+    setPaused(false);
+    setKillFeed([]);
+    setElapsedSeconds(0);
+    setRound(previous => previous + 1);
+  };
+  const handleStart = () => {
+    const engine = engineRef.current;
+    if (!engine) return;
+    engine.setDifficulty(difficulty);
+    engine.start();
+    setStarted(true);
+    setPaused(false);
+    document.querySelector<HTMLCanvasElement>('canvas[aria-label="Surviv Arena Canvas"]')?.focus({ preventScroll: true });
+  };
+  const handlePause = () => {
+    const engine = engineRef.current;
+    if (!engine || !started || matchResult.over) return;
+    if (paused) {
+      engine.start();
+      document.querySelector<HTMLCanvasElement>('canvas[aria-label="Surviv Arena Canvas"]')?.focus({ preventScroll: true });
+    } else {
+      engine.stop();
+      engine.keys = {};
+      engine.isMouseDown = false;
     }
+    setPaused(value => !value);
   };
 
   const handleReload = () => {
@@ -202,8 +232,39 @@ export default function SurvivBattleRoyale() {
   return (
     <div className="relative w-screen h-screen overflow-hidden select-none bg-[#719853] font-sans">
       {/* 1. Underlying 2D Game Simulation Canvas */}
-      <SurvivCanvas callbacks={callbacks} engineRef={engineRef} audio={audio.current} />
+      <SurvivCanvas key={round} callbacks={callbacks} engineRef={engineRef} audio={audio.current} />
 
+      {!matchResult.over && (!started || paused) && (
+        <div className="absolute inset-0 z-40 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4" role="dialog" aria-label="Surviv Battle Royale start menu">
+          <div className="w-full max-w-md rounded-2xl border border-amber-400/40 bg-slate-900 p-5 sm:p-7 text-white shadow-2xl space-y-4">
+            <p className="text-xs font-mono uppercase tracking-widest text-amber-300">SURVIV / {paused ? "Paused" : "Ready"}</p>
+            <h1 className="text-2xl font-black">{paused ? "Match paused" : "Explore first. Fight later."}</h1>
+            <p className="text-sm text-slate-300">The island stays safe until you start. Armed bots spawn away from you. Opening protection gives you time to learn, loot and reposition before combat ramps up.</p>
+            {!started && <label className="block text-sm text-slate-200">Difficulty
+              <select data-game-difficulty="surviv" value={difficulty} onChange={e=>setDifficulty(e.target.value as ArcadeDifficulty)}
+                className="mt-1 w-full rounded-lg bg-slate-800 border border-white/20 p-3">
+                <option value="easy">Easy — longer protection, slower enemies</option>
+                <option value="normal">Normal — gradual challenge</option>
+                <option value="hard">Hard — shorter protection</option>
+              </select>
+            </label>}
+            <div className="rounded-lg bg-slate-800/70 p-3 text-xs leading-6 text-slate-200">
+              <strong>Controls:</strong> WASD / arrows to move · Mouse to aim · Click to shoot · R reload · 1–3 switch weapons · 7–0 healing items · Touch: twin joysticks.
+            </div>
+            <button type="button" onClick={paused ? handlePause : handleStart}
+              className="w-full rounded-xl bg-amber-400 py-3 text-slate-950 font-black">{paused ? "Resume match" : "Start match"}</button>
+            <Link href="/games" className="block text-center text-sm text-slate-400 underline">Back to Games</Link>
+          </div>
+        </div>
+      )}
+
+      {started && !matchResult.over && (
+        <div role="status" aria-live="off" className="absolute top-24 left-3 z-20 pointer-events-none rounded-lg border border-amber-400/40 bg-slate-950/85 px-3 py-1.5 text-xs font-mono text-amber-200 shadow-xl">
+          {arcadePressure(elapsedSeconds,difficulty).protectionRemaining>0
+            ? "Opening shield: "+Math.ceil(arcadePressure(elapsedSeconds,difficulty).protectionRemaining)+"s"
+            : arcadePhaseLabel(arcadePressure(elapsedSeconds,difficulty).phase)}
+        </div>
+      )}
       {/* 2. TOP HEADER HUD */}
       <header className="absolute top-0 left-0 right-0 p-3 sm:p-4 flex items-center justify-between pointer-events-none z-20">
         {/* Left: Navigation & Audio Controls */}
@@ -216,6 +277,8 @@ export default function SurvivBattleRoyale() {
             <span className="hidden sm:inline">Games Bay</span>
           </Link>
 
+          {started && !matchResult.over && <button type="button" onClick={handlePause}
+            className="rounded-lg border border-white/20 bg-black/70 px-3 py-2 text-xs text-white" aria-label={paused ? "Resume Surviv" : "Pause Surviv"}>{paused ? "Resume" : "Pause"}</button>}
           <button
             onClick={handleSoundToggle}
             className={`p-2 rounded-lg backdrop-blur border text-xs font-medium transition ${

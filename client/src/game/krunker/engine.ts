@@ -22,6 +22,7 @@ import { buildBotCharacter, buildFPSViewmodel } from "./characterBuilder";
 import { krunkerAudio } from "./audio";
 import { freshKrunkerMatchStats, KRUNKER_MATCH_DURATION_SECONDS, resetKrunkerBotForMatch } from "./matchReset";
 import { rayAabbDistance } from "./rayAabb";
+import { arcadePressure, krunkerBotHitChance, type ArcadeDifficulty } from "../playability";
 
 export class KrunkerEngine {
   // Three.js Core
@@ -91,6 +92,9 @@ export class KrunkerEngine {
   private lastTime: number = 0;
   private animationFrameId: number | null = null;
   private isDestroyed: boolean = false;
+  private isSuspended: boolean = false;
+  public elapsedSeconds = 0;
+  public difficulty: ArcadeDifficulty = "normal";
 
   constructor(container: HTMLElement, callbacks: KrunkerCallbacks) {
     this.container = container;
@@ -138,7 +142,9 @@ export class KrunkerEngine {
 
   // Spawn or Respawn Player at safe spawn point
   public spawnPlayer() {
-    const sp = this.spawnPoints[Math.floor(Math.random() * this.spawnPoints.length)];
+    const safeSpawns=this.spawnPoints.filter(point=>this.bots.every(bot=>!bot.isAlive || bot.position.distanceTo(point)>=20));
+    const candidates=safeSpawns.length?safeSpawns:this.spawnPoints;
+    const sp=candidates[Math.floor(Math.random() * candidates.length)];
     this.playerPos.set(sp.x, sp.y + 0.5, sp.z);
     this.playerVelocity.set(0, 0, 0);
     this.health = 100;
@@ -150,7 +156,7 @@ export class KrunkerEngine {
     this.currentAmmo = this.currentWeapon.magSize;
     this.isReloading = false;
     this.isInvulnerable = true;
-    this.invulnerableTimer = PHYSICS.INVULNERABLE_DURATION;
+    this.invulnerableTimer = this.elapsedSeconds === 0 ? Math.max(PHYSICS.INVULNERABLE_DURATION,arcadePressure(0,this.difficulty).protectionRemaining) : Math.max(4,PHYSICS.INVULNERABLE_DURATION);
 
     this.camera.position.copy(this.playerPos);
     this.camera.position.y += this.currentCameraHeight;
@@ -163,6 +169,7 @@ export class KrunkerEngine {
   /** Start a genuinely new round, not just a respawn into the previous scoreboard. */
   public restartMatch(): void {
     if (this.isDestroyed) return;
+    this.elapsedSeconds=0;
     this.matchTimeRemaining = KRUNKER_MATCH_DURATION_SECONDS;
     this.isMatchEnded = false;
     this.stats = freshKrunkerMatchStats();
@@ -251,7 +258,9 @@ export class KrunkerEngine {
       const name = BOT_NAMES[i % BOT_NAMES.length];
       const color = BOT_COLORS[i % BOT_COLORS.length];
       const botClass = classes[i % classes.length];
-      const sp = this.spawnPoints[(i + 1) % this.spawnPoints.length];
+      const separated = this.spawnPoints.filter(point=>point.distanceTo(this.playerPos)>=22);
+      const candidateSpawns = separated.length ? separated : this.spawnPoints;
+      const sp = candidateSpawns[i % candidateSpawns.length];
 
       const visuals = buildBotCharacter(color, botClass);
       visuals.group.position.copy(sp);
@@ -293,14 +302,38 @@ export class KrunkerEngine {
     }
   }
 
+  public setDifficulty(mode: ArcadeDifficulty) {
+    if (this.elapsedSeconds===0 && this.isSuspended) {
+      this.difficulty=mode;
+      this.invulnerableTimer=Math.max(this.invulnerableTimer,arcadePressure(0,mode).protectionRemaining);
+      this.isInvulnerable=true;
+    }
+  }
+
+  public getOpeningProtectionRemaining(){
+    return arcadePressure(this.elapsedSeconds,this.difficulty).protectionRemaining;
+  }
+
+  // A hidden tab must not consume match time, move bots, or apply damage.
+  public setSuspended(hidden: boolean) {
+    this.isSuspended = hidden;
+    if (!hidden) this.lastTime = performance.now();
+  }
+
   // Main Game Loop
   private animate(now: number) {
     if (this.isDestroyed) return;
+    if (this.isSuspended) {
+      this.lastTime = now;
+      this.animationFrameId = requestAnimationFrame(this.animate);
+      return;
+    }
 
-    const dt = Math.min((now - this.lastTime) / 1000, 0.1);
+    const dt = Math.min(Math.max(0,(now - this.lastTime) / 1000), 0.1);
     this.lastTime = now;
 
     if (!this.isMatchEnded) {
+      this.elapsedSeconds += dt;
       // 1. Update Match Timer
       this.matchTimeRemaining -= dt;
       if (this.matchTimeRemaining <= 0) {
@@ -883,7 +916,7 @@ export class KrunkerEngine {
         const forward = new THREE.Vector3(Math.sin(bot.rotationY), 0, Math.cos(bot.rotationY));
         const right = new THREE.Vector3(Math.cos(bot.rotationY), 0, -Math.sin(bot.rotationY));
 
-        let speed = 9.0;
+        const speed = 5.2 + 3.8 * arcadePressure(this.elapsedSeconds,this.difficulty).enemyPressure;
         if (targetDist > 16) {
           // Advance closer
           bot.position.addScaledVector(forward, speed * dt);
@@ -902,7 +935,7 @@ export class KrunkerEngine {
 
         // 3. Bot Shooting
         if (bot.fireCooldown <= 0 && targetDist < 40) {
-          bot.fireCooldown = 0.5 + Math.random() * 0.8;
+          bot.fireCooldown = (0.7 + Math.random() * 0.9) / Math.max(0.25, arcadePressure(this.elapsedSeconds,this.difficulty).enemyPressure);
           this.botFire(bot, targetPos, targetIsPlayer);
         }
       } else {
@@ -962,9 +995,17 @@ export class KrunkerEngine {
     });
 
     // If targeting player, deal damage
-    if (isTargetPlayer && this.isAlive && !this.isInvulnerable) {
+    if (isTargetPlayer && this.isAlive && !this.isInvulnerable &&
+      this.getOpeningProtectionRemaining()<=0) {
       const botDef = WEAPON_DEFS[bot.weaponClass];
-      const damage = Math.round(botDef.damage * 0.75); // slight damage tuning for bots
+      // Prior code unconditionally damaged the player on every bot shot:
+      // projectile-like tracers are visual only, so add genuine miss chance.
+      // This permits dodging, especially while moving during the learning phase.
+      const range=bot.position.distanceTo(this.playerPos);
+      const pressure=arcadePressure(this.elapsedSeconds,this.difficulty).enemyPressure;
+      const accuracy=krunkerBotHitChance(pressure,range,this.playerVelocity.length());
+      if(Math.random()>=accuracy)return;
+      const damage = Math.max(1,Math.round(botDef.damage * 0.65 * Math.min(1.1,pressure)));
       this.health -= damage;
       this.callbacks.onPlayerDamaged(Math.max(0, this.health), this.maxHealth);
 
@@ -976,7 +1017,9 @@ export class KrunkerEngine {
 
   // Bot respawns at random spawn
   private respawnBot(bot: BotEntity) {
-    const sp = this.spawnPoints[Math.floor(Math.random() * this.spawnPoints.length)];
+    const safe=this.spawnPoints.filter(point=>point.distanceTo(this.playerPos)>=18);
+    const choices=safe.length?safe:this.spawnPoints;
+    const sp = choices[Math.floor(Math.random() * choices.length)];
     bot.position.copy(sp);
     bot.health = 100;
     bot.isAlive = true;

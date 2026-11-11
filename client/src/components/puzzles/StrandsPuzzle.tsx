@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from "react";
+import { subscribeVisibleGameSeconds } from "@/game/visibleGameTimer";
 import { Link } from "wouter";
 import confetti from "canvas-confetti";
 import { OrbitAudio } from "@/game/audio";
@@ -67,10 +68,7 @@ export default function StrandsPuzzle() {
   // Track timer
   useEffect(() => {
     if (isSolved) return;
-    const interval = setInterval(() => {
-      setSeconds(s => s + 1);
-    }, 1000);
-    return () => clearInterval(interval);
+    return subscribeVisibleGameSeconds(delta => setSeconds(s => s + delta));
   }, [isSolved]);
 
   // Victory handling

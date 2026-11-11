@@ -31,7 +31,7 @@ jobs:
       - name: Isolated Chromium runner
         run: |
           npm install --no-save --package-lock=false --ignore-scripts --no-audit --no-fund playwright@1.65.0
-          npx --no-install playwright install --with-deps chromium
+          npx --no-install playwright install chromium
       - name: Ten-tool browser regression
         run: |
           nohup npm run start > /tmp/tbg-next-priority.log 2>&1 &

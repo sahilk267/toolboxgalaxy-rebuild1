@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from "react";
+import { subscribeVisibleGameSeconds } from "@/game/visibleGameTimer";
 import { Link } from "wouter";
 import confetti from "canvas-confetti";
 import { OrbitAudio } from "@/game/audio";
@@ -74,11 +75,9 @@ export default function HivePuzzle() {
 
   // Timer
   useEffect(() => {
-    const interval = window.setInterval(() => {
-      setSeconds((s) => s + 1);
-    }, 1000);
-    return () => window.clearInterval(interval);
-  }, []);
+    if (showVictoryModal) return;
+    return subscribeVisibleGameSeconds(delta => setSeconds(s => s + delta));
+  }, [showVictoryModal]);
 
   // Peer-to-Peer Automated Challenge System
   const challengeInfo = useMemo(() => {
@@ -400,7 +399,7 @@ export default function HivePuzzle() {
   }, [foundWords]);
 
   return (
-    <div className="logic-game-page flex flex-col h-screen max-h-screen overflow-hidden select-none bg-[#090d16] text-[#f4f2ea]">
+    <div className="logic-game-page flex flex-col min-h-[100dvh] h-auto overflow-y-auto md:h-screen md:max-h-screen md:overflow-hidden select-none bg-[#090d16] text-[#f4f2ea]">
       {/* Top Standard Action Bar */}
       <header className="shrink-0 h-14 border-b border-white/10 bg-slate-950/80 backdrop-blur-md px-3 sm:px-6 flex items-center justify-between z-30">
         <div className="flex items-center gap-2 sm:gap-3">

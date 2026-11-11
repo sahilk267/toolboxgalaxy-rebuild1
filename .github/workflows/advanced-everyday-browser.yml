@@ -27,7 +27,7 @@ jobs:
       - name: Install isolated Chromium test runner
         run: |
           npm install --no-save --package-lock=false --ignore-scripts --no-audit --no-fund playwright@1.65.0
-          npx --no-install playwright install --with-deps chromium
+          npx --no-install playwright install chromium
       - name: Browser UI and downloaded-report smoke
         run: |
           nohup npm run start > /tmp/tbg-everyday.log 2>&1 &
