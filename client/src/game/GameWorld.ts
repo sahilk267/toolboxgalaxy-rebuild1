@@ -6,6 +6,7 @@ import { StandardMaterial } from "@babylonjs/core/Materials/standardMaterial";
 import { TransformNode } from "@babylonjs/core/Meshes/transformNode";
 import type { Scene } from "@babylonjs/core/scene";
 import type { SoundEvent } from "@/game/audio";
+import { arcadePressure, isOpeningProtected, type ArcadeDifficulty } from "@/game/playability";
 
 type GameCallbacks = { onScore: (score: number, best: number) => void; onStatus: (status: "ready" | "playing" | "over") => void; onSound: (event: SoundEvent) => void };
 type Gate = { root: TransformNode; x: number; gapY: number; scored: boolean; fragmentCollected: boolean; fragment: ReturnType<typeof MeshBuilder.CreatePolyhedron> };
@@ -37,7 +38,7 @@ export class GameWorld {
   private readonly onWindowBlur: () => void;
   private readonly onPointer: (event: PointerEvent) => void;
 
-  constructor(private readonly scene: Scene, private readonly canvas: HTMLCanvasElement, private readonly callbacks: GameCallbacks) {
+  constructor(private readonly scene: Scene, private readonly canvas: HTMLCanvasElement, private readonly callbacks: GameCallbacks, private readonly difficulty: ArcadeDifficulty = "normal") {
     this.demo = new URLSearchParams(window.location.search).has("demo");
     this.configurePlayer();
     this.createStarfield();
@@ -97,11 +98,11 @@ export class GameWorld {
     }
   }
 
-  start() { this.status = "playing"; this.callbacks.onStatus(this.status); this.callbacks.onSound("start"); }
+  start() { this.status = "playing"; this.spawnClock=1.2; this.callbacks.onStatus(this.status); this.callbacks.onSound("start"); }
 
   reset() {
     this.gates.splice(0).forEach((gate) => gate.root.dispose());
-    this.score = 0; this.spawnClock = 0; this.elapsed = 0; this.playerY = 0; this.player.position.y = 0; this.status = "playing";
+    this.score = 0; this.spawnClock = 1.2; this.elapsed = 0; this.playerY = 0; this.player.position.y = 0; this.status = "playing";
     this.callbacks.onScore(this.score, this.best); this.callbacks.onStatus(this.status); this.callbacks.onSound("start");
   }
 
@@ -114,12 +115,14 @@ export class GameWorld {
     this.player.position.y += (this.playerY - this.player.position.y) * Math.min(1, delta * 9);
     this.player.rotation.y = Math.sin(this.elapsed * 5) * 0.16;
     this.spawnClock -= delta;
-    if (this.spawnClock <= 0) { this.spawnGate(); this.spawnClock = 2.05; }
+    const ramp=arcadePressure(this.elapsed,this.difficulty);
+    const gateSpeed=2.25 + ramp.enemyPressure * 2.85;
+    if (this.spawnClock <= 0) { this.spawnGate(); this.spawnClock = 3.5 - ramp.rampFraction * 1.75; }
     for (let index = this.gates.length - 1; index >= 0; index -= 1) {
-      const gate = this.gates[index]; gate.x -= delta * 4.35; gate.root.position.x = gate.x;
+      const gate = this.gates[index]; gate.x -= delta * gateSpeed; gate.root.position.x = gate.x;
       const yDistance = Math.abs(this.player.position.y - gate.gapY);
       const nearGate = Math.abs(gate.x - this.player.position.x) < 0.32;
-      if (nearGate && yDistance > 1.42) { this.endRun(); break; }
+      if (nearGate && yDistance > 1.42 && !isOpeningProtected(this.elapsed,this.difficulty)) { this.endRun(); break; }
       if (!gate.fragmentCollected && Math.abs(gate.x - this.player.position.x) < 0.38 && yDistance < 0.44) { gate.fragmentCollected = true; gate.fragment.setEnabled(false); this.addScore(2); this.callbacks.onSound("fragment"); }
       if (!gate.scored && gate.x < this.player.position.x - 0.4) { gate.scored = true; this.addScore(1); this.callbacks.onSound("gate"); }
       if (gate.x < -8.4) { gate.root.dispose(); this.gates.splice(index, 1); }
@@ -127,7 +130,10 @@ export class GameWorld {
   }
 
   private spawnGate() {
-    const gapY = this.demo ? Math.sin((this.elapsed + 0.6) * 1.22) * 2.1 : Math.max(-2.7, Math.min(2.7, Math.sin(this.elapsed * 1.51) * 2.5));
+    const ramp=arcadePressure(this.elapsed,this.difficulty);
+    const gapRange=0.4+2.3*ramp.rampFraction;
+    const gapY = this.demo ? Math.sin((this.elapsed + 0.6) * 1.22) * 2.1 :
+      Math.max(-gapRange, Math.min(gapRange, Math.sin(this.elapsed * (0.55+1.0*ramp.rampFraction)) * gapRange));
     const root = new TransformNode(`gate-${this.elapsed.toFixed(2)}`, this.scene);
     const material = new StandardMaterial(`gate-mat-${this.elapsed}`, this.scene);
     material.diffuseColor = new Color3(0.28, 0.41, 0.54); material.emissiveColor = new Color3(0.04, 0.09, 0.15); material.specularColor = Color3.Black();
