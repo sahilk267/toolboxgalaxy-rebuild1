@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useMemo } from "react";
+import { subscribeVisibleGameSeconds } from "@/game/visibleGameTimer";
 import { Link } from "wouter";
 import { OrbitAudio } from "@/game/audio";
 import { connectionsEditionForDate, CONNECTIONS_LEVEL_CONFIG, type ConnectionGroup, type ConnectionsEdition } from "@/game/logicPuzzles/connectionsBank";
@@ -81,8 +82,7 @@ export default function ConnectionsPuzzle() {
   // Timer
   useEffect(() => {
     if (isSolved || isGameOver) return;
-    const interval = window.setInterval(() => setSeconds((s) => s + 1), 1000);
-    return () => window.clearInterval(interval);
+    return subscribeVisibleGameSeconds(delta => setSeconds(s => s + delta));
   }, [isSolved, isGameOver]);
 
   // Peer-to-Peer Automated Challenge System
