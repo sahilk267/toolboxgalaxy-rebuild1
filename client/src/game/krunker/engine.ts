@@ -91,6 +91,7 @@ export class KrunkerEngine {
   private lastTime: number = 0;
   private animationFrameId: number | null = null;
   private isDestroyed: boolean = false;
+  private isSuspended: boolean = false;
 
   constructor(container: HTMLElement, callbacks: KrunkerCallbacks) {
     this.container = container;
@@ -293,11 +294,22 @@ export class KrunkerEngine {
     }
   }
 
+  // A hidden tab must not consume match time, move bots, or apply damage.
+  public setSuspended(hidden: boolean) {
+    this.isSuspended = hidden;
+    if (!hidden) this.lastTime = performance.now();
+  }
+
   // Main Game Loop
   private animate(now: number) {
     if (this.isDestroyed) return;
+    if (this.isSuspended) {
+      this.lastTime = now;
+      this.animationFrameId = requestAnimationFrame(this.animate);
+      return;
+    }
 
-    const dt = Math.min((now - this.lastTime) / 1000, 0.1);
+    const dt = Math.min(Math.max(0,(now - this.lastTime) / 1000), 0.1);
     this.lastTime = now;
 
     if (!this.isMatchEnded) {
