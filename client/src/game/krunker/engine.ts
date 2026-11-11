@@ -22,7 +22,7 @@ import { buildBotCharacter, buildFPSViewmodel } from "./characterBuilder";
 import { krunkerAudio } from "./audio";
 import { freshKrunkerMatchStats, KRUNKER_MATCH_DURATION_SECONDS, resetKrunkerBotForMatch } from "./matchReset";
 import { rayAabbDistance } from "./rayAabb";
-import { arcadePressure, type ArcadeDifficulty } from "../playability";
+import { arcadePressure, krunkerBotHitChance, type ArcadeDifficulty } from "../playability";
 
 export class KrunkerEngine {
   // Three.js Core
@@ -1000,9 +1000,8 @@ export class KrunkerEngine {
       // projectile-like tracers are visual only, so add genuine miss chance.
       // This permits dodging, especially while moving during the learning phase.
       const range=bot.position.distanceTo(this.playerPos);
-      const moving=Math.min(1,this.playerVelocity.length()/12);
       const pressure=arcadePressure(this.elapsedSeconds,this.difficulty).enemyPressure;
-      const accuracy=Math.max(0.10,Math.min(0.70,0.17+0.38*pressure-range/170-moving*0.16));
+      const accuracy=krunkerBotHitChance(pressure,range,this.playerVelocity.length());
       if(Math.random()>=accuracy)return;
       const damage = Math.max(1,Math.round(botDef.damage * 0.65 * Math.min(1.1,pressure)));
       this.health -= damage;
