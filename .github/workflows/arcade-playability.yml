@@ -1,7 +1,7 @@
 name: Arcade Playability Safety QA
 on:
   pull_request:
-    branches: [feat/games-upgrade-phase]
+    branches: [feat/browser-ai-background-remover, feat/games-upgrade-phase]
     paths:
       - .github/workflows/arcade-playability.yml
       - client/src/game/**
