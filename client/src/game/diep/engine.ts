@@ -306,6 +306,8 @@ export class DiepEngine {
   }
 
   private spawnShapeSpecific(type: ShapeType, x: number, y: number) {
+    // No hostile or damaging shape can materialize directly on the player.
+    if (type !== "alpha-pentagon" && Math.hypot(x-this.player.x,y-this.player.y)<180) return;
     const slot = this.shapes.find((s) => !s.active);
     if (!slot) return;
 
