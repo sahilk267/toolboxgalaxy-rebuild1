@@ -1,5 +1,6 @@
 // Orbit Dash / Orbital Workbench: full-screen game page with a DOM telemetry HUD over a Babylon canvas.
 import GameCanvas from "@/components/GameCanvas";
+import type { ArcadeDifficulty } from "@/game/playability";
 import GameAudioControls from "@/components/GameAudioControls";
 import { OrbitAudio, type SoundEvent } from "@/game/audio";
 import { ArrowLeft, RotateCcw, Trophy, Share2, Swords, Send } from "lucide-react";
@@ -11,6 +12,7 @@ export default function OrbitDash() {
   const [best, setBest] = useState(0);
   const [status, setStatus] = useState<"ready" | "playing" | "over">("ready");
   const [copied, setCopied] = useState(false);
+  const [difficulty,setDifficulty] = useState<ArcadeDifficulty>("normal");
   const audio = useRef(new OrbitAudio());
 
   useEffect(() => () => audio.current.dispose(), []);
@@ -80,7 +82,7 @@ export default function OrbitDash() {
 
   const instruction =
     status === "ready"
-      ? "Use ↑ ↓ or W S · move pointer to fly"
+      ? "Choose a difficulty · use ↑ ↓ or W S · move pointer to fly"
       : status === "over"
       ? "Signal lost · press Space or R to restart"
       : "Collect fragments · clear the gates";
@@ -88,6 +90,7 @@ export default function OrbitDash() {
   return (
     <section className="orbit-dash-page">
       <GameCanvas
+        difficulty={difficulty}
         callbacks={{
           onScore: (nextScore, nextBest) => {
             setScore(nextScore);
@@ -151,7 +154,7 @@ export default function OrbitDash() {
             <p>
               {status === "over"
                 ? `You locked in ${score} signal points (Best: ${best}).`
-                : "Pass through the gates, pull in signal fragments, and keep the lane clear."}
+                : "Early gates approach slowly with a protected learning period. Fly through the gaps, collect fragments, then adapt as the speed rises."}
             </p>
 
             {/* Duel Result when game over */}
@@ -213,6 +216,17 @@ export default function OrbitDash() {
               </div>
             )}
 
+            {status === "ready" && (
+              <label className="block w-full max-w-xs mx-auto text-xs text-slate-300 text-left my-3">
+                Difficulty
+                <select data-game-difficulty="orbit" className="mt-1 block w-full rounded-lg bg-slate-900 border border-white/30 p-2 text-white"
+                  value={difficulty} onChange={e=>setDifficulty(e.target.value as ArcadeDifficulty)}>
+                  <option value="easy">Easy — longer protection</option>
+                  <option value="normal">Normal — gradual speed ramp</option>
+                  <option value="hard">Hard — faster speed ramp</option>
+                </select>
+              </label>
+            )}
             <button onClick={beginRun} className="signal-button">
               {status === "over" ? "Run again" : "Start run"}
             </button>
