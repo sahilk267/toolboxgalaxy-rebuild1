@@ -353,6 +353,7 @@ export default function SurvivCanvas({ callbacks, engineRef, audio }: SurvivCanv
       ref={canvasRef}
       className="absolute inset-0 w-full h-full cursor-crosshair touch-none select-none block"
       tabIndex={0}
+      aria-label="Surviv Arena Canvas"
     />
   );
 }
