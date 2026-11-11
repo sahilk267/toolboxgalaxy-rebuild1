@@ -4,7 +4,7 @@
 **Review PR:** https://github.com/sahilk267/toolboxgalaxy-rebuild1/pull/21
 **Target branch:** `feat/browser-ai-background-remover`
 **Scope:** Games only. Do not modify Hostinger, the main branch, or unrelated tools in this PR.
-**Status:** Development candidate; initial CI passed but automated workflow checks **must pass on the final PR HEAD** before review-ready. Not merged or deployed.
+**Status:** Ready for Review, **not merged** or independently deployed. All five required GitHub workflows passed on the full implementation candidate; verify green checks again on the newest HEAD after final documentation and timer-precision changes.
 
 ## What was implemented
 
@@ -30,8 +30,8 @@
 - **Krunker Voxel FPS:** hidden tabs suspend match clock, bot updates, collision/damage and weapon physics; resume resets performance time anchor so there is no catch-up simulation burst. Keyboard/mouse flags cleared on blur.
 
 ## Automated verification
-- Full `npm run check` runs both previous game banks/solvers and `scripts/verify-game-practice.ts` (72 combinations of real generated puzzle configurations, deterministic seeds, constraints, Sudoku/Queens/Tango unique-solution checks and active clock semantics). The first candidate run passed **2,153 assertions across 72 generated fields**, with TypeScript and production build.
-- `.github/workflows/games-upgrade-browser.yml` launches the actual production bundle in Chromium. Covers practice generator, keyboard input, undo/hints, three game types, reproducible seed, search/filter, all 13 puzzle URL launches and 4 arcade entry points.
+- Full `npm run check` includes existing game banks/solvers and `scripts/verify-game-practice.ts` (72 real generated puzzle boards, unique-solution and clock assertions). Implementation candidate passed **2,153 assertions across 72 generated fields**, TypeScript and production build: https://github.com/sahilk267/toolboxgalaxy-rebuild1/actions/runs/42997527028.
+- `.github/workflows/games-upgrade-browser.yml` launches the actual production bundle in Chromium. The full implementation candidate passed **58 Chromium assertions** for practice, keyboard, undo, hints, seed, search, all 13 puzzle routes and four arcade entry routes: https://github.com/sahilk267/toolboxgalaxy-rebuild1/actions/runs/42997527175.
 - Existing CI and advanced tools browser workflows continue running on the PR.
 - A successful browser route launch is **not** evidence that every gameplay mechanic, puzzle ending, GPU feature or touch input was exercised.
 
