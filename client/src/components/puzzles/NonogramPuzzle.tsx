@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useMemo } from "react";
+import { subscribeVisibleGameSeconds } from "@/game/visibleGameTimer";
 import { Link } from "wouter";
 import confetti from "canvas-confetti";
 import { OrbitAudio } from "@/game/audio";
@@ -61,8 +62,7 @@ export default function NonogramPuzzle() {
   // Live Timer
   useEffect(() => {
     if (isSolved) return;
-    const interval = window.setInterval(() => setSeconds((s) => s + 1), 1000);
-    return () => window.clearInterval(interval);
+    return subscribeVisibleGameSeconds(delta => setSeconds(s => s + delta));
   }, [isSolved]);
 
   // Check if grid matches solution
