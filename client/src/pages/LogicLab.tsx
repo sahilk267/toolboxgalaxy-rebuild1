@@ -1,5 +1,7 @@
 // Orbital Workbench: shared catalog for browser-local logic modules; verified availability is explicit.
 import AppShell from "@/components/AppShell";
+import { lazy, Suspense, useMemo, useState } from "react";
+const LogicPracticeStudio = lazy(() => import("@/components/LogicPracticeStudio"));
 import { DailyHabitPulse } from "@/components/DailyHabitPulse";
 import WeeklyLogicCalendar from "@/components/WeeklyLogicCalendar";
 import LogicPersonalBestSummary from "@/components/LogicPersonalBestSummary";
@@ -36,6 +38,15 @@ const modules = [
 ];
 
 export default function LogicLab() {
+  const [filter, setFilter] = useState<"all"|"words"|"numbers"|"spatial">("all");
+  const [search, setSearch] = useState("");
+  const visibleModules = useMemo(() => modules.filter(item => {
+    const words = ["the-hive","orbit-lexicon","connections","strands","wend","mini-crossword"];
+    const numbers = ["tango","mini-sudoku","nonogram"];
+    const category = words.includes(item.slug) ? "words" : numbers.includes(item.slug) ? "numbers" : "spatial";
+    return (filter === "all" || filter === category) &&
+      (item.name+" "+item.rule+" "+item.detail).toLowerCase().includes(search.toLowerCase().trim());
+  }), [filter, search]);
   return (
     <AppShell>
       <section className="page-section logic-lab">
@@ -70,8 +81,28 @@ export default function LogicLab() {
           <span>TOUCH + KEYS / LOCAL STATE</span>
         </div>
 
+        <Suspense fallback={<div role="status" className="my-6 text-slate-300">Loading local practice boards…</div>}>
+          <LogicPracticeStudio />
+        </Suspense>
+        <div className="mb-4 flex flex-wrap gap-3 rounded-xl border border-white/10 bg-white/[0.03] p-3">
+          <label className="flex-1 min-w-[190px] text-sm text-slate-300">
+            Find a puzzle
+            <input aria-label="Search puzzle modules" value={search} onChange={e => setSearch(e.target.value)}
+              placeholder="Search names or rules…" className="mt-1 block w-full rounded-lg bg-slate-900 p-2" />
+          </label>
+          <label className="min-w-[150px] text-sm text-slate-300">
+            Puzzle family
+            <select aria-label="Puzzle category" value={filter}
+              onChange={e=>setFilter(e.target.value as "all"|"words"|"numbers"|"spatial")}
+              className="mt-1 block w-full rounded-lg bg-slate-900 p-2">
+              <option value="all">All games</option><option value="words">Word puzzles</option>
+              <option value="numbers">Number & symbols</option><option value="spatial">Spatial & tactics</option>
+            </select>
+          </label>
+          <p role="status" className="self-end text-xs text-slate-400">{visibleModules.length} of {modules.length} modules</p>
+        </div>
         <div className="logic-lab__grid">
-          {modules.map((module) => {
+          {visibleModules.map((module) => {
             const Icon = module.icon;
             return (
               <article key={module.slug} className="logic-card logic-card--live">
@@ -90,6 +121,10 @@ export default function LogicLab() {
             );
           })}
         </div>
+
+        {visibleModules.length === 0 && <p role="status" className="mt-4 text-slate-300">
+          No puzzle matches your search. Try another category or clear the search.
+        </p>}
 
         {/* Weekly Streak Calendar & Personal Bests */}
         <div className="mt-12 space-y-8">
