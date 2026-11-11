@@ -90,7 +90,7 @@ export function gradientCss(stops:readonly GradientStop[],angle:number,type:"lin
 export type CaseMode = "title"|"sentence"|"upper"|"lower"|"camel"|"kebab"|"snake"|"pascal"|"constant"|"alternating";
 function upperFirst(word:string):string{return word?word.slice(0,1).toLocaleUpperCase()+word.slice(1):word;}
 const letterRE=new RegExp("\\p{L}","u");
-const wordTokens=(input:string)=>input.match(new RegExp("[\\p{L}\\p{N}]+","gu"))||[];
+const wordTokens=(input:string)=>input.match(new RegExp("[\\p{L}\\p{M}\\p{N}]+","gu"))||[];
 export function transformTextCase(input:string,mode:CaseMode):string {
   if(input.length>100_000)throw new Error("Text is limited to 100,000 characters.");
   if(mode==="upper")return input.toLocaleUpperCase();
@@ -101,7 +101,7 @@ export function transformTextCase(input:string,mode:CaseMode):string {
   if(mode==="kebab")return tokens.map(w=>w.toLocaleLowerCase()).join("-");
   if(mode==="snake")return tokens.map(w=>w.toLocaleLowerCase()).join("_");
   if(mode==="constant")return tokens.map(w=>w.toLocaleUpperCase()).join("_");
-  if(mode==="title")return input.replace(new RegExp("[\\p{L}\\p{N}]+","gu"),w=>upperFirst(w.toLocaleLowerCase()));
+  if(mode==="title")return input.replace(new RegExp("[\\p{L}\\p{M}\\p{N}]+","gu"),w=>upperFirst(w.toLocaleLowerCase()));
   if(mode==="alternating"){
     let cap=false;return Array.from(input).map(char=>{
       if(!letterRE.test(char))return char;
