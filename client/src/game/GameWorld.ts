@@ -18,6 +18,11 @@ const INK = new Color3(0.04, 0.07, 0.14);
 export class GameWorld {
   private readonly player = MeshBuilder.CreatePolyhedron("signal-ship", { type: 1, size: 0.65 }, this.scene);
   private readonly gates: Gate[] = [];
+  // Shared by every procedural gate: thousands of gates must not mean
+  // thousands of Babylon materials retained until scene teardown.
+  private readonly gateMaterial: StandardMaterial;
+  private readonly gateEdgeMaterial: StandardMaterial;
+  private readonly gateFragmentMaterial: StandardMaterial;
   private readonly pressed = new Set<string>();
   private readonly demo: boolean;
   private score = 0;
@@ -39,6 +44,16 @@ export class GameWorld {
   private readonly onPointer: (event: PointerEvent) => void;
 
   constructor(private readonly scene: Scene, private readonly canvas: HTMLCanvasElement, private readonly callbacks: GameCallbacks, private readonly difficulty: ArcadeDifficulty = "normal") {
+    this.gateMaterial = new StandardMaterial("orbit-gate-shared", scene);
+    this.gateMaterial.diffuseColor = new Color3(0.28, 0.41, 0.54);
+    this.gateMaterial.emissiveColor = new Color3(0.04, 0.09, 0.15);
+    this.gateMaterial.specularColor = Color3.Black();
+    this.gateEdgeMaterial = new StandardMaterial("orbit-edge-shared", scene);
+    this.gateEdgeMaterial.diffuseColor = LIME.scale(0.7);
+    this.gateEdgeMaterial.emissiveColor = LIME.scale(0.22);
+    this.gateFragmentMaterial = new StandardMaterial("orbit-fragment-shared", scene);
+    this.gateFragmentMaterial.diffuseColor = EMBER;
+    this.gateFragmentMaterial.emissiveColor = EMBER.scale(0.46);
     this.demo = new URLSearchParams(window.location.search).has("demo");
     this.configurePlayer();
     this.createStarfield();
@@ -135,23 +150,19 @@ export class GameWorld {
     const gapY = this.demo ? Math.sin((this.elapsed + 0.6) * 1.22) * 2.1 :
       Math.max(-gapRange, Math.min(gapRange, Math.sin(this.elapsed * (0.55+1.0*ramp.rampFraction)) * gapRange));
     const root = new TransformNode(`gate-${this.elapsed.toFixed(2)}`, this.scene);
-    const material = new StandardMaterial(`gate-mat-${this.elapsed}`, this.scene);
-    material.diffuseColor = new Color3(0.28, 0.41, 0.54); material.emissiveColor = new Color3(0.04, 0.09, 0.15); material.specularColor = Color3.Black();
-    const edgeMaterial = new StandardMaterial(`edge-mat-${this.elapsed}`, this.scene);
-    edgeMaterial.diffuseColor = LIME.scale(0.7); edgeMaterial.emissiveColor = LIME.scale(0.22);
     const topHeight = 5.3 - (gapY + 1.25); const bottomHeight = gapY - 1.25 + 5.3;
     [
       { y: gapY + 1.25 + topHeight / 2, height: topHeight },
       { y: -5.3 + bottomHeight / 2, height: bottomHeight },
     ].forEach((part, index) => {
       const block = MeshBuilder.CreateBox(`gate-block-${index}-${this.elapsed}`, { width: 0.58, height: Math.max(.1, part.height), depth: 0.28 }, this.scene);
-      block.parent = root; block.position.y = part.y; block.material = material;
+      block.parent = root; block.position.y = part.y; block.material = this.gateMaterial;
       const rail = MeshBuilder.CreateBox(`gate-rail-${index}-${this.elapsed}`, { width: 0.76, height: 0.08, depth: 0.32 }, this.scene);
-      rail.parent = root; rail.position.y = index === 0 ? gapY + 1.25 : gapY - 1.25; rail.material = edgeMaterial;
+      rail.parent = root; rail.position.y = index === 0 ? gapY + 1.25 : gapY - 1.25; rail.material = this.gateEdgeMaterial;
     });
     const fragment = MeshBuilder.CreatePolyhedron(`fragment-${this.elapsed}`, { type: 1, size: .28 }, this.scene);
     fragment.parent = root; fragment.position = new Vector3(0, gapY, 0.38);
-    const fragmentMaterial = new StandardMaterial(`fragment-mat-${this.elapsed}`, this.scene); fragmentMaterial.diffuseColor = EMBER; fragmentMaterial.emissiveColor = EMBER.scale(.46); fragment.material = fragmentMaterial;
+    fragment.material = this.gateFragmentMaterial;
     root.position.x = 8.2;
     this.gates.push({ root, x: 8.2, gapY, scored: false, fragmentCollected: false, fragment });
   }
@@ -167,5 +178,17 @@ export class GameWorld {
     this.callbacks.onScore(this.score, this.best);
   }
   private endRun() { this.status = "over"; this.callbacks.onStatus(this.status); this.callbacks.onSound("collision"); }
-  dispose() { window.removeEventListener("keydown", this.onKeyDown); window.removeEventListener("keyup", this.onKeyUp); window.removeEventListener("blur", this.onWindowBlur); this.canvas.removeEventListener("pointermove", this.onPointer); this.canvas.removeEventListener("pointerdown", this.onPointer); this.gates.forEach((gate) => gate.root.dispose()); this.player.dispose(); }
+  dispose() {
+    window.removeEventListener("keydown", this.onKeyDown);
+    window.removeEventListener("keyup", this.onKeyUp);
+    window.removeEventListener("blur", this.onWindowBlur);
+    this.canvas.removeEventListener("pointermove", this.onPointer);
+    this.canvas.removeEventListener("pointerdown", this.onPointer);
+    this.gates.forEach((gate) => gate.root.dispose());
+    this.gates.length = 0;
+    this.player.dispose();
+    this.gateMaterial.dispose();
+    this.gateEdgeMaterial.dispose();
+    this.gateFragmentMaterial.dispose();
+  }
 }

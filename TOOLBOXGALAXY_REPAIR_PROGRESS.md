@@ -1,5 +1,15 @@
 # ToolboxGalaxy Repair & Verification Progress Ledger
 
+## Runtime scalability and lifecycle hardening — implementation only (12 November 2026)
+
+- **Working branch:** `feat/browser-ai-background-remover`; PR #22 merged previously as `b79c74dde3817eca5f81cf7237f199a4b451bb8b`.
+- **Diep Arena:** switched legacy per-animation-frame physics to a bounded fixed 60 Hz simulation, with a maximum of four simulation ticks per render and no accumulated catch-up across pause/resume. This maintains movement, collision, recoil and projectile lifetimes across 30/60/120 Hz displays without an unbounded catch-up spike.
+- **Diep opponents:** purge inactive bots when spawning replacements so the long-lived array cannot grow throughout an extended match. Existing living entities and unique IDs are preserved.
+- **Diep game-over lifecycle:** stop the simulation when the player's final lethal hit is processed instead of continuing invisible updates.
+- **Orbit Dash:** reuse three Babylon gate materials for the entire world instead of allocating and retaining three new materials with every gate; explicitly dispose them on world teardown.
+- **Scope boundary:** implementation and Git push only. Per user request, no manual QA, test execution, build verification, production deployment or Hostinger changes are part of this checkpoint. This is *not* a claim that gameplay has been retested after these code changes.
+
+
 ## Games Upgrade Phase — Implementation candidate (11 November 2026)
 
 - **Working feature branch:** `feat/games-upgrade-phase` based on the integrated `feat/browser-ai-background-remover` branch after [PR #20](https://github.com/sahilk267/toolboxgalaxy-rebuild1/pull/20) successfully merged (10 further advanced tools).

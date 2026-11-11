@@ -40,6 +40,11 @@ const BOT_NAMES = [
   "Shadow", "Vector", "Eclipse", "Rogue", "Blaze", "Vortex", "Cipher", "Hydra"
 ];
 
+// Diep's legacy movement and collision maths are calibrated in 60 Hz ticks.
+// Decouple them from display refresh rate without retuning damage or movement.
+const DIEP_FIXED_STEP_SECONDS = 1 / 60;
+const DIEP_MAX_STEPS_PER_FRAME = 4;
+
 export class DiepEngine {
   public canvas: HTMLCanvasElement;
   public ctx: CanvasRenderingContext2D;
@@ -49,6 +54,7 @@ export class DiepEngine {
   public isRunning = false;
   private animFrameId: number | null = null;
   private lastTime = 0;
+  private simulationAccumulator = 0;
   public elapsedSeconds = 0;
   public difficulty: ArcadeDifficulty = "normal";
 
@@ -231,6 +237,11 @@ export class DiepEngine {
   }
 
   private spawnBot() {
+    // Killed bots must not accumulate in this long-lived array after respawn.
+    // Retain unique tank IDs, active drones and all living opponents unchanged.
+    if (this.bots.some((bot) => !bot.active)) {
+      this.bots = this.bots.filter((bot) => bot.active);
+    }
     const name = BOT_NAMES[Math.floor(Math.random() * BOT_NAMES.length)] + " [" + Math.floor(Math.random() * 90 + 10) + "]";
     const botColors = [COLORS.botEnemy, COLORS.botTeamGreen, COLORS.botTeamPurple, "#f18d4e"];
     const color = botColors[Math.floor(Math.random() * botColors.length)];
@@ -601,11 +612,13 @@ export class DiepEngine {
     if (this.isRunning || !this.player.active) return;
     this.isRunning = true;
     this.lastTime = performance.now();
+    this.simulationAccumulator = 0;
     this.loop();
   }
 
   public stop() {
     this.isRunning = false;
+    this.simulationAccumulator = 0;
     if (this.animFrameId !== null) {
       cancelAnimationFrame(this.animFrameId);
       this.animFrameId = null;
@@ -615,13 +628,30 @@ export class DiepEngine {
   private loop = () => {
     if (!this.isRunning) return;
     const now = performance.now();
-    const dt = Math.min(0.05, (now - this.lastTime) / 1000);
+    const elapsed = Math.max(0, Math.min(0.1, (now - this.lastTime) / 1000));
     this.lastTime = now;
 
-    this.update(dt);
-    this.render();
+    // A 30 Hz display advances two 60 Hz simulation ticks per rendered frame.
+    // Bound catch-up on very slow devices so a stalled tab never runs a burst
+    // of collision/damage ticks or locks the main thread after resuming.
+    this.simulationAccumulator = Math.min(
+      this.simulationAccumulator + elapsed,
+      DIEP_FIXED_STEP_SECONDS * DIEP_MAX_STEPS_PER_FRAME,
+    );
+    let steps = 0;
+    while (
+      this.simulationAccumulator + 1e-9 >= DIEP_FIXED_STEP_SECONDS &&
+      steps < DIEP_MAX_STEPS_PER_FRAME &&
+      this.isRunning &&
+      this.player.active
+    ) {
+      this.update(DIEP_FIXED_STEP_SECONDS);
+      this.simulationAccumulator = Math.max(0, this.simulationAccumulator - DIEP_FIXED_STEP_SECONDS);
+      steps++;
+    }
 
-    this.animFrameId = requestAnimationFrame(this.loop);
+    this.render();
+    if (this.isRunning) this.animFrameId = requestAnimationFrame(this.loop);
   };
 
   // PHYSICS & GAMEPLAY UPDATE
@@ -688,6 +718,11 @@ export class DiepEngine {
 
     // 5. Collisions Resolution
     this.resolveCollisions();
+    if (!this.player.active) {
+      // No invisible physics or score changes after the final lethal hit.
+      this.stop();
+      return;
+    }
     if (isOpeningProtected(this.elapsedSeconds,this.difficulty)) {
       this.player.health=this.player.maxHealth;
       this.player.damagedTimer=0;
