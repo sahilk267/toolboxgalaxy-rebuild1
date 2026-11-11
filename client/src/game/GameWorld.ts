@@ -22,7 +22,8 @@ export class GameWorld {
   private score = 0;
   private best = (() => {
     try {
-      return Number(window.localStorage.getItem("toolbox-galaxy-orbit-dash-best") || 0);
+      const stored = Number(window.localStorage.getItem("toolbox-galaxy-orbit-dash-best") || 0);
+      return Number.isSafeInteger(stored) && stored >= 0 ? stored : 0;
     } catch {
       return 0;
     }
@@ -41,19 +42,24 @@ export class GameWorld {
     this.configurePlayer();
     this.createStarfield();
     this.onKeyDown = (event) => {
+      if (event.ctrlKey || event.metaKey || event.altKey) return;
       const target = event.target;
       if (target instanceof HTMLElement &&
         (["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName) || target.isContentEditable)) return;
       if (["ArrowUp", "ArrowDown", "w", "W", "s", "S", " ", "r", "R"].includes(event.key)) event.preventDefault();
       if (event.key === " " || event.key.toLowerCase() === "r") { if (this.status !== "playing") this.reset(); return; }
-      this.pressed.add(event.key.toLowerCase());
+      const key = event.key.toLowerCase();
+      if (!["arrowup","arrowdown","w","s"].includes(key)) return;
+      this.pressed.add(key);
       if (this.status === "ready") this.start();
     };
     this.onKeyUp = (event) => this.pressed.delete(event.key.toLowerCase());
     this.onWindowBlur = () => this.pressed.clear();
     this.onPointer = (event) => {
-      if (this.status === "ready") this.start();
+      // Hovering over the canvas must not start a game unexpectedly.
+      if (this.status === "ready" && event.type === "pointerdown") this.start();
       const rect = this.canvas.getBoundingClientRect();
+      if (rect.height < 1) return;
       const normalized = 1 - ((event.clientY - rect.top) / rect.height) * 2;
       this.playerY = Math.max(-4.2, Math.min(4.2, normalized * 4.2));
     };
