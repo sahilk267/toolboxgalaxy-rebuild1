@@ -41,6 +41,7 @@ jobs:
           done
           curl -fsS http://127.0.0.1:3000/api/health
           node scripts/verify-next-priority-browser.mjs
+          node scripts/verify-advanced-core-browser.mjs
       - name: Server output if failed
         if: failure()
         run: tail -n 100 /tmp/tbg-next-priority.log || true
