@@ -118,7 +118,7 @@ export function evaluateExpression(expression:string):{value?:string;error?:stri
     const expect=(type:Token["type"])=>{if(peek()?.type!==type)throw new Error("Expected "+(type==="right"?")":type)+".");take();};
     let depth=0;
     const opPrecedence=(op:string)=>op==="+"||op==="-"?1:op==="*"||op==="/"?2:op==="^"?4:0;
-    function parsePrefix():number {
+    const parsePrefix = ():number => {
       if(++depth>40)throw new Error("Expression nesting is too deep.");
       try {
         const token=take();
@@ -137,7 +137,7 @@ export function evaluateExpression(expression:string):{value?:string;error?:stri
         throw new Error("Expected a number, function or opening parenthesis.");
       } finally {depth--;}
     }
-    function parseExpr(min:number):number {
+    const parseExpr = (min:number):number => {
       let value=parsePrefix();
       while(peek()){
         const token=peek();
