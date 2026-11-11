@@ -92,7 +92,7 @@ equal(countBusinessDays("2026-08-28","2026-08-31",true,"none").value?.count,4,"n
 equal(countBusinessDays("2026-08-24","2026-08-28",true,"sat-sun","2026-08-26").value?.count,4,"custom holiday excluded");
 equal(countBusinessDays("2026-01-26","2026-01-30",true,"sat-sun","","india-fixed").value?.count,4,"Indian fixed-date preset");
 equal(countBusinessDays("2026-07-03","2026-07-07",true,"sat-sun","","us-fixed").value?.count,3,"US fixed holiday on weekend not double-counted");
-equal(countBusinessDays("2026-12-24","2026-12-29",true,"sat-sun","","uk-fixed").value?.count,2,"UK Christmas and Boxing Day weekend handling");
+equal(countBusinessDays("2026-12-24","2026-12-29",true,"sat-sun","","uk-fixed").value?.count,3,"UK fixed dates only; observed substitute must be entered separately");
 equal(countBusinessDays("2026-08-24","2026-08-24",true).value?.count,1,"one working day");
 equal(countBusinessDays("2026-08-24","2026-08-24",false).value?.count,0,"exclusive same date");
 equal(parseHolidays("2026-08-26,2026-08-26").value?.size,1,"duplicate holiday removed");
