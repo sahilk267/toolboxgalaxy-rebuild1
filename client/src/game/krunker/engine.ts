@@ -1017,7 +1017,9 @@ export class KrunkerEngine {
 
   // Bot respawns at random spawn
   private respawnBot(bot: BotEntity) {
-    const sp = this.spawnPoints[Math.floor(Math.random() * this.spawnPoints.length)];
+    const safe=this.spawnPoints.filter(point=>point.distanceTo(this.playerPos)>=18);
+    const choices=safe.length?safe:this.spawnPoints;
+    const sp = choices[Math.floor(Math.random() * choices.length)];
     bot.position.copy(sp);
     bot.health = 100;
     bot.isAlive = true;
