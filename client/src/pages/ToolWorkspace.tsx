@@ -175,5 +175,5 @@ export default function ToolWorkspace() {
 
   if (!tool) return <AppShell><section className="page-section"><p className="mono-label">MODULE NOT FOUND</p><Link href="/tools" className="signal-button mt-5 inline-flex">Return to tools</Link></section></AppShell>;
   const Runner = runnerByKind[tool.kind];
-  return <WorkspaceFrame tool={tool}><Suspense fallback={<p role="status">Loading background AI tool…</p>}><Runner /></Suspense></WorkspaceFrame>;
+  return <WorkspaceFrame tool={tool}><Suspense fallback={<p role="status">Loading tool…</p>}><Runner /></Suspense></WorkspaceFrame>;
 }
