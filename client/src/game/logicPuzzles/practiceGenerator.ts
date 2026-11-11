@@ -113,7 +113,7 @@ export function generatePractice(kind:PracticeKind,difficulty:PracticeDifficulty
 export function countPracticeSolutions(puzzle:PracticePuzzle):number {
   if(puzzle.kind==="sudoku")return countSudokuSolutions(puzzle.givens as SudokuGrid,2);
   if(puzzle.kind==="queens")return countQueensSolutionsFor(puzzle.regions!,2);
-  return countTangoSolutions(puzzle.givens as TangoGrid,puzzle.relations!,2);
+  return countTangoSolutions(puzzle.givens as TangoGrid,2,puzzle.relations!);
 }
 export function isPracticeSolved(puzzle:PracticePuzzle, board:number[][] | QueenState[][] | TangoGrid):boolean {
   if(puzzle.kind==="sudoku")return solvedSudoku(board as SudokuGrid);
