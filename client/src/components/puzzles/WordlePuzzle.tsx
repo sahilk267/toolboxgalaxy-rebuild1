@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from "react";
+import { subscribeVisibleGameSeconds } from "@/game/visibleGameTimer";
 import { Link } from "wouter";
 import { OrbitAudio } from "@/game/audio";
 import { wordleEditionForDate, type WordleEdition } from "@/game/logicPuzzles/wordleBank";
@@ -69,8 +70,7 @@ export default function WordlePuzzle() {
   // Timer
   useEffect(() => {
     if (isSolved || isGameOver) return;
-    const interval = window.setInterval(() => setSeconds((s) => s + 1), 1000);
-    return () => window.clearInterval(interval);
+    return subscribeVisibleGameSeconds(delta => setSeconds(s => s + delta));
   }, [isSolved, isGameOver]);
 
   // Peer-to-Peer Automated Challenge System
