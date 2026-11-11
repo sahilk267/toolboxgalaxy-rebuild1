@@ -16,6 +16,7 @@ import {
   Send
 } from "lucide-react";
 import DiepCanvas from "@/components/DiepCanvas";
+import type { ArcadeDifficulty } from "@/game/playability";
 import { DiepAudio } from "@/game/diep/audio";
 import { DiepEngine } from "@/game/diep/engine";
 import {
@@ -45,6 +46,10 @@ export default function DiepArena() {
   const [killFeed, setKillFeed] = useState<KillFeedItem[]>([]);
   const [evolutionChoices, setEvolutionChoices] = useState<TankClassId[]>([]);
   const [isGameOver, setIsGameOver] = useState(false);
+  const [started, setStarted] = useState(false);
+  const [paused, setPaused] = useState(false);
+  const [round, setRound] = useState(0);
+  const [difficulty, setDifficulty] = useState<ArcadeDifficulty>("normal");
   const [gameOverStats, setGameOverStats] = useState<{
     score: number;
     level: number;
@@ -64,6 +69,8 @@ export default function DiepArena() {
       return 0;
     }
   });
+
+  const bestRef = useRef(highScore);
 
   // Challenge from URL parameter
   const challengeInfo = useMemo(() => {
@@ -85,13 +92,14 @@ export default function DiepArena() {
 
   const handlePlayerUpdate = useCallback((p: TankEntity) => {
     setPlayer({ ...p, stats: { ...p.stats } });
-    if (p.score > highScore) {
+    if (p.score > bestRef.current) {
+      bestRef.current = p.score;
       setHighScore(p.score);
       try {
         localStorage.setItem(DIEP_HIGH_SCORE_KEY, String(p.score));
       } catch {}
     }
-  }, [highScore]);
+  }, []);
 
   const handleLeaderboardUpdate = useCallback((entries: LeaderboardEntry[]) => {
     setLeaderboard(entries);
@@ -111,22 +119,48 @@ export default function DiepArena() {
   const handleGameOver = useCallback((score: number, level: number, classId: TankClassId, kills: number) => {
     setIsGameOver(true);
     setGameOverStats({ score, level, classId, kills });
-    if (score > highScore) {
+    if (score > bestRef.current) {
+      bestRef.current = score;
       setHighScore(score);
       try {
         localStorage.setItem(DIEP_HIGH_SCORE_KEY, String(score));
       } catch {}
     }
-  }, [highScore]);
+  }, []);
 
   const handleRestart = () => {
     setIsGameOver(false);
     setEvolutionChoices([]);
-    if (engineRef.current) {
-      engineRef.current.dispose();
-      // Trigger re-mount by reloading or re-initializing engine
-      window.location.reload();
+    setKillFeed([]);
+    setStarted(false);
+    setPaused(false);
+    setAutoFireActive(false);
+    setAutoSpinActive(false);
+    setRound(current => current + 1);
+  };
+
+  const handleStart = () => {
+    const engine = engineRef.current;
+    if (!engine) return;
+    engine.setDifficulty(difficulty);
+    engine.start();
+    setStarted(true);
+    setPaused(false);
+    document.querySelector<HTMLCanvasElement>('canvas[aria-label="Diep Arena Canvas"]')?.focus({ preventScroll: true });
+  };
+
+  const handlePause = () => {
+    const engine = engineRef.current;
+    if (!engine || !started || isGameOver) return;
+    if (paused) {
+      engine.start();
+      document.querySelector<HTMLCanvasElement>('canvas[aria-label="Diep Arena Canvas"]')?.focus({ preventScroll: true });
+    } else {
+      engine.stop();
+      engine.keys = {};
+      engine.isMouseDown = false;
     }
+    setPaused(current => !current);
   };
 
   const callbacks = useMemo(() => ({
@@ -211,7 +245,31 @@ export default function DiepArena() {
   return (
     <div className="relative w-screen h-screen overflow-hidden select-none bg-[#cdcdcd] font-sans">
       {/* 1. Underlying 2D Game Canvas */}
-      <DiepCanvas callbacks={callbacks} engineRef={engineRef} audio={audio.current} />
+      <DiepCanvas key={round} callbacks={callbacks} engineRef={engineRef} audio={audio.current} />
+
+      {!isGameOver && (!started || paused) && (
+        <div className="absolute inset-0 z-40 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4" role="dialog" aria-label="Diep Arena start menu">
+          <div className="w-full max-w-md rounded-2xl border border-cyan-400/40 bg-slate-900 p-5 sm:p-7 text-white shadow-2xl space-y-4">
+            <p className="text-xs font-mono uppercase tracking-widest text-cyan-300">TANK EVOLUTION / {paused ? "Paused" : "Ready"}</p>
+            <h1 className="text-2xl font-black">{paused ? "Game paused" : "Learn to aim. Then survive."}</h1>
+            <p className="text-sm text-slate-300">You start away from dangerous nests, with a protected learning window. Enemy levels and aggression increase gradually.</p>
+            {!started && <label className="block text-sm text-slate-200">Difficulty
+              <select data-game-difficulty="diep" value={difficulty} onChange={e=>setDifficulty(e.target.value as ArcadeDifficulty)}
+                className="mt-1 w-full rounded-lg bg-slate-800 border border-white/20 p-3">
+                <option value="easy">Easy — longer shield, slower enemies</option>
+                <option value="normal">Normal — gradual challenge</option>
+                <option value="hard">Hard — shorter shield, faster ramp</option>
+              </select>
+            </label>}
+            <div className="rounded-lg bg-slate-800/70 p-3 text-xs leading-6 text-slate-200">
+              <strong>Controls:</strong> WASD / arrows move · Mouse aims · Hold click / Space fires · E auto-fire · 1–8 stat upgrades · Touch: left move / right aim.
+            </div>
+            <button type="button" className="w-full rounded-xl bg-cyan-400 py-3 text-slate-950 font-black"
+              onClick={paused ? handlePause : handleStart}>{paused ? "Resume game" : "Start game"}</button>
+            <Link href="/games" className="block text-center text-sm text-slate-400 underline">Back to Games</Link>
+          </div>
+        </div>
+      )}
 
       {/* 2. TOP HEADER HUD */}
       <header className="absolute top-0 left-0 right-0 p-3 sm:p-4 flex items-center justify-between pointer-events-none z-20">
@@ -225,6 +283,7 @@ export default function DiepArena() {
             <span className="hidden sm:inline">Games Bay</span>
           </Link>
 
+          {started && !isGameOver && <button type="button" onClick={handlePause} className="rounded-lg border border-white/20 bg-black/70 px-3 py-2 text-xs text-white" aria-label={paused ? "Resume Diep Arena" : "Pause Diep Arena"}>{paused ? "Resume" : "Pause"}</button>}
           <button
             onClick={handleSoundToggle}
             className={`p-2 rounded-lg backdrop-blur border text-xs font-medium transition ${
