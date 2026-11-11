@@ -318,6 +318,12 @@ export const KrunkerCanvas: React.FC<KrunkerCanvasProps> = ({ onBackToMenu }) =>
       setShowTabScoreboard(false);
       setIsADS(false);
     };
+    const onVisibility = () => {
+      engine.setSuspended(document.hidden);
+      if (document.hidden) onWindowBlur();
+    };
+    document.addEventListener("visibilitychange", onVisibility);
+    if (document.hidden) onVisibility();
     window.addEventListener("blur", onWindowBlur);
     window.addEventListener("keydown", onKeyDown);
     window.addEventListener("keyup", onKeyUp);
@@ -355,6 +361,7 @@ export const KrunkerCanvas: React.FC<KrunkerCanvasProps> = ({ onBackToMenu }) =>
       window.removeEventListener("mousedown", onMouseDown);
       window.removeEventListener("mouseup", onMouseUp);
       window.removeEventListener("contextmenu", onContextMenu);
+      document.removeEventListener("visibilitychange", onVisibility);
       window.removeEventListener("blur", onWindowBlur);
       window.removeEventListener("keydown", onKeyDown);
       window.removeEventListener("keyup", onKeyUp);
