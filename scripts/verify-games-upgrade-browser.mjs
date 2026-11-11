@@ -63,6 +63,33 @@ try {
   check(await page.locator(".logic-lab__grid article").count()>2,"Category filter displays multiple word games");
   check(await page.locator('a[href="/games/mini-crossword"]').count()>=1,"Mini Crossword discoverable in Logic Lab puzzle launcher");
 
+  // Navigate all 13 listed puzzle routes against the same real production build.
+  // This is a launch/React-regression check, not automated certification of every
+  // solution path, hint or touch interaction inside those games.
+  for(const [path,title] of [
+    ["/games/strands","Strands"],
+    ["/games/the-hive","Hive"],
+    ["/games/connections","Connections"],
+    ["/games/orbit-lexicon","Wordle"],
+    ["/games/logic/queens","Queens"],
+    ["/games/logic/mini-sudoku","Sudoku"],
+    ["/games/logic/tango","Tango"],
+    ["/games/logic/patches","Patches"],
+    ["/games/logic/zip","Zip"],
+    ["/games/logic/wend","Wend"],
+    ["/games/chess-puzzles","Chess"],
+    ["/games/nonogram","Nonogram"],
+    ["/games/mini-crossword","Crossword"],
+  ]) {
+    const response=await page.goto("http://127.0.0.1:3000"+path,{waitUntil:"domcontentloaded"});
+    check(response?.status()===200,path+" route responds");
+    await page.getByText(title,{exact:false}).first().waitFor({timeout:20000});
+    const pageText=await page.locator("body").innerText();
+    check(!pageText.includes("Puzzle Module Not Found") &&
+      !pageText.includes("Something went wrong") &&
+      !pageText.includes("404 Not Found"),path+" puzzle interface available");
+  }
+
   // Full-screen arcade controls and WebGL require real devices for final QA;
   // these checks assert routes render without crashing the React application.
   for(const [slug,label] of [
