@@ -191,6 +191,22 @@ export default function DiepCanvas({ callbacks, engineRef, audio }: DiepCanvasPr
       rightTouchId.current = null;
     };
 
+    // Background tabs must not burn frames or progress combat while inactive.
+    // Only resume a game that was genuinely running before suspension.
+    let resumeAfterHidden = false;
+    const onVisibility = () => {
+      if (document.hidden) {
+        resumeAfterHidden = engine.isRunning;
+        resetInputOnBlur();
+        engine.stop();
+      } else if (resumeAfterHidden) {
+        resumeAfterHidden = false;
+        engine.start();
+      }
+    };
+    document.addEventListener("visibilitychange", onVisibility);
+    if (document.hidden) onVisibility();
+
     window.addEventListener("blur", resetInputOnBlur);
     canvas.addEventListener("blur", resetInputOnBlur);
     window.addEventListener("keydown", onKeyDown);
@@ -206,6 +222,7 @@ export default function DiepCanvas({ callbacks, engineRef, audio }: DiepCanvasPr
 
     return () => {
       resizeObserver.disconnect();
+      document.removeEventListener("visibilitychange", onVisibility);
       window.removeEventListener("blur", resetInputOnBlur);
       canvas.removeEventListener("blur", resetInputOnBlur);
       window.removeEventListener("keydown", onKeyDown);
