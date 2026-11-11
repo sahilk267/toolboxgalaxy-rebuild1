@@ -16,7 +16,7 @@ import {
   Send
 } from "lucide-react";
 import DiepCanvas from "@/components/DiepCanvas";
-import type { ArcadeDifficulty } from "@/game/playability";
+import { arcadePressure, arcadePhaseLabel, type ArcadeDifficulty } from "@/game/playability";
 import { DiepAudio } from "@/game/diep/audio";
 import { DiepEngine } from "@/game/diep/engine";
 import {
@@ -46,6 +46,7 @@ export default function DiepArena() {
   const [killFeed, setKillFeed] = useState<KillFeedItem[]>([]);
   const [evolutionChoices, setEvolutionChoices] = useState<TankClassId[]>([]);
   const [isGameOver, setIsGameOver] = useState(false);
+  const [elapsedSeconds,setElapsedSeconds] = useState(0);
   const [started, setStarted] = useState(false);
   const [paused, setPaused] = useState(false);
   const [round, setRound] = useState(0);
@@ -91,6 +92,7 @@ export default function DiepArena() {
   };
 
   const handlePlayerUpdate = useCallback((p: TankEntity) => {
+    setElapsedSeconds(Math.floor(engineRef.current?.elapsedSeconds || 0));
     setPlayer({ ...p, stats: { ...p.stats } });
     if (p.score > bestRef.current) {
       bestRef.current = p.score;
@@ -132,6 +134,7 @@ export default function DiepArena() {
     setIsGameOver(false);
     setEvolutionChoices([]);
     setKillFeed([]);
+    setElapsedSeconds(0);
     setStarted(false);
     setPaused(false);
     setAutoFireActive(false);
@@ -271,6 +274,13 @@ export default function DiepArena() {
         </div>
       )}
 
+      {started && !isGameOver && (
+        <div role="status" aria-live="off" className="absolute top-20 left-3 z-20 pointer-events-none rounded-lg border border-cyan-400/40 bg-slate-950/85 px-3 py-1.5 text-xs font-mono text-cyan-200 shadow-xl">
+          {arcadePressure(elapsedSeconds,difficulty).protectionRemaining>0
+            ? "Opening shield: "+Math.ceil(arcadePressure(elapsedSeconds,difficulty).protectionRemaining)+"s"
+            : arcadePhaseLabel(arcadePressure(elapsedSeconds,difficulty).phase)}
+        </div>
+      )}
       {/* 2. TOP HEADER HUD */}
       <header className="absolute top-0 left-0 right-0 p-3 sm:p-4 flex items-center justify-between pointer-events-none z-20">
         {/* Left: Back to Games Bay & Controls */}
