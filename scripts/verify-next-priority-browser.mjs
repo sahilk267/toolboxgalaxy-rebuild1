@@ -74,7 +74,7 @@ try {
   await box.locator("[data-tool-output]").getByText("RGB",{exact:false}).waitFor();
   check((await box.locator("[data-tool-output]").innerText()).includes("HEX #C7F36B"),"legacy HEX defaults maintained");
   check((await box.locator("[data-tool-output]").innerText()).includes("HSV"),"HSV conversion displayed");
-  check(await box.getByRole("button",{name:"Use",exact:false}).count()>=5,"palette swatches rendered");
+  check(await box.locator('button[title^="Use "]').count()>=5,"palette swatches rendered");
   await box.locator('[data-field="color-hex"]').fill("invalid");
   check((await box.locator("[data-tool-output]").innerText()).includes("Enter a three- or six-digit"),"invalid HEX handled");
 
