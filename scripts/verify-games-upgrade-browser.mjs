@@ -65,7 +65,7 @@ try {
   // Full-screen arcade controls and WebGL require real devices for final QA;
   // these checks assert routes render without crashing the React application.
   for(const [slug,label] of [
-    ["orbit-dash","Orbit Dash"],["tank-evolution","Diep"],
+    ["orbit-dash","Orbit Dash"],["tank-evolution","TANK"],
     ["surviv-io","Surviv"],["krunker","Krunker"],
   ]) {
     const arcade=await page.goto("http://127.0.0.1:3000/games/"+slug,{waitUntil:"domcontentloaded"});
