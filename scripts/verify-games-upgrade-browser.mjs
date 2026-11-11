@@ -70,10 +70,18 @@ try {
   ]) {
     const arcade=await page.goto("http://127.0.0.1:3000/games/"+slug,{waitUntil:"domcontentloaded"});
     check(arcade?.status()===200,slug+" arcade route exists");
-    await page.waitForTimeout(1800);
+    if (slug==="tank-evolution") {
+      await page.locator('canvas[aria-label="Diep Arena Canvas"]').waitFor({timeout:20000});
+      check(true,"Diep real canvas mounted");
+    } else if (slug==="surviv-io") {
+      await page.locator('canvas[tabindex="0"]').first().waitFor({timeout:20000});
+      check(true,"Surviv playable game canvas mounted");
+    } else {
+      await page.getByText(label,{exact:false}).first().waitFor({timeout:20000});
+      check(true,slug+" game interface displays");
+    }
     const body=await page.locator("body").innerText();
-    check(body.toLowerCase().includes(label.toLowerCase()),slug+" game interface displays");
-    check(!body.includes("Application error"),slug+" has no fatal application fallback");
+    check(!body.includes("Application error")&&!body.includes("Something went wrong"),slug+" has no fatal application fallback");
   }
   check(failures.length===0,"No uncaught browser page errors across practice and arcade routes: "+failures.join(" | "));
   console.log("PASS: "+assertions+" games Chromium UI and arcade-route assertions.");
