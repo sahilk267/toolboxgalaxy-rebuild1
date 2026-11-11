@@ -1,5 +1,16 @@
 # ToolboxGalaxy Repair & Verification Progress Ledger
 
+## Games Upgrade Phase — Implementation candidate (11 November 2026)
+
+- **Working feature branch:** `feat/games-upgrade-phase` based on the integrated `feat/browser-ai-background-remover` branch after [PR #20](https://github.com/sahilk267/toolboxgalaxy-rebuild1/pull/20) successfully merged (10 further advanced tools).
+- **New game review:** [PR #21](https://github.com/sahilk267/toolboxgalaxy-rebuild1/pull/21), draft and **unmerged**; keep `main` and hosting untouched.
+- **Puzzle upgrades:** All 13 listed puzzle games now share visible-time-only timer behavior (six from the common PuzzleFrame, seven independently rendered), including reset timer fairness. Logic Lab includes all 13 puzzles plus searchable categories.
+- **Practice:** Verified seeded Sudoku/Queens/Tango unique-solution board variations, three difficulty tiers, keyboard/touch-friendly 6x6 controls, hints, undo, reset, constraints and deterministic reproduction. New practice sessions do not write daily-completion records.
+- **Arcade:** Orbit Dash hover start/keyboard/graphics handling, Diep and Surviv active simulation pause and stuck-input clearance, Surviv rendering pause, Krunker physics/timer suspension. Original movement/collision/damage rules and game names preserved.
+- **Evidence:** `scripts/verify-game-practice.ts` runs real solver checks in normal `npm run check`; first green candidate produced **2,153 assertions across 72 uniquely solvable generated fields**. `scripts/verify-games-upgrade-browser.mjs` launches the real Logic Lab, all 13 puzzle URLs and all four arcade URLs in Chromium. Reverify the final HEAD results before labeling fully green.
+- **Details and limitations:** [docs/GAMES_UPGRADE_RELEASE.md](docs/GAMES_UPGRADE_RELEASE.md). Browser route smoke and solver checks do **not** amount to all-game controls or mobile graphics certification. Hostinger, manual testing and unrelated projects were excluded.
+
+
 ## Next-best development batch — Ten existing tools (11 November 2026)
 
 - **Branch:** `feat/advanced-remaining-everyday-dev-tools` from the user's working `feat/browser-ai-background-remover` branch.
