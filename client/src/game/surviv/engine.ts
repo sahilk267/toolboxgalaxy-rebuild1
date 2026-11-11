@@ -201,6 +201,8 @@ export class SurvivEngine {
     this.loop();
   }
 
+  public get running() { return this.isRunning; }
+
   public stop() {
     this.isRunning = false;
     if (this.animFrameId !== null) {
