@@ -1,0 +1,52 @@
+name: Games Upgrade Chromium QA
+on:
+  pull_request:
+    branches: [feat/browser-ai-background-remover]
+    paths:
+      - .github/workflows/games-upgrade-browser.yml
+      - client/src/game/logicPuzzles/practiceGenerator.ts
+      - client/src/game/visibleGameTimer.ts
+      - client/src/pages/LogicLab.tsx
+      - client/src/pages/LogicPuzzle.tsx
+      - client/src/components/LogicPracticeStudio.tsx
+      - client/src/components/GameCanvas.tsx
+      - client/src/components/DiepCanvas.tsx
+      - client/src/components/SurvivCanvas.tsx
+      - client/src/components/KrunkerCanvas.tsx
+      - client/src/components/puzzles/**
+      - client/src/game/GameWorld.ts
+      - client/src/game/krunker/engine.ts
+      - client/src/game/surviv/engine.ts
+      - scripts/verify-game-practice.ts
+      - scripts/verify-games-upgrade-browser.mjs
+      - package.json
+jobs:
+  chromium:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Install locked dependencies
+        run: npm ci
+      - name: Production bundle
+        run: npm run build
+      - name: Install browser
+        run: |
+          npm install --no-save --package-lock=false --ignore-scripts --no-audit --no-fund playwright@1.65.0
+          npx --no-install playwright install --with-deps chromium
+      - name: Real Chromium games smoke
+        run: |
+          nohup npm run start > /tmp/tbg-games-upgrade.log 2>&1 &
+          for attempt in $(seq 1 60); do
+            if curl -fsS http://127.0.0.1:3000/api/health >/dev/null; then break; fi
+            sleep 1
+          done
+          curl -fsS http://127.0.0.1:3000/api/health
+          node scripts/verify-games-upgrade-browser.mjs
+      - name: Server logs on failure
+        if: failure()
+        run: tail -n 100 /tmp/tbg-games-upgrade.log || true
