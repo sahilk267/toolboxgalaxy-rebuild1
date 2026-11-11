@@ -33,6 +33,7 @@ export class GameWorld {
   private playerY = 0;
   private readonly onKeyDown: (event: KeyboardEvent) => void;
   private readonly onKeyUp: (event: KeyboardEvent) => void;
+  private readonly onWindowBlur: () => void;
   private readonly onPointer: (event: PointerEvent) => void;
 
   constructor(private readonly scene: Scene, private readonly canvas: HTMLCanvasElement, private readonly callbacks: GameCallbacks) {
@@ -40,12 +41,16 @@ export class GameWorld {
     this.configurePlayer();
     this.createStarfield();
     this.onKeyDown = (event) => {
+      const target = event.target;
+      if (target instanceof HTMLElement &&
+        (["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName) || target.isContentEditable)) return;
       if (["ArrowUp", "ArrowDown", "w", "W", "s", "S", " ", "r", "R"].includes(event.key)) event.preventDefault();
       if (event.key === " " || event.key.toLowerCase() === "r") { if (this.status !== "playing") this.reset(); return; }
       this.pressed.add(event.key.toLowerCase());
       if (this.status === "ready") this.start();
     };
     this.onKeyUp = (event) => this.pressed.delete(event.key.toLowerCase());
+    this.onWindowBlur = () => this.pressed.clear();
     this.onPointer = (event) => {
       if (this.status === "ready") this.start();
       const rect = this.canvas.getBoundingClientRect();
@@ -54,6 +59,7 @@ export class GameWorld {
     };
     window.addEventListener("keydown", this.onKeyDown, { passive: false });
     window.addEventListener("keyup", this.onKeyUp);
+    window.addEventListener("blur", this.onWindowBlur);
     this.canvas.addEventListener("pointermove", this.onPointer);
     this.canvas.addEventListener("pointerdown", this.onPointer);
     this.callbacks.onScore(this.score, this.best);
@@ -149,5 +155,5 @@ export class GameWorld {
     this.callbacks.onScore(this.score, this.best);
   }
   private endRun() { this.status = "over"; this.callbacks.onStatus(this.status); this.callbacks.onSound("collision"); }
-  dispose() { window.removeEventListener("keydown", this.onKeyDown); window.removeEventListener("keyup", this.onKeyUp); this.canvas.removeEventListener("pointermove", this.onPointer); this.canvas.removeEventListener("pointerdown", this.onPointer); this.gates.forEach((gate) => gate.root.dispose()); this.player.dispose(); }
+  dispose() { window.removeEventListener("keydown", this.onKeyDown); window.removeEventListener("keyup", this.onKeyUp); window.removeEventListener("blur", this.onWindowBlur); this.canvas.removeEventListener("pointermove", this.onPointer); this.canvas.removeEventListener("pointerdown", this.onPointer); this.gates.forEach((gate) => gate.root.dispose()); this.player.dispose(); }
 }
