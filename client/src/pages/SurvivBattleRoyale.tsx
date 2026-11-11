@@ -18,7 +18,7 @@ import {
   Clock
 } from "lucide-react";
 import SurvivCanvas from "@/components/SurvivCanvas";
-import type { ArcadeDifficulty } from "@/game/playability";
+import { arcadePressure, arcadePhaseLabel, type ArcadeDifficulty } from "@/game/playability";
 import { SurvivAudio } from "@/game/surviv/audio";
 import { SurvivEngine } from "@/game/surviv/engine";
 import {
@@ -55,6 +55,7 @@ export default function SurvivBattleRoyale() {
   }>({ over: false, won: false, rank: 0, kills: 0, damage: 0 });
 
   const [copied, setCopied] = useState(false);
+  const [elapsedSeconds,setElapsedSeconds] = useState(0);
   const [started,setStarted] = useState(false);
   const [paused,setPaused] = useState(false);
   const [round,setRound] = useState(0);
@@ -90,6 +91,7 @@ export default function SurvivBattleRoyale() {
   };
 
   const handlePlayerUpdate = useCallback((p: PlayerEntity) => {
+    setElapsedSeconds(Math.floor(engineRef.current?.elapsedSeconds || 0));
     setPlayer({
       ...p,
       weapons: [...p.weapons] as [any, any, any],
@@ -142,6 +144,7 @@ export default function SurvivBattleRoyale() {
     setStarted(false);
     setPaused(false);
     setKillFeed([]);
+    setElapsedSeconds(0);
     setRound(previous => previous + 1);
   };
   const handleStart = () => {
@@ -255,6 +258,13 @@ export default function SurvivBattleRoyale() {
         </div>
       )}
 
+      {started && !matchResult.over && (
+        <div role="status" aria-live="off" className="absolute top-24 left-3 z-20 pointer-events-none rounded-lg border border-amber-400/40 bg-slate-950/85 px-3 py-1.5 text-xs font-mono text-amber-200 shadow-xl">
+          {arcadePressure(elapsedSeconds,difficulty).protectionRemaining>0
+            ? "Opening shield: "+Math.ceil(arcadePressure(elapsedSeconds,difficulty).protectionRemaining)+"s"
+            : arcadePhaseLabel(arcadePressure(elapsedSeconds,difficulty).phase)}
+        </div>
+      )}
       {/* 2. TOP HEADER HUD */}
       <header className="absolute top-0 left-0 right-0 p-3 sm:p-4 flex items-center justify-between pointer-events-none z-20">
         {/* Left: Navigation & Audio Controls */}
