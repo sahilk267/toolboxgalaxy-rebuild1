@@ -99,6 +99,21 @@ export default function SurvivCanvas({ callbacks, engineRef, audio }: SurvivCanv
       touchState.current.moveTouchId = null;
       touchState.current.aimTouchId = null;
     };
+    // Preserve the user's actual match state across browser tab switches.
+    // Starting an already-ended match is still rejected by the core engine.
+    let resumeAfterHidden = false;
+    const onVisibility = () => {
+      if (document.hidden) {
+        resumeAfterHidden = engine.running;
+        resetInputOnBlur();
+        engine.stop();
+      } else if (resumeAfterHidden) {
+        resumeAfterHidden = false;
+        engine.start();
+      }
+    };
+    document.addEventListener("visibilitychange", onVisibility);
+    if (document.hidden) onVisibility();
     window.addEventListener("blur", resetInputOnBlur);
     canvas.addEventListener("blur", resetInputOnBlur);
     window.addEventListener("keydown", handleKeyDown);
@@ -305,6 +320,7 @@ export default function SurvivCanvas({ callbacks, engineRef, audio }: SurvivCanv
       cancelAnimationFrame(animId);
       window.removeEventListener("resize", handleResize);
       resizeObserver.disconnect();
+      document.removeEventListener("visibilitychange", onVisibility);
       window.removeEventListener("blur", resetInputOnBlur);
       canvas.removeEventListener("blur", resetInputOnBlur);
       window.removeEventListener("keydown", handleKeyDown);
