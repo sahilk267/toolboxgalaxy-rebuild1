@@ -26,7 +26,7 @@ jobs:
       - name: Install isolated browser test tooling
         run: |
           npm install --no-save --package-lock=false --ignore-scripts --no-audit --no-fund playwright@1.65.0
-          npx --no-install playwright install --with-deps chromium
+          npx --no-install playwright install chromium
       - name: Run actual browser inference and download smoke
         run: |
           nohup npm run start > /tmp/toolbox-ai-server.log 2>&1 &
