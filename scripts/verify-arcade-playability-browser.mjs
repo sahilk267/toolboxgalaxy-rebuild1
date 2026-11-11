@@ -72,6 +72,33 @@ try{
  await confirmNoDeath("YOU DIED",2);
  await page.getByRole("button",{name:"Start match"}).click();
  check(await page.getByRole("heading",{name:"Krunker Voxel FPS"}).count()>0,"Krunker start action does not crash UI");
+ // Responsive regression: short mobile viewports must scroll to real controls.
+ const mobile=await browser.newPage({viewport:{width:375,height:590},isMobile:true,hasTouch:true});
+ mobile.on("pageerror",e=>errors.push("mobile: "+e.message));
+ await mobile.route(/https?:\/\//,route=>{
+  const host=new URL(route.request().url()).hostname;
+  return host==="127.0.0.1"?route.continue():route.abort();
+ });
+ for(const slug of [
+   "logic/queens","logic/mini-sudoku","logic/tango","logic/patches",
+   "logic/zip","logic/wend","orbit-lexicon","connections","the-hive",
+   "mini-crossword","chess-puzzles","nonogram",
+ ]) {
+  const response=await mobile.goto("http://127.0.0.1:3000/games/"+slug,{waitUntil:"domcontentloaded"});
+  check(response?.status()===200,slug+" mobile route");
+  const root=mobile.locator(".logic-game-page");
+  await root.waitFor({timeout:15000});
+  const overflow=await root.evaluate(node=>getComputedStyle(node).overflowY);
+  check(overflow==="auto"||overflow==="scroll",slug+" small viewport scroll enabled ("+overflow+")");
+  const controls=root.locator("button:visible");
+  await controls.first().waitFor({timeout:10000});
+  const target=controls.last();
+  await target.scrollIntoViewIfNeeded({timeout:10000});
+  const box=await target.boundingBox();
+  check(Boolean(box&&box.y>=-3&&box.y+box.height<=(await mobile.evaluate(()=>innerHeight))+3),slug+" final action is reachable by scrolling");
+ }
+ await mobile.close();
+
  check(errors.length===0,"no uncaught page errors in four arcade game sessions: "+errors.join("; "));
  console.log("PASS: "+count+" actual arcade onboarding and early-survival Chromium assertions.");
 } catch(error){
