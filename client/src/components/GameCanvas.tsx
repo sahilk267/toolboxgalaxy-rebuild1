@@ -3,8 +3,9 @@ import { Engine } from "@babylonjs/core/Engines/engine";
 import "@/game/registerStandardShaders";
 import { createGameScene, type GameCallbacks, type GameHandle } from "@/game/scene";
 import { useEffect, useRef, useState } from "react";
+import type { ArcadeDifficulty } from "@/game/playability";
 
-export default function GameCanvas({ callbacks }: { callbacks: GameCallbacks }) {
+export default function GameCanvas({ callbacks, difficulty = "normal" }: { callbacks: GameCallbacks; difficulty?: ArcadeDifficulty }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const callbacksRef = useRef(callbacks);
   const [error, setError] = useState("");
@@ -43,7 +44,7 @@ export default function GameCanvas({ callbacks }: { callbacks: GameCallbacks }) 
       onScore: (score,best)=>callbacksRef.current.onScore(score,best),
       onStatus: status=>callbacksRef.current.onStatus(status),
       onSound: event=>callbacksRef.current.onSound(event),
-    }).then(game=>{
+    }, difficulty).then(game=>{
       if (disposed) { game.dispose(); return; }
       handle = game;
       if (!document.hidden) engine.runRenderLoop(render);
@@ -59,7 +60,7 @@ export default function GameCanvas({ callbacks }: { callbacks: GameCallbacks }) 
       handle?.dispose();
       engine.dispose();
     };
-  }, []);
+  }, [difficulty]);
 
   return <>
     <canvas ref={canvasRef} className="game-canvas" style={{touchAction:"none"}}
