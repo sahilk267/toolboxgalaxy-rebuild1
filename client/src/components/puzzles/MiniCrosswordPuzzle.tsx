@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from "react";
+import { subscribeVisibleGameSeconds } from "@/game/visibleGameTimer";
 import { Link } from "wouter";
 import { OrbitAudio } from "@/game/audio";
 import { miniCrosswordEditionForDate, type MiniCrosswordEdition, type CrosswordClue } from "@/game/logicPuzzles/miniCrosswordBank";
@@ -68,8 +69,7 @@ export default function MiniCrosswordPuzzle() {
   // Timer
   useEffect(() => {
     if (isSolved) return;
-    const interval = window.setInterval(() => setSeconds((s) => s + 1), 1000);
-    return () => window.clearInterval(interval);
+    return subscribeVisibleGameSeconds(delta => setSeconds(s => s + delta));
   }, [isSolved]);
 
   // Peer-to-Peer Automated Challenge System
