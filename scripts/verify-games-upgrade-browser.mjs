@@ -17,7 +17,9 @@ try {
   await studio.getByText("Build a fresh puzzle").waitFor({timeout:20000});
   check(await studio.locator("[data-practice-cell]").count()===36,"Six-by-six practice board rendered");
   check(await studio.locator('[data-practice="kind"]').inputValue()==="sudoku","Sudoku initial practice type");
-  const empty=studio.locator('[data-practice-cell]').filter({hasText:"·"}).first();
+  const firstEmpty=studio.locator('[data-practice-cell]').filter({hasText:"·"}).first();
+  const firstEmptyId=await firstEmpty.getAttribute("data-practice-cell");
+  const empty=studio.locator('[data-practice-cell="'+firstEmptyId+'"]');
   await empty.click();
   await empty.press("2");
   check((await empty.innerText()).trim()==="2","Sudoku keypad input via keyboard");
