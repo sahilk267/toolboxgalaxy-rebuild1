@@ -104,12 +104,38 @@ function PuzzleFrame({
   const [copied, setCopied] = useState(false);
   const [showRules, setShowRules] = useState(false);
 
-  // Live Timer
+  // Single-screen puzzles need an active-play timer: resetting the board starts
+  // a fresh run, and a hidden browser tab does not silently keep scoring time.
   useEffect(() => {
     if (solved) return;
-    const interval = window.setInterval(() => setSeconds((s) => s + 1), 1000);
-    return () => window.clearInterval(interval);
+    let anchor = performance.now();
+    const tick = () => {
+      const now = performance.now();
+      const elapsed = Math.floor((now - anchor) / 1000);
+      if (elapsed > 0) {
+        setSeconds((previous) => previous + Math.min(elapsed, 60));
+        anchor += elapsed * 1000;
+      }
+    };
+    const onVisibility = () => {
+      if (!document.hidden) anchor = performance.now();
+    };
+    const interval = window.setInterval(() => {
+      if (!document.hidden) tick();
+    }, 250);
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => {
+      window.clearInterval(interval);
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
   }, [solved]);
+
+  const resetRun = () => {
+    setSeconds(0);
+    setCopied(false);
+    setShowRules(false);
+    onReset();
+  };
 
   // Check Lightning Solver badge on victory
   useEffect(() => {
@@ -235,7 +261,7 @@ function PuzzleFrame({
           <button 
             type="button" 
             className="logic-action" 
-            onClick={onReset} 
+            onClick={resetRun} 
             title="Reset board"
           >
             <RotateCcw size={14} />
@@ -403,7 +429,7 @@ function PuzzleFrame({
               </button>
               <button
                 type="button"
-                onClick={onReset}
+                onClick={resetRun}
                 className="logic-action text-xs py-1.5 px-4"
               >
                 Play Again
