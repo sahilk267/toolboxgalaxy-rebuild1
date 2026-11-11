@@ -49,6 +49,20 @@ export function meetsSpawnSeparation(
     Number.isFinite(minDistance) && minDistance >= 0 &&
     others.every(other => Math.hypot(candidate.x-other.x, candidate.y-other.y) >= minDistance);
 }
+export function krunkerBotHitChance(pressure:number, distance:number, playerSpeed:number):number {
+  const normalizedPressure=Number.isFinite(pressure)?Math.max(0,pressure):0;
+  const range=Number.isFinite(distance)?Math.max(0,distance):100;
+  const moving=Number.isFinite(playerSpeed)?Math.max(0,Math.min(1,playerSpeed/12)):0;
+  return Math.max(0.10,Math.min(0.70,0.17+0.38*normalizedPressure-range/170-moving*0.16));
+}
+export function orbitGatePace(elapsedSeconds:number,difficulty:ArcadeDifficulty="normal") {
+  const pressure=arcadePressure(elapsedSeconds,difficulty);
+  return {
+    speed:2.25+pressure.enemyPressure*2.85,
+    spawnInterval:3.5-pressure.rampFraction*1.75,
+    gapRange:0.4+2.3*pressure.rampFraction,
+  };
+}
 export function arcadePhaseLabel(phase: ArcadePressure["phase"]): string {
   return {
     learning: "Learn the controls — protected",
