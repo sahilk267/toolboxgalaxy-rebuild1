@@ -161,6 +161,7 @@ equal(transformTextCase("Hello World","snake"),"hello_world","snake");
 equal(transformTextCase("Hello World","constant"),"HELLO_WORLD","constant");
 equal(transformTextCase("hello world","alternating"),"hElLo WoRlD","alternating Unicode letters");
 equal(transformTextCase("नमस्ते दुनिया","upper").length>0,true,"Hindi accepted");
+equal(transformTextCase("नमस्ते दुनिया","snake"),"नमस्ते_दुनिया","Indic combining marks stay in original words");
 rejects(()=>transformTextCase("a".repeat(100001),"title"),"text case bounded length");
 
 // Base64 binary strictness, Unicode, Base64URL:
