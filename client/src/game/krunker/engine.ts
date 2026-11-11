@@ -142,7 +142,9 @@ export class KrunkerEngine {
 
   // Spawn or Respawn Player at safe spawn point
   public spawnPlayer() {
-    const sp = this.spawnPoints[Math.floor(Math.random() * this.spawnPoints.length)];
+    const safeSpawns=this.spawnPoints.filter(point=>this.bots.every(bot=>!bot.isAlive || bot.position.distanceTo(point)>=20));
+    const candidates=safeSpawns.length?safeSpawns:this.spawnPoints;
+    const sp=candidates[Math.floor(Math.random() * candidates.length)];
     this.playerPos.set(sp.x, sp.y + 0.5, sp.z);
     this.playerVelocity.set(0, 0, 0);
     this.health = 100;
@@ -154,7 +156,7 @@ export class KrunkerEngine {
     this.currentAmmo = this.currentWeapon.magSize;
     this.isReloading = false;
     this.isInvulnerable = true;
-    this.invulnerableTimer = this.elapsedSeconds === 0 ? Math.max(PHYSICS.INVULNERABLE_DURATION,arcadePressure(0,this.difficulty).protectionRemaining) : PHYSICS.INVULNERABLE_DURATION;
+    this.invulnerableTimer = this.elapsedSeconds === 0 ? Math.max(PHYSICS.INVULNERABLE_DURATION,arcadePressure(0,this.difficulty).protectionRemaining) : Math.max(4,PHYSICS.INVULNERABLE_DURATION);
 
     this.camera.position.copy(this.playerPos);
     this.camera.position.y += this.currentCameraHeight;
