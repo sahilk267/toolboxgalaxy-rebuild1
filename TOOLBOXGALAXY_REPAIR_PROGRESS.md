@@ -1,5 +1,18 @@
 # ToolboxGalaxy Repair & Verification Progress Ledger
 
+## Implementation & scalability batch 2 — 12 November 2026
+
+**Git branch:** `feat/browser-ai-background-remover`. These are source changes only; testing and deployment are deliberately deferred at the user's request.
+
+- **Surviv Battle Royale:** static ordered obstacle spatial index for projectile sweeps, nearby bush/loot-target and melee candidate searches; reusable combatants list; hunting bots continuously refresh tracked target positions; fleeing-zone bots choose waypoints on staggered think timers rather than jittering per animation frame. HUD publishes at most 10 times/s, alive counters only when changed.
+- **Krunker FPS:** cap large frame deltas, split player collision/movement over bounded substeps on slow devices, use squared distance checks and scalar movement to avoid transient bot vectors, normalize bot yaw on wrap, use pause-aware simulation time. Suspended matches park requestAnimationFrame entirely, clear stuck inputs on blur/unlock, and release scene mesh/geometry/material memory on teardown.
+- **Krunker mobile:** stable touch identifiers and `touchcancel` handling for movement, aim, ADS, jump, slide and fire; focus/visibility guards prevent unwanted continued combat.
+- **Excel Studio:** 100-row accessible preview pages instead of mounting every spreadsheet row at once; downloads still operate on complete sheet. Reject excessively large uploads/sheet dimensions, ignore superseded file reads, and reset pagination on import/sheet/filter changes.
+- **PDF Compressor:** reject PDFs above a browser-local 40 MB cap; bound raster pages to 16 megapixels, free each canvas and page, close pdf.js worker/document after inspection and recompression.
+- **Image Resizer:** stale asynchronous uploads/encodes are ignored after changing the source/settings; release canvas bitmap backing after export.
+- **Release boundary:** no build, tests, human QA, Hostinger upload or deployment performed; do not claim these modifications are verified runtime fixes.
+
+
 ## Runtime scalability and lifecycle hardening — implementation only (12 November 2026)
 
 - **Working branch:** `feat/browser-ai-background-remover`; PR #22 merged previously as `b79c74dde3817eca5f81cf7237f199a4b451bb8b`.

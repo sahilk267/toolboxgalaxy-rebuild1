@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useRef } from "react";
 import { toast } from "sonner";
 import * as XLSX from "xlsx";
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
@@ -18,6 +18,10 @@ import {
   Sparkles,
   Layers
 } from "lucide-react";
+
+const EXCEL_PREVIEW_PAGE_SIZE = 100;
+const MAX_EXCEL_FILE_BYTES = 25 * 1024 * 1024;
+const MAX_EXCEL_SHEET_ROWS = 150_000;
 
 export function syncDataToWorksheet(ws: XLSX.WorkSheet | undefined, data: any[][]): XLSX.WorkSheet {
   if (!ws) {
@@ -149,6 +153,8 @@ export default function ExcelStudioTool() {
   const [hasUserEdits, setHasUserEdits] = useState<boolean>(false);
   const [editedSheets, setEditedSheets] = useState<Set<string>>(new Set());
   const [originalRawBytes, setOriginalRawBytes] = useState<Uint8Array | null>(null);
+  const [previewPage, setPreviewPage] = useState(0);
+  const uploadRevision = useRef(0);
 
   // Load sample dataset
   const loadSampleData = () => {
@@ -186,21 +192,42 @@ export default function ExcelStudioTool() {
     setOriginalRawBytes(null);
     setHasUserEdits(false);
     setEditedSheets(new Set());
+    setSearchTerm("");
+    setPreviewPage(0);
+    uploadRevision.current++;
   };
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
+    e.target.value = ""; // Allows importing the same filename again.
     if (!file) return;
+    const revision = ++uploadRevision.current;
+    if (file.size > MAX_EXCEL_FILE_BYTES) {
+      toast.error("File exceeds 25 MB. Choose a smaller workbook to protect browser memory.");
+      return;
+    }
 
     const reader = new FileReader();
+    reader.onerror = () => {
+      if (revision === uploadRevision.current) toast.error("Could not read the selected spreadsheet.");
+    };
     reader.onload = (evt) => {
+      if (revision !== uploadRevision.current) return;
       try {
-        const arrayBuf = evt.target?.result as ArrayBuffer;
-        const bytes = new Uint8Array(arrayBuf);
+        const buffer = evt.target?.result;
+        if (!(buffer instanceof ArrayBuffer)) throw new Error("Invalid workbook input");
+        const bytes = new Uint8Array(buffer);
         const wb = XLSX.read(bytes, { type: "array", cellStyles: true, cellFormula: true, cellNF: true });
         const firstSheet = wb.SheetNames[0];
+        if (!firstSheet || !wb.Sheets[firstSheet]) throw new Error("Workbook has no readable sheets");
+        // An XLSX can expand far beyond its compressed upload size.
+        for (const sheet of wb.SheetNames) {
+          const reference = wb.Sheets[sheet]?.["!ref"];
+          if (reference && XLSX.utils.decode_range(reference).e.r + 1 > MAX_EXCEL_SHEET_ROWS) {
+            throw new Error("This workbook contains a sheet with over 150,000 rows.");
+          }
+        }
         const sheetData = XLSX.utils.sheet_to_json<any[]>(wb.Sheets[firstSheet], { header: 1 });
-        
         setWorkbook(wb);
         setSheetNames(wb.SheetNames);
         setActiveSheet(firstSheet);
@@ -208,9 +235,12 @@ export default function ExcelStudioTool() {
         setFileName(file.name);
         setOriginalRawBytes(bytes);
         setHasUserEdits(false);
-    setEditedSheets(new Set());
+        setEditedSheets(new Set());
+        setSearchTerm("");
+        setPreviewPage(0);
       } catch (err) {
-        toast.error("Failed to parse Excel/CSV file. Please check file format.");
+        toast.error(err instanceof Error && err.message.includes("150,000")
+          ? err.message : "Failed to parse Excel/CSV file. Please check file format.");
       }
     };
     reader.readAsArrayBuffer(file);
@@ -223,6 +253,7 @@ export default function ExcelStudioTool() {
       workbook.Sheets[activeSheet] = syncDataToWorksheet(workbook.Sheets[activeSheet], rawData);
     }
     setActiveSheet(sheet);
+    setPreviewPage(0);
     const targetWs = workbook.Sheets[sheet];
     const sheetData = targetWs ? XLSX.utils.sheet_to_json<any[]>(targetWs, { header: 1 }) : [];
     setRawData(sheetData);
@@ -566,6 +597,10 @@ export default function ExcelStudioTool() {
 
   const headers = filteredData[0] || [];
   const contentRows = filteredData.slice(1);
+  const previewPageCount = Math.max(1, Math.ceil(contentRows.length / EXCEL_PREVIEW_PAGE_SIZE));
+  const safePreviewPage = Math.min(previewPage, previewPageCount - 1);
+  const firstPreviewRow = safePreviewPage * EXCEL_PREVIEW_PAGE_SIZE;
+  const visibleRows = contentRows.slice(firstPreviewRow, firstPreviewRow + EXCEL_PREVIEW_PAGE_SIZE);
 
   return (
     <div className="runner-stack space-y-6">
@@ -648,7 +683,7 @@ export default function ExcelStudioTool() {
               <input
                 type="text"
                 value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
+                onChange={(e) => { setSearchTerm(e.target.value); setPreviewPage(0); }}
                 placeholder="Search cells & filter..."
                 className="w-full rounded-lg border border-white/10 bg-black/40 py-1.5 pl-8 pr-3 text-xs text-white placeholder-white/30"
               />
@@ -748,10 +783,10 @@ export default function ExcelStudioTool() {
                     </td>
                   </tr>
                 ) : (
-                  contentRows.map((row, rowIdx) => (
+                  visibleRows.map((row, rowIdx) => (
                     <tr key={rowIdx} className="hover:bg-white/[0.04] transition-colors">
                       <td className="px-3 py-2 text-white/40 font-mono text-[10px] bg-black/20">
-                        {rowIdx + 1}
+                        {firstPreviewRow + rowIdx + 1}
                       </td>
                       {headers.map((_, colIdx) => (
                         <td key={colIdx} className="px-3 py-2 border-r border-white/5 truncate max-w-xs">
@@ -765,6 +800,22 @@ export default function ExcelStudioTool() {
                 )}
               </tbody>
             </table>
+          </div>
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-white/10 px-3 py-2 text-xs text-white/70">
+            <span aria-live="polite">
+              {contentRows.length === 0 ? "No matching rows" :
+                `Previewing ${firstPreviewRow + 1}–${Math.min(firstPreviewRow + EXCEL_PREVIEW_PAGE_SIZE, contentRows.length)} of ${contentRows.length.toLocaleString()} rows`}
+              {" · Exports include the complete sheet"}
+            </span>
+            <div className="flex items-center gap-2">
+              <button type="button" className="quiet-button" disabled={safePreviewPage === 0}
+                onClick={() => setPreviewPage(page => Math.max(0, page - 1))}
+                aria-label="Previous spreadsheet preview page">Previous</button>
+              <span>Page {safePreviewPage + 1} / {previewPageCount}</span>
+              <button type="button" className="quiet-button" disabled={safePreviewPage >= previewPageCount - 1}
+                onClick={() => setPreviewPage(page => Math.min(previewPageCount - 1, page + 1))}
+                aria-label="Next spreadsheet preview page">Next</button>
+            </div>
           </div>
         </div>
       )}

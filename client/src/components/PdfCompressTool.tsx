@@ -21,6 +21,9 @@ import { useLocation } from "wouter";
 
 export type CompressionLevel = "extreme" | "recommended" | "low" | "lossless";
 
+const MAX_PDF_UPLOAD_BYTES = 40 * 1024 * 1024;
+const MAX_PDF_PAGE_PIXELS = 16_000_000;
+
 interface CompressionConfig {
   id: CompressionLevel;
   title: string;
@@ -119,19 +122,26 @@ export default function PdfCompressTool({
     try {
       setErrorMessage(null);
       setCompressedBytes(null);
+      if (file.size > MAX_PDF_UPLOAD_BYTES) {
+        throw new Error("PDF exceeds 40 MB. Choose a smaller file for safe browser-side processing.");
+      }
       const buffer = await file.arrayBuffer();
       const bytes = new Uint8Array(buffer);
 
       const loadingTask = pdfjsLib.getDocument({ data: bytes.slice() });
       const pdf = await loadingTask.promise;
-
-      setPdfBytes(bytes);
-      setFileName(file.name);
-      setOriginalSize(file.size);
-      setPageCount(pdf.numPages);
+      try {
+        setPdfBytes(bytes);
+        setFileName(file.name);
+        setOriginalSize(file.size);
+        setPageCount(pdf.numPages);
+      } finally {
+        await pdf.destroy(); // Release parser/worker memory after inspection.
+      }
     } catch (err) {
       console.error(err);
-      setErrorMessage("Could not parse PDF. Ensure the file is not password-protected or corrupt.");
+      setErrorMessage(err instanceof Error && err.message.includes("40 MB")
+        ? err.message : "Could not parse PDF. Ensure the file is not password-protected or corrupt.");
     }
   };
 
@@ -180,47 +190,54 @@ export default function PdfCompressTool({
 
         const newDoc = await PDFDocument.create();
 
-        for (let pageNum = 1; pageNum <= totalPages; pageNum++) {
-          setCurrentStep(`Optimizing page ${pageNum} of ${totalPages}...`);
-          setProgressPercent(Math.round(10 + (pageNum / totalPages) * 75));
+        try {
+          for (let pageNum = 1; pageNum <= totalPages; pageNum++) {
+            setCurrentStep(`Optimizing page ${pageNum} of ${totalPages}...`);
+            setProgressPercent(Math.round(10 + (pageNum / totalPages) * 75));
 
-          const page = await pdf.getPage(pageNum);
-          const viewport = page.getViewport({ scale: profile.scale });
+            const page = await pdf.getPage(pageNum);
+            let canvas: HTMLCanvasElement | null = null;
+            try {
+              const viewport = page.getViewport({ scale: profile.scale });
+              const pixels = Math.ceil(viewport.width) * Math.ceil(viewport.height);
+              if (!Number.isFinite(pixels) || pixels > MAX_PDF_PAGE_PIXELS) {
+                throw new Error(`Page ${pageNum} exceeds the 16-megapixel canvas budget. Use a lower-resolution compression profile.`);
+              }
+              canvas = document.createElement("canvas");
+              canvas.width = Math.max(1, Math.ceil(viewport.width));
+              canvas.height = Math.max(1, Math.ceil(viewport.height));
+              const ctx = canvas.getContext("2d", { willReadFrequently: false });
+              if (!ctx) throw new Error("Could not initialize canvas rendering context.");
 
-          const canvas = document.createElement("canvas");
-          canvas.width = viewport.width;
-          canvas.height = viewport.height;
-          const ctx = canvas.getContext("2d", { willReadFrequently: true });
+              await (page.render as any)({
+                canvasContext: ctx,
+                viewport,
+                intent: "display",
+              }).promise;
 
-          if (!ctx) throw new Error("Could not initialize canvas rendering context.");
+              const blob = await new Promise<Blob | null>(resolve =>
+                canvas!.toBlob(resolve, "image/jpeg", profile.quality),
+              );
+              if (!blob) throw new Error(`Compression failed on page ${pageNum}.`);
 
-          // Render page to canvas with smooth graphics
-          await (page.render as any)({
-            canvasContext: ctx,
-            viewport,
-            intent: "display",
-          }).promise;
-
-          // Convert to compressed JPEG blob
-          const blob = await new Promise<Blob | null>((resolve) =>
-            canvas.toBlob((b) => resolve(b), "image/jpeg", profile.quality)
-          );
-
-          if (!blob) throw new Error(`Compression failed on page ${pageNum}.`);
-
-          const imgBuffer = await blob.arrayBuffer();
-          const embeddedImg = await newDoc.embedJpg(new Uint8Array(imgBuffer));
-
-          // Get original PDF point dimensions so page layout is preserved
-          const origViewport = page.getViewport({ scale: 1.0 });
-          const newPage = newDoc.addPage([origViewport.width, origViewport.height]);
-
-          newPage.drawImage(embeddedImg, {
-            x: 0,
-            y: 0,
-            width: origViewport.width,
-            height: origViewport.height,
-          });
+              const embeddedImg = await newDoc.embedJpg(new Uint8Array(await blob.arrayBuffer()));
+              const origViewport = page.getViewport({ scale: 1.0 });
+              const newPage = newDoc.addPage([origViewport.width, origViewport.height]);
+              newPage.drawImage(embeddedImg, {
+                x: 0, y: 0, width: origViewport.width, height: origViewport.height,
+              });
+            } finally {
+              if (canvas) {
+                // Release GPU/canvas backing memory before processing the next page.
+                canvas.width = 0;
+                canvas.height = 0;
+              }
+              page.cleanup();
+            }
+          }
+        } finally {
+          // pdf.js owns an independent copy; explicitly close worker & document.
+          await pdf.destroy();
         }
 
         setCurrentStep("Packaging final compressed PDF stream...");
