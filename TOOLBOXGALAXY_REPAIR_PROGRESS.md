@@ -10,7 +10,8 @@
 - **AI Background Remover:** free large full-resolution canvas backing after matte composition and final background-color export while preserving full-size output.
 - **Base64 Workbench:** prevent superseded asynchronous file reads from overwriting the latest chosen file, including after reset.
 - **PDF Editor:** lazily render only thumbnails close to the viewport using IntersectionObserver, cap thumbnail bitmap area to 1 megapixel, release each independent pdf.js parser/worker promptly, cancel obsolete render tasks, and enforce a 24-megapixel main-page canvas budget. Precompute annotation badge counts in a single pass. Uploads above 50 MB are refused before browser allocation.
-- **Image Crop/Rotate Editor:** avoid stale output after changing crop/rotation/quality or switching files mid-render, release canvas backing after encoding, and make same-file re-import reliable.
+- **Image Crop/Rotate Editor:** avoid stale output after changing crop/rotation/quality or switching files mid-render, release canvas backing after encoding, and make same-file re-import reliable. Invalidation also unlocks the busy state so rapid option edits cannot leave the editor disabled.
+- **Image/EXIF invalid uploads:** clear any superseded busy indicator when a newly selected file fails validation.
 - **Verification boundary:** no executed unit tests, gameplay, builds, performance benchmarks or Hostinger deployment; this document records source changes, not verified runtime behavior.
 
 

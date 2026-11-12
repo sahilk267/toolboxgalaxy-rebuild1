@@ -19,6 +19,7 @@ export default function ImageTransformTool() {
   const sourceSummary = useMemo(() => source ? `${source.width} × ${source.height} · ${describeBytes(source.file.size)}` : "PNG, JPG, or WebP · up to 20 MB / 8,192 px edge", [source]);
   const clearOutput = () => {
     renderRevision.current++;
+    setWorking(false); // A superseded encode must not leave the UI locked.
     setOutput(null);
   };
   const choose = async (event: ChangeEvent<HTMLInputElement>) => {
@@ -27,10 +28,10 @@ export default function ImageTransformTool() {
     if (!file) return;
     const revision = ++fileRevision.current;
     const fileError = imageFileError(file);
-    if (fileError) { setError(fileError); return; }
-    setWorking(true);
+    if (fileError) { setWorking(false); setError(fileError); return; }
     setError("");
     clearOutput();
+    setWorking(true);
     try {
       const next = await readSource(file);
       if (revision !== fileRevision.current) {

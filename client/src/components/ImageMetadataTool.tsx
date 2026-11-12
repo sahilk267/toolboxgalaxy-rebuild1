@@ -67,7 +67,7 @@ export default function ImageMetadataTool() {
     if (!file) return;
     const revision = ++operationRevision.current;
     const fileError = metadataFileError(file);
-    if (fileError) { setError(fileError); return; }
+    if (fileError) { setWorking(false); setError(fileError); return; }
 
     setWorking(true);
     setError("");
