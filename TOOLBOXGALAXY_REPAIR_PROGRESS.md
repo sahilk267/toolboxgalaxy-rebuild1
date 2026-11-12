@@ -1,5 +1,13 @@
 # ToolboxGalaxy Repair & Verification Progress Ledger
 
+## PDF OCR long-session worker and bitmap lifecycle — 12 November 2026
+
+- Both text OCR and searchable PDF generation now dispose the Tesseract worker and PDF.js document in `finally`, including failure paths after engine setup.
+- OCR page bitmaps are limited to approximately 15.8 megapixels and 8,192px per edge, automatically scaling down unusually large PDF pages; the searchable layer uses the actual render scale when calculating text coordinates.
+- Every page canvas bitmap is released and `page.cleanup()` is called before advancing to the next page. Input PDFs above 40 MB are rejected before expensive OCR initialization.
+- This is source implementation only; no tests, build, OCR accuracy assessment or deployment were performed.
+
+
 ## PDF conversion & pointer memory follow-up — 12 November 2026
 
 - **Images-to-PDF:** replace memory-expensive base64 previews with Blob URLs; read images sequentially; bound queues at 40 images / 100 MB; release URLs on removal/unmount and canvas backing after conversion. Preserve file ordering and PNG/JPEG/WebP output behavior.
