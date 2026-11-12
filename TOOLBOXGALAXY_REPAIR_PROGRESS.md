@@ -1,5 +1,18 @@
 # ToolboxGalaxy Repair & Verification Progress Ledger
 
+## PDF editor P0 data-integrity stabilization — 12 November 2026
+
+**Working branch:** `feat/browser-ai-background-remover`. Source implementation and Git pushes only. No build, automated tests, browser QA, real-PDF comparison or hosting deployment were performed.
+
+- **History now includes the document:** Undo/Redo stores immutable PDF byte references, page count/index, page rotations and copied annotations, rather than annotations/rotations only. Document page delete/insert/duplicate/reorder actions record pre-mutation snapshots after successful save. New sample/upload sessions clear outdated history.
+- **Image annotation safety:** History copies `Uint8Array` image bytes and drawing points without JSON serialization, avoiding typed-array corruption. Page duplication remaps following-page annotations and duplicates the source page's unsaved visual annotations.
+- **In-place text re-edit/cancel:** Reopening an edited annotation no longer deletes it before Save. Save replaces the matching annotation ID; Cancel retains the prior edit. This is still a visual overlay workflow, **not a native PDF text-stream replacement**.
+- **Async extraction:** PDF.js text scanning results from superseded page/file/tool sessions are ignored; stale highlights are cleared and extraction completion only updates its active session. PDF.js extraction documents are destroyed in `finally`.
+- **Pointer history:** Existing mouse drag/resize operations snapshot geometry at interaction start instead of after change. This restores a useful Undo target but mobile touch/pointer behavior still needs subsequent work.
+- **Export renderer cleanup:** The optional PDF.js renderer used for raster redactions is destroyed in an export `finally` block, including failure paths.
+- **Known gaps not solved:** White rectangular masking, accurate original-text replacement, Unicode font embedding, secure redaction certification, ACRO form editing, large-PDF benchmarks and visual fidelity remain open.
+- **Release boundary:** Treat all modifications as *unverified implementation candidates* until typecheck, browser workflows, controlled real-PDF outputs and memory checks complete.
+
 ## PDF Merge/Split guardrails — 12 November 2026
 
 - Merge input queues are limited to 20 PDFs, 30 MB per document and 100 MB combined; uploads use a sequential loader, a race guard and same-file re-selection support.
