@@ -9,6 +9,7 @@
 - **Image Metadata Remover:** selection/reset generations reject late decode/EXIF/re-export completions, release unused object URLs and canvas backings, and allow same-file re-selection; unreadable EXIF does not block safe image export.
 - **AI Background Remover:** free large full-resolution canvas backing after matte composition and final background-color export while preserving full-size output.
 - **Base64 Workbench:** prevent superseded asynchronous file reads from overwriting the latest chosen file, including after reset.
+- **PDF Editor:** lazily render only thumbnails close to the viewport using IntersectionObserver, cap thumbnail bitmap area to 1 megapixel, release each independent pdf.js parser/worker promptly, cancel obsolete render tasks, and enforce a 24-megapixel main-page canvas budget. Precompute annotation badge counts in a single pass. Uploads above 50 MB are refused before browser allocation.
 - **Verification boundary:** no executed unit tests, gameplay, builds, performance benchmarks or Hostinger deployment; this document records source changes, not verified runtime behavior.
 
 

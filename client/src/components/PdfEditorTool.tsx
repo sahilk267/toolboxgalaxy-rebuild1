@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { PDFDocument, rgb, StandardFonts, degrees, PDFString } from "pdf-lib";
 import * as pdfjsLib from "pdfjs-dist";
 import { trackPageView } from "../lib/analytics";
@@ -265,39 +265,75 @@ function PdfPageThumbnail({
   onDrop,
 }: PdfPageThumbnailProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const thumbnailRef = useRef<HTMLDivElement | null>(null);
+  const [visible, setVisible] = useState(false);
 
   useEffect(() => {
-    let isCancelled = false;
+    const element = thumbnailRef.current;
+    if (!element) return;
+    if (typeof IntersectionObserver === "undefined") {
+      setVisible(true);
+      return;
+    }
+    // A 200-page PDF should not create 200 workers or full-file copies on load.
+    const observer = new IntersectionObserver(entries => {
+      if (entries.some(entry => entry.isIntersecting)) {
+        setVisible(true);
+        observer.disconnect();
+      }
+    }, { rootMargin: "240px" });
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, []);
+
+  useEffect(() => {
+    if (!visible) return;
+    let cancelled = false;
+    let loadingTask: ReturnType<typeof pdfjsLib.getDocument> | null = null;
+    let renderTask: { cancel: () => void } | null = null;
     const renderThumb = async () => {
       try {
-        const loadingTask = pdfjsLib.getDocument({ data: pdfBytes.slice() });
+        loadingTask = pdfjsLib.getDocument({ data: pdfBytes.slice() });
         const pdf = await loadingTask.promise;
-        if (isCancelled) return;
-        const page = await pdf.getPage(pageIndex + 1);
-        const viewport = page.getViewport({ scale: 0.22, rotation });
-        const canvas = canvasRef.current;
-        if (!canvas) return;
-        const ctx = canvas.getContext("2d");
-        if (!ctx) return;
-        canvas.width = viewport.width;
-        canvas.height = viewport.height;
-        await (page.render as any)({
-          canvasContext: ctx,
-          viewport,
-          canvas,
-        }).promise;
+        try {
+          if (cancelled) return;
+          const page = await pdf.getPage(pageIndex + 1);
+          if (cancelled) return;
+          const full = page.getViewport({ scale: 0.22, rotation });
+          // Pages can have unusual dimensions; thumbnails cap their backing
+          // bitmap independently of CSS display dimensions.
+          const pixels = Math.max(1, full.width * full.height);
+          const scale = 0.22 * Math.min(1, Math.sqrt(1_000_000 / pixels));
+          const viewport = scale < 0.22 ? page.getViewport({ scale, rotation }) : full;
+          const canvas = canvasRef.current;
+          if (!canvas || cancelled) return;
+          const ctx = canvas.getContext("2d");
+          if (!ctx) return;
+          canvas.width = Math.max(1, Math.ceil(viewport.width));
+          canvas.height = Math.max(1, Math.ceil(viewport.height));
+          renderTask = (page.render as any)({ canvasContext: ctx, viewport, canvas });
+          await (renderTask as any).promise;
+          page.cleanup();
+        } finally {
+          // pdf.js page proxies, file copies and workers must not survive
+          // longer than this visible thumbnail render.
+          await pdf.destroy();
+        }
       } catch {
-        // ignore cancelled renders
+        // Cancelled or unsupported thumbnail: keep a blank placeholder.
       }
     };
-    renderThumb();
+    void renderThumb();
     return () => {
-      isCancelled = true;
+      cancelled = true;
+      renderTask?.cancel();
+      void loadingTask?.destroy().catch(() => {});
     };
-  }, [pdfBytes, pageIndex, rotation]);
+  }, [visible, pdfBytes, pageIndex, rotation]);
 
   return (
     <div
+      ref={thumbnailRef}
       draggable
       onDragStart={onDragStart}
       onDragOver={onDragOver}
@@ -410,6 +446,12 @@ export default function PdfEditorTool({
   const [currentPage, setCurrentPage] = useState<number>(0);
   const [pageRotations, setPageRotations] = useState<number[]>([]);
   const [annotations, setAnnotations] = useState<Annotation[]>([]);
+  const annotationCounts = useMemo(() => {
+    const counts = new Map<number, number>();
+    for (const item of annotations)
+      counts.set(item.pageIndex, (counts.get(item.pageIndex) ?? 0) + 1);
+    return counts;
+  }, [annotations]);
   const [activeTool, setActiveTool] = useState<
     "select" | "smart-edit" | "text" | "whiteout" | "draw" | "stamp" | "image" | "link" | "highlight" | "shape"
   >("smart-edit");
@@ -825,7 +867,12 @@ export default function PdfEditorTool({
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
+    e.target.value = "";
     if (!file) return;
+    if (file.size > 50 * 1024 * 1024) {
+      showToast("PDF exceeds the 50 MB browser editing limit.");
+      return;
+    }
     setIsProcessing(true);
     try {
       const buffer = await file.arrayBuffer();
@@ -856,41 +903,46 @@ export default function PdfEditorTool({
   // Render current page to canvas using pdfjs-dist
   useEffect(() => {
     if (!pdfBytes || numPages === 0) return;
-    let isCancelled = false;
+    let cancelled = false;
+    let loadingTask: ReturnType<typeof pdfjsLib.getDocument> | null = null;
+    let renderTask: { cancel: () => void } | null = null;
 
     const renderPage = async () => {
       try {
-        const loadingTask = pdfjsLib.getDocument({ data: pdfBytes.slice() });
+        loadingTask = pdfjsLib.getDocument({ data: pdfBytes.slice() });
         const pdf = await loadingTask.promise;
-        if (isCancelled) return;
-        
-        const page = await pdf.getPage(currentPage + 1);
-        const rotation = pageRotations[currentPage] || 0;
-        const viewport = page.getViewport({ scale: 1.5 * zoomScale, rotation });
-        
-        const canvas = canvasRef.current;
-        if (!canvas) return;
-        
-        const context = canvas.getContext("2d");
-        if (!context) return;
-        
-        canvas.height = viewport.height;
-        canvas.width = viewport.width;
-        
-        const renderContext = {
-          canvasContext: context,
-          viewport: viewport,
-          canvas: canvas,
-        };
-        await (page.render as any)(renderContext).promise;
-      } catch (e) {
-        console.warn("Canvas render notice:", e);
+        try {
+          if (cancelled) return;
+          const page = await pdf.getPage(currentPage + 1);
+          if (cancelled) return;
+          const rotation = pageRotations[currentPage] || 0;
+          const viewport = page.getViewport({ scale: 1.5 * zoomScale, rotation });
+          // Avoid allocating multi-hundred-megapixel canvases on extreme
+          // page dimensions / zoom. Keep the original PDF data unchanged.
+          if (Math.ceil(viewport.width) * Math.ceil(viewport.height) > 24_000_000)
+            throw new Error("Page zoom exceeds browser canvas budget; zoom out.");
+          const canvas = canvasRef.current;
+          if (!canvas || cancelled) return;
+          const context = canvas.getContext("2d");
+          if (!context) return;
+          canvas.height = Math.max(1, Math.ceil(viewport.height));
+          canvas.width = Math.max(1, Math.ceil(viewport.width));
+          renderTask = (page.render as any)({ canvasContext: context, viewport, canvas });
+          await (renderTask as any).promise;
+          page.cleanup();
+        } finally {
+          await pdf.destroy();
+        }
+      } catch (reason) {
+        if (!cancelled) console.warn("Canvas render notice:", reason);
       }
     };
 
-    renderPage();
+    void renderPage();
     return () => {
-      isCancelled = true;
+      cancelled = true;
+      renderTask?.cancel();
+      void loadingTask?.destroy().catch(() => {});
     };
   }, [pdfBytes, currentPage, pageRotations, zoomScale]);
 
@@ -3715,7 +3767,7 @@ export default function PdfEditorTool({
                       pdfBytes={pdfBytes!}
                       isActive={currentPage === idx}
                       rotation={pageRotations[idx] || 0}
-                      annotationCount={annotations.filter((a) => a.pageIndex === idx).length}
+                      annotationCount={annotationCounts.get(idx) || 0}
                       onClick={() => {
                         setCurrentPage(idx);
                         setSelectedId(null);
