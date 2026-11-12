@@ -88,6 +88,11 @@ import {
 } from "../lib/pdfLayoutEngine";
 import { sanitizeWinAnsiText } from "../lib/pdfTextSanitizer";
 import {
+  inspectNativeFormFields,
+  updateNativeFormField,
+  type NativeFormField,
+} from "../lib/pdfNativeFormEditing";
+import {
   extractInteractiveTextBlocks,
   DetectedTextBlock,
   DetectedFontProfile,
@@ -563,6 +568,9 @@ export default function PdfEditorTool({
   const [reeditingAnnotationId, setReeditingAnnotationId] = useState<string | null>(null);
   const [inlineDraftText, setInlineDraftText] = useState<string>("");
   const [smartEditSearchQuery, setSmartEditSearchQuery] = useState<string>("");
+  const [nativeFormFields, setNativeFormFields] = useState<NativeFormField[]>([]);
+  const [nativeFormDrafts, setNativeFormDrafts] = useState<Record<string, string | boolean>>({});
+  const [nativeFormsError, setNativeFormsError] = useState<string | null>(null);
 
   // Sync initialPdfBytes or sessionStorage load on mount
   useEffect(() => {
@@ -652,6 +660,26 @@ export default function PdfEditorTool({
     }
     return () => { cancelled = true; };
   }, [pdfBytes, currentPage, activeTool]);
+
+  // Form fields are genuine PDF objects; never confuse them with whiteout edits.
+  useEffect(() => {
+    let cancelled = false;
+    setNativeFormFields([]);
+    setNativeFormDrafts({});
+    setNativeFormsError(null);
+    if (pdfBytes) {
+      inspectNativeFormFields(pdfBytes)
+        .then((fields) => {
+          if (cancelled) return;
+          setNativeFormFields(fields);
+          setNativeFormDrafts(Object.fromEntries(fields.map((field) => [field.name, field.value])));
+        })
+        .catch((error) => {
+          if (!cancelled) setNativeFormsError(error instanceof Error ? error.message : "Could not inspect PDF forms.");
+        });
+    }
+    return () => { cancelled = true; };
+  }, [pdfBytes]);
 
   // Canvas drawing state
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -1807,6 +1835,22 @@ export default function PdfEditorTool({
     };
   };
 
+  const saveNativeFormField = async (field: NativeFormField, value: string | boolean) => {
+    if (!pdfBytes || isProcessing) return;
+    const original = captureSnapshot();
+    setIsProcessing(true);
+    try {
+      const updated = await updateNativeFormField(pdfBytes, field.name, value);
+      pushSnapshot(original);
+      setPdfBytes(updated);
+      showToast(`Saved native PDF form field: ${field.name}`);
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : "Could not save PDF field.");
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
   // Export & Download Modified PDF
   const exportModifiedPdf = async () => {
     if (!pdfBytes) return;
@@ -2740,15 +2784,73 @@ export default function PdfEditorTool({
                 </div>
               </div>
 
+              {/* Native PDF AcroForm editor: writes real field values to document bytes. */}
+              {(nativeFormFields.length > 0 || nativeFormsError) && (
+                <section className="rounded-lg border border-emerald-500/30 bg-emerald-500/[0.05] p-3 space-y-3">
+                  <div className="text-xs font-semibold text-emerald-300">Native PDF Form Fields</div>
+                  <p className="text-[11px] text-white/70">
+                    These controls change existing PDF form values, not visual text overlays.
+                    Saved values are checked by reopening the PDF. Signed PDFs may lose signature validity when changed.
+                  </p>
+                  {nativeFormsError && <p role="alert" className="text-xs text-amber-300">{nativeFormsError}</p>}
+                  <div className="max-h-72 overflow-y-auto space-y-3">
+                    {nativeFormFields.map((field) => (
+                      <div key={field.name} className="rounded border border-white/10 bg-black/20 p-2 space-y-1.5">
+                        <label className="block text-[11px] font-medium text-white/90 break-all">{field.name}</label>
+                        {field.kind === "text" ? (
+                          <textarea
+                            value={String(nativeFormDrafts[field.name] ?? "")}
+                            disabled={field.readOnly || isProcessing}
+                            onChange={(event) => setNativeFormDrafts((prev) => ({ ...prev, [field.name]: event.target.value }))}
+                            maxLength={20000}
+                            rows={2}
+                            className="w-full rounded border border-white/20 bg-black/40 p-2 text-xs text-white disabled:opacity-50"
+                          />
+                        ) : field.kind === "checkbox" ? (
+                          <label className="flex items-center gap-2 text-xs text-white/80">
+                            <input
+                              type="checkbox"
+                              checked={Boolean(nativeFormDrafts[field.name])}
+                              disabled={field.readOnly || isProcessing}
+                              onChange={(event) => setNativeFormDrafts((prev) => ({ ...prev, [field.name]: event.target.checked }))}
+                            />
+                            Checked
+                          </label>
+                        ) : (
+                          <select
+                            value={String(nativeFormDrafts[field.name] ?? "")}
+                            disabled={field.readOnly || isProcessing}
+                            onChange={(event) => setNativeFormDrafts((prev) => ({ ...prev, [field.name]: event.target.value }))}
+                            className="w-full rounded border border-white/20 bg-black/40 p-2 text-xs text-white disabled:opacity-50"
+                          >
+                            {field.value === "" && <option value="">Choose a value</option>}
+                            {field.options.map((option) => <option key={option} value={option}>{option}</option>)}
+                          </select>
+                        )}
+                        <button
+                          type="button"
+                          disabled={isProcessing || field.readOnly || nativeFormDrafts[field.name] === field.value}
+                          onClick={() => void saveNativeFormField(field, nativeFormDrafts[field.name] ?? field.value)}
+                          className="rounded border border-emerald-400/40 px-2 py-1 text-[11px] text-emerald-200 disabled:opacity-40 hover:bg-emerald-400/10"
+                        >
+                          Apply to PDF
+                        </button>
+                        {field.readOnly && <span className="ml-2 text-[10px] text-white/50">Read-only</span>}
+                      </div>
+                    ))}
+                  </div>
+                </section>
+              )}
+
               {/* Intelligent Auto-Font & In-Place Text Editing (Editing Mode) */}
               {activeTool === "smart-edit" && (
                 <div className="space-y-3 rounded-lg border border-sky-500/30 bg-sky-500/[0.05] p-3.5 shadow-inner">
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-semibold text-white/90 flex items-center gap-1.5">
-                      <Sparkles size={14} className="text-[#c7f36b]" /> Editing Mode
+                      <Sparkles size={14} className="text-[#c7f36b]" /> Visual Text Replacement
                     </span>
                     <span className="text-[10px] font-mono text-[#c7f36b] bg-[#c7f36b]/15 px-1.5 py-0.5 rounded border border-[#c7f36b]/30">
-                      DEFAULT · ACTIVE
+                      OVERLAY MODE
                     </span>
                   </div>
 
@@ -2759,7 +2861,7 @@ export default function PdfEditorTool({
                     </div>
                   ) : (
                     <p className="text-[11px] text-white/70 leading-relaxed">
-                      💡 <b>Hover and click directly on any text</b> on the page. The engine will detect its original font family, size, weight, and color so you can edit it in place.
+                      <b>Visual replacement only:</b> clicking source text creates a cover-and-add overlay. Original PDF words remain searchable/copyable, and backgrounds/fonts may not match. Use Native PDF Form Fields above when available.
                     </p>
                   )}
 
