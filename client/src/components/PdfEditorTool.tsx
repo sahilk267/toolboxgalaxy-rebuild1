@@ -720,9 +720,23 @@ export default function PdfEditorTool({
     setCanUndo(false);
     setCanRedo(false);
   };
+  // Bounded history: native form edits may create a complete new PDF revision.
+  // Avoid retaining up to 30 * 50 MB PDF buffers during long editing sessions.
+  const capHistory = (items: EditorSnapshot[]) => {
+    while (items.length > 12) items.shift();
+    const unique = new Set<Uint8Array>();
+    const size = () => {
+      unique.clear();
+      for (const item of items) if (item.pdfBytes) unique.add(item.pdfBytes);
+      let bytes = 0;
+      for (const buffer of unique) bytes += buffer.byteLength;
+      return bytes;
+    };
+    while (items.length > 1 && size() > 96 * 1024 * 1024) items.shift();
+  };
   const pushSnapshot = (snapshot: EditorSnapshot) => {
     undoStackRef.current.push(snapshot);
-    if (undoStackRef.current.length > 30) undoStackRef.current.shift();
+    capHistory(undoStackRef.current);
     redoStackRef.current = [];
     setCanUndo(true);
     setCanRedo(false);
@@ -743,6 +757,7 @@ export default function PdfEditorTool({
     const prev = undoStackRef.current.pop();
     if (!prev) return;
     redoStackRef.current.push(captureSnapshot());
+    capHistory(redoStackRef.current);
     restoreSnapshot(prev);
     setCanUndo(undoStackRef.current.length > 0);
     setCanRedo(true);
@@ -752,7 +767,7 @@ export default function PdfEditorTool({
     const next = redoStackRef.current.pop();
     if (!next) return;
     undoStackRef.current.push(captureSnapshot());
-    if (undoStackRef.current.length > 30) undoStackRef.current.shift();
+    capHistory(undoStackRef.current);
     restoreSnapshot(next);
     setCanUndo(true);
     setCanRedo(redoStackRef.current.length > 0);
