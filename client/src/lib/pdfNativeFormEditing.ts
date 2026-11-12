@@ -37,7 +37,11 @@ export async function inspectNativeFormFields(bytes: Uint8Array): Promise<Native
     } else if (field instanceof PDFRadioGroup) {
       result.push({ name, kind: "radio", value: field.getSelected() ?? "", options: field.getOptions(), readOnly });
     } else if (field instanceof PDFOptionList) {
-      result.push({ name, kind: "list", value: field.getSelected()[0] ?? "", options: field.getOptions(), readOnly });
+      // A one-choice HTML select must not drop additional PDF selections.
+      // Keep multiselect fields untouched until a dedicated multi-value UI exists.
+      if (!field.isMultiselect() && field.getSelected().length <= 1) {
+        result.push({ name, kind: "list", value: field.getSelected()[0] ?? "", options: field.getOptions(), readOnly });
+      }
     }
     // Unsupported widgets remain intact in the original PDF.
   }
