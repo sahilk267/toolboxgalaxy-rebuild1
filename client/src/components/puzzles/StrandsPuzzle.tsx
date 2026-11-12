@@ -60,6 +60,7 @@ export default function StrandsPuzzle() {
 
   const gridContainerRef = useRef<HTMLDivElement>(null);
   const pointerMovedRef = useRef(false);
+  const pointerActiveRef = useRef(false);
 
   // Total words to find: theme words + 1 spangram
   const totalTargetWords = edition.themeWords.length + 1;
@@ -221,6 +222,7 @@ export default function StrandsPuzzle() {
   const handlePointerDown = (c: CellCoord) => {
     if (isSolved || usedCells.has(cellKey(c))) return;
     pointerMovedRef.current = false;
+    pointerActiveRef.current = true;
     setIsPointerDown(true);
     // Taps append to the selection; dragging begins from its first cell.
     if (currentPath.length && !isPointerDown) addCell(c);
@@ -237,7 +239,8 @@ export default function StrandsPuzzle() {
   };
 
   const handlePointerUp = () => {
-    if (!isPointerDown) return;
+    if (!pointerActiveRef.current) return;
+    pointerActiveRef.current = false;
     setIsPointerDown(false);
     // A drag submits the selected path; tapping leaves it available for
     // successive taps or the explicit Submit button on touch devices.
@@ -250,6 +253,7 @@ export default function StrandsPuzzle() {
     // Release outside the grid must not leave all cells in drag mode.
     const release = () => handlePointerUp();
     const cancel = () => {
+      pointerActiveRef.current = false;
       pointerMovedRef.current = false;
       setIsPointerDown(false);
     };
@@ -281,6 +285,7 @@ export default function StrandsPuzzle() {
     audio.current.play("rotate");
     setCurrentPath([]);
     setIsPointerDown(false);
+    pointerActiveRef.current = false;
     pointerMovedRef.current = false;
     setFoundWords([]);
     setFoundSpangram(null);
@@ -449,6 +454,19 @@ Play free at: ${window.location.origin}/games/strands`;
         {/* 8 rows x 6 cols Strands Grid */}
         <div 
           ref={gridContainerRef}
+          onPointerUp={handlePointerUp}
+          onPointerCancel={() => {
+            pointerActiveRef.current = false;
+            pointerMovedRef.current = false;
+            setIsPointerDown(false);
+          }}
+          onPointerLeave={() => {
+            if (pointerActiveRef.current) {
+              pointerActiveRef.current = false;
+              pointerMovedRef.current = false;
+              setIsPointerDown(false);
+            }
+          }}
           className={`grid grid-cols-6 gap-1.5 sm:gap-2 p-2 sm:p-3 bg-[#0a1020] border border-white/10 rounded-2xl shadow-2xl relative select-none touch-none ${isShaking ? "animate-shake" : ""}`}
         >
           {edition.grid.map((rowArr, r) =>

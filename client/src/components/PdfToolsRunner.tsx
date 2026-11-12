@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { PDFDocument } from "pdf-lib";
 import { trackPageView } from "@/lib/analytics";
 import { imagesPdfDimensionError, imagesPdfFileError, imagesPdfPlacement } from "@/lib/imagesToPdfLayout";
@@ -417,41 +417,39 @@ interface ImageItem {
   id: string;
   name: string;
   type: string;
-  dataUrl: string;
+  previewUrl: string;
   bytes: Uint8Array;
 }
 
-async function renderImageToPngBytes(dataUrl: string): Promise<Uint8Array> {
-  return new Promise((resolve, reject) => {
-    const el = new Image();
-    el.crossOrigin = "anonymous";
-    el.onload = () => {
-      try {
-        const canvas = document.createElement("canvas");
-        canvas.width = el.naturalWidth || el.width;
-        canvas.height = el.naturalHeight || el.height;
-        const invalid = imagesPdfDimensionError(canvas.width, canvas.height);
-        if (invalid) throw new Error(invalid);
-        const ctx = canvas.getContext("2d");
-        if (!ctx) {
-          reject(new Error("Unable to obtain 2D rendering context"));
-          return;
-        }
-        ctx.drawImage(el, 0, 0);
-        canvas.toBlob((blob) => {
-          if (!blob) {
-            reject(new Error("Unable to serialize canvas to PNG blob"));
-            return;
-          }
-          blob.arrayBuffer().then((buf) => resolve(new Uint8Array(buf))).catch(reject);
-        }, "image/png");
-      } catch (e) {
-        reject(e);
-      }
-    };
-    el.onerror = () => reject(new Error("Failed to load and decode image data"));
-    el.src = dataUrl;
+const MAX_IMAGES_PER_PDF = 40;
+const MAX_QUEUED_IMAGE_BYTES = 100 * 1024 * 1024;
+
+async function renderImageToPngBytes(previewUrl: string): Promise<Uint8Array> {
+  const image = await new Promise<HTMLImageElement>((resolve, reject) => {
+    const element = new Image();
+    element.onload = () => resolve(element);
+    element.onerror = () => reject(new Error("Failed to decode image for PDF"));
+    element.src = previewUrl;
   });
+  const canvas = document.createElement("canvas");
+  try {
+    canvas.width = image.naturalWidth || image.width;
+    canvas.height = image.naturalHeight || image.height;
+    const invalid = imagesPdfDimensionError(canvas.width, canvas.height);
+    if (invalid) throw new Error(invalid);
+    const ctx = canvas.getContext("2d");
+    if (!ctx) throw new Error("Unable to obtain 2D canvas context");
+    ctx.drawImage(image, 0, 0);
+    const blob = await new Promise<Blob>((resolve, reject) =>
+      canvas.toBlob(value =>
+        value ? resolve(value) : reject(new Error("Unable to serialize canvas to PNG")),
+        "image/png"),
+    );
+    return new Uint8Array(await blob.arrayBuffer());
+  } finally {
+    canvas.width = 0;
+    canvas.height = 0;
+  }
 }
 
 export function ImagesToPdfTool() {
@@ -461,59 +459,56 @@ export function ImagesToPdfTool() {
   const [margin, setMargin] = useState<number>(20);
   const [isGenerating, setIsGenerating] = useState(false);
   const [isDone, setIsDone] = useState(false);
+  const imageUrlsRef = useRef(new Set<string>());
+  useEffect(() => () => {
+    for (const url of imageUrlsRef.current) URL.revokeObjectURL(url);
+    imageUrlsRef.current.clear();
+  }, []);
 
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const selected = Array.from(e.target.files ?? []);
     e.target.value = "";
-    if (selected.length === 0) return;
-
-    // FileReader completion timing must not reorder a multi-file PDF document.
-    // Promise.all returns entries in the original input selection order.
-    const loaded = await Promise.all(selected.map(async (file, index): Promise<{
-      item: ImageItem | null; error: string | null;
-    }> => {
-      const validation = imagesPdfFileError(file);
-      if (validation) return { item: null, error: `${file.name}: ${validation}` };
-      try {
-        const [buffer, dataUrl] = await Promise.all([
-          file.arrayBuffer(),
-          new Promise<string>((resolve, reject) => {
-            const reader = new FileReader();
-            reader.onload = () => typeof reader.result === "string"
-              ? resolve(reader.result)
-              : reject(new Error("Image could not be previewed."));
-            reader.onerror = () => reject(new Error("Image could not be read."));
-            reader.readAsDataURL(file);
-          }),
-        ]);
-        return {
-          item: {
-            id: `${Date.now()}-${index}-${Math.random()}`,
-            name: file.name,
-            type: file.type,
-            dataUrl,
-            bytes: new Uint8Array(buffer),
-          },
-          error: null,
-        };
-      } catch (error) {
-        return {
-          item: null,
-          error: `${file.name}: ${error instanceof Error ? error.message : "Unable to read file"}`,
-        };
-      }
-    }));
-
-    const valid = loaded.flatMap((entry) => entry.item ? [entry.item] : []);
-    const rejected = loaded.flatMap((entry) => entry.error ? [entry.error] : []);
-    if (valid.length > 0) setImages((prev) => [...prev, ...valid]);
-    if (rejected.length > 0) {
-      alert("Skipped unsupported or unreadable images:\n" + rejected.join("\n"));
+    if (selected.length === 0 || isGenerating) return;
+    if (images.length + selected.length > MAX_IMAGES_PER_PDF) {
+      alert(`Choose at most ${MAX_IMAGES_PER_PDF} images for a browser-side PDF.`);
+      return;
     }
+    let totalBytes = images.reduce((sum, item) => sum + item.bytes.length, 0);
+    const valid: ImageItem[] = [];
+    const rejected: string[] = [];
+    // Sequential reads avoid many simultaneous file allocations.
+    for (const [index, file] of selected.entries()) {
+      const validation = imagesPdfFileError(file);
+      if (validation) { rejected.push(`${file.name}: ${validation}`); continue; }
+      if (totalBytes + file.size > MAX_QUEUED_IMAGE_BYTES) {
+        rejected.push(`${file.name}: combined images exceed the 100 MB browser limit.`);
+        continue;
+      }
+      try {
+        const bytes = new Uint8Array(await file.arrayBuffer());
+        const previewUrl = URL.createObjectURL(file);
+        imageUrlsRef.current.add(previewUrl);
+        valid.push({
+          id: `${Date.now()}-${index}-${Math.random()}`,
+          name: file.name, type: file.type, previewUrl, bytes,
+        });
+        totalBytes += bytes.length;
+      } catch (reason) {
+        rejected.push(`${file.name}: ${reason instanceof Error ? reason.message : "Unable to read file"}`);
+      }
+    }
+    if (valid.length) setImages(previous => [...previous, ...valid]);
+    if (rejected.length) alert("Skipped unreadable or over-limit images:\n" + rejected.join("\n"));
   };
 
   const removeImage = (id: string) => {
-    setImages((prev) => prev.filter((img) => img.id !== id));
+    if (isGenerating) return;
+    const discarded = images.find(item => item.id === id);
+    if (discarded) {
+      URL.revokeObjectURL(discarded.previewUrl);
+      imageUrlsRef.current.delete(discarded.previewUrl);
+    }
+    setImages(previous => previous.filter(item => item.id !== id));
   };
 
   const moveImage = (index: number, direction: "up" | "down") => {
@@ -541,19 +536,19 @@ export function ImagesToPdfTool() {
           try {
             embeddedImage = await pdfDoc.embedPng(img.bytes);
           } catch {
-            const pngBytes = await renderImageToPngBytes(img.dataUrl);
+            const pngBytes = await renderImageToPngBytes(img.previewUrl);
             embeddedImage = await pdfDoc.embedPng(pngBytes);
           }
         } else if (isJpg) {
           try {
             embeddedImage = await pdfDoc.embedJpg(img.bytes);
           } catch {
-            const pngBytes = await renderImageToPngBytes(img.dataUrl);
+            const pngBytes = await renderImageToPngBytes(img.previewUrl);
             embeddedImage = await pdfDoc.embedPng(pngBytes);
           }
         } else {
           // WebP, BMP, GIF, SVG, etc: render to compatible PNG bitmap
-          const pngBytes = await renderImageToPngBytes(img.dataUrl);
+          const pngBytes = await renderImageToPngBytes(img.previewUrl);
           embeddedImage = await pdfDoc.embedPng(pngBytes);
         }
 
@@ -578,7 +573,7 @@ export function ImagesToPdfTool() {
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
-      URL.revokeObjectURL(url);
+      window.setTimeout(() => URL.revokeObjectURL(url), 2500);
       setIsDone(true);
       setTimeout(() => setIsDone(false), 3000);
     } catch (err) {
@@ -668,7 +663,7 @@ export function ImagesToPdfTool() {
                   #{idx + 1}
                 </span>
                 <img
-                  src={img.dataUrl}
+                  src={img.previewUrl}
                   alt={img.name}
                   className="mx-auto h-28 w-full rounded object-contain bg-black/20"
                 />

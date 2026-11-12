@@ -1,5 +1,12 @@
 # ToolboxGalaxy Repair & Verification Progress Ledger
 
+## PDF conversion & pointer memory follow-up — 12 November 2026
+
+- **Images-to-PDF:** replace memory-expensive base64 previews with Blob URLs; read images sequentially; bound queues at 40 images / 100 MB; release URLs on removal/unmount and canvas backing after conversion. Preserve file ordering and PNG/JPEG/WebP output behavior.
+- **Strands:** a synchronous pointer ref and direct grid pointerup/cancel handlers close the race between a very fast tap and React's effect installing the window release handler. Cleanup is idempotent and off-grid cancellation cannot leave controls stuck.
+- **Scope:** implementation and Git push only; no build, tests, manual QA or deployment performed.
+
+
 ## Puzzle input & game timer lifecycle — 12 November 2026
 
 - **Cross-puzzle keyboard guard:** Wordle, Hive and Mini Crossword ignore keys when focus belongs to fields, buttons, contenteditable or dialogs, as well as IME, modifier shortcuts, hidden tabs and auto-repeat. This prevents global window listeners from hijacking other controls. Hive no longer blocks Tab navigation; Mini Crossword captures arrows only for grid navigation.
