@@ -1,5 +1,12 @@
 # ToolboxGalaxy Repair & Verification Progress Ledger
 
+## PDF extraction worker lifecycle and text-table scaling — 12 November 2026
+
+- **PDF text:** release PDF.js page caches and worker/document after extraction; build text fragments as arrays to avoid repeated large string copies, and skip non-text PDF objects.
+- **PDF table export:** sort text vertically and group rows in one pass instead of scanning previous rows per text item. Release PDF.js worker and page caches even after errors.
+- **Scope:** source code updates and Git push only; no build, unit tests, manual QA or deployment.
+
+
 ## Krunker keyboard/focus lifecycle hardening — 12 November 2026
 
 - **Working branch:** `feat/browser-ai-background-remover`.
