@@ -8,7 +8,9 @@ import type { Scene } from "@babylonjs/core/scene";
 import type { SoundEvent } from "@/game/audio";
 import { arcadePressure, isOpeningProtected, orbitGatePace, type ArcadeDifficulty } from "@/game/playability";
 
-type GameCallbacks = { onScore: (score: number, best: number) => void; onStatus: (status: "ready" | "playing" | "over") => void; onSound: (event: SoundEvent) => void };
+export type OrbitGameStatus = "ready" | "playing" | "paused" | "over";
+
+type GameCallbacks = { onScore: (score: number, best: number) => void; onStatus: (status: OrbitGameStatus) => void; onSound: (event: SoundEvent) => void };
 type Gate = { root: TransformNode; x: number; gapY: number; scored: boolean; fragmentCollected: boolean; fragment: ReturnType<typeof MeshBuilder.CreatePolyhedron> };
 
 const LIME = new Color3(0.78, 0.95, 0.42);
@@ -34,13 +36,14 @@ export class GameWorld {
       return 0;
     }
   })();
-  private status: "ready" | "playing" | "over" = "ready";
+  private status: OrbitGameStatus = "ready";
   private spawnClock = 0;
   private elapsed = 0;
   private playerY = 0;
   private readonly onKeyDown: (event: KeyboardEvent) => void;
   private readonly onKeyUp: (event: KeyboardEvent) => void;
   private readonly onWindowBlur: () => void;
+  private readonly onVisibility: () => void;
   private readonly onPointer: (event: PointerEvent) => void;
 
   constructor(private readonly scene: Scene, private readonly canvas: HTMLCanvasElement, private readonly callbacks: GameCallbacks, private readonly difficulty: ArcadeDifficulty = "normal") {
@@ -62,16 +65,33 @@ export class GameWorld {
       const target = event.target;
       if (target instanceof HTMLElement &&
         (["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName) || target.isContentEditable)) return;
-      if (["ArrowUp", "ArrowDown", "w", "W", "s", "S", " ", "r", "R"].includes(event.key)) event.preventDefault();
-      if (event.key === " " || event.key.toLowerCase() === "r") { if (this.status !== "playing") this.reset(); return; }
       const key = event.key.toLowerCase();
+      if (["arrowup", "arrowdown", "w", "s", " ", "r", "p", "escape"].includes(key)) event.preventDefault();
+      if (key === "p" || key === "escape") {
+        if (this.status === "playing") this.pause();
+        else if (this.status === "paused") this.resume();
+        return;
+      }
+      if (key === " " || key === "r") {
+        if (this.status === "paused") this.resume();
+        else if (this.status !== "playing") this.reset();
+        return;
+      }
       if (!["arrowup","arrowdown","w","s"].includes(key)) return;
+      if (this.status === "paused" || this.status === "over") return;
       this.pressed.add(key);
       if (this.status === "ready") this.start();
     };
     this.onKeyUp = (event) => this.pressed.delete(event.key.toLowerCase());
-    this.onWindowBlur = () => this.pressed.clear();
+    this.onWindowBlur = () => {
+      this.pressed.clear();
+      if (!this.demo && this.status === "playing") this.pause();
+    };
+    this.onVisibility = () => {
+      if (document.hidden && !this.demo && this.status === "playing") this.pause();
+    };
     this.onPointer = (event) => {
+      if (this.status === "paused" || this.status === "over") return;
       // Hovering over the canvas must not start a game unexpectedly.
       if (this.status === "ready" && event.type === "pointerdown") this.start();
       const rect = this.canvas.getBoundingClientRect();
@@ -82,6 +102,7 @@ export class GameWorld {
     window.addEventListener("keydown", this.onKeyDown, { passive: false });
     window.addEventListener("keyup", this.onKeyUp);
     window.addEventListener("blur", this.onWindowBlur);
+    document.addEventListener("visibilitychange", this.onVisibility);
     this.canvas.addEventListener("pointermove", this.onPointer);
     this.canvas.addEventListener("pointerdown", this.onPointer);
     this.callbacks.onScore(this.score, this.best);
@@ -113,10 +134,33 @@ export class GameWorld {
     }
   }
 
-  start() { this.status = "playing"; this.spawnClock=1.2; this.callbacks.onStatus(this.status); this.callbacks.onSound("start"); }
+  start() {
+    if (this.status === "playing") return;
+    if (this.status === "paused") { this.resume(); return; }
+    if (this.status === "over") { this.reset(); return; }
+    this.status = "playing";
+    this.spawnClock = 1.2;
+    this.callbacks.onStatus(this.status);
+    this.callbacks.onSound("start");
+  }
+
+  pause() {
+    if (this.status !== "playing") return;
+    this.status = "paused";
+    this.pressed.clear();
+    this.callbacks.onStatus(this.status);
+  }
+
+  resume() {
+    if (this.status !== "paused") return;
+    this.status = "playing";
+    this.pressed.clear();
+    this.callbacks.onStatus(this.status);
+  }
 
   reset() {
     this.gates.splice(0).forEach((gate) => gate.root.dispose());
+    this.pressed.clear();
     this.score = 0; this.spawnClock = 1.2; this.elapsed = 0; this.playerY = 0; this.player.position.y = 0; this.status = "playing";
     this.callbacks.onScore(this.score, this.best); this.callbacks.onStatus(this.status); this.callbacks.onSound("start");
   }
@@ -182,6 +226,7 @@ export class GameWorld {
     window.removeEventListener("keydown", this.onKeyDown);
     window.removeEventListener("keyup", this.onKeyUp);
     window.removeEventListener("blur", this.onWindowBlur);
+    document.removeEventListener("visibilitychange", this.onVisibility);
     this.canvas.removeEventListener("pointermove", this.onPointer);
     this.canvas.removeEventListener("pointerdown", this.onPointer);
     this.gates.forEach((gate) => gate.root.dispose());

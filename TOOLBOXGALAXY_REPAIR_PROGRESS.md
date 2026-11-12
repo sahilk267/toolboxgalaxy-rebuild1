@@ -10,6 +10,8 @@
 - **Excel Studio:** 100-row accessible preview pages instead of mounting every spreadsheet row at once; downloads still operate on complete sheet. Reject excessively large uploads/sheet dimensions, ignore superseded file reads, and reset pagination on import/sheet/filter changes.
 - **PDF Compressor:** reject PDFs above a browser-local 40 MB cap; bound raster pages to 16 megapixels, free each canvas and page, close pdf.js worker/document after inspection and recompression.
 - **Image Resizer:** stale asynchronous uploads/encodes are ignored after changing the source/settings; release canvas bitmap backing after export.
+- **Orbit lifecycle follow-up:** visible Pause/Resume, keyboard P/Escape/Space support, input-reset on restart, hidden-tab/blur automatic pause and a frozen difficulty clock while paused.
+- **Final source-review correction:** preserve Surviv melee crate reach when selecting broad-phase candidates and throttle Krunker speed HUD to 10 Hz without changing top-speed statistics.
 - **Release boundary:** no build, tests, human QA, Hostinger upload or deployment performed; do not claim these modifications are verified runtime fixes.
 
 

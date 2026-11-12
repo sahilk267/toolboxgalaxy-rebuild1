@@ -90,6 +90,7 @@ export class KrunkerEngine {
 
   // Internal Loop
   private lastTime: number = 0;
+  private speedHudClock = 0;
   private animationFrameId: number | null = null;
   private isDestroyed: boolean = false;
   private isSuspended: boolean = false;
@@ -170,6 +171,7 @@ export class KrunkerEngine {
   public restartMatch(): void {
     if (this.isDestroyed) return;
     this.elapsedSeconds=0;
+    this.speedHudClock = 0;
     this.matchTimeRemaining = KRUNKER_MATCH_DURATION_SECONDS;
     this.isMatchEnded = false;
     this.stats = freshKrunkerMatchStats();
@@ -343,6 +345,7 @@ export class KrunkerEngine {
 
     if (!this.isMatchEnded) {
       this.elapsedSeconds += dt;
+      this.speedHudClock += dt;
       // 1. Update Match Timer
       this.matchTimeRemaining -= dt;
       if (this.matchTimeRemaining <= 0) {
@@ -366,6 +369,12 @@ export class KrunkerEngine {
 
       // 3. Process Bots AI & Movement
       this.updateBots(dt);
+      if (this.speedHudClock >= 0.1) {
+        this.speedHudClock = 0;
+        this.callbacks.onSpeedUpdate(Math.round(
+          Math.hypot(this.playerVelocity.x, this.playerVelocity.z) * 10,
+        ));
+      }
 
       // 4. Process Weapon Viewmodel Animations
       this.updateViewmodel(dt);
@@ -505,7 +514,6 @@ export class KrunkerEngine {
     const horizSpeed = Math.sqrt(
       this.playerVelocity.x * this.playerVelocity.x + this.playerVelocity.z * this.playerVelocity.z
     );
-    this.callbacks.onSpeedUpdate(Math.round(horizSpeed * 10));
     if (horizSpeed > this.stats.topSpeed) {
       this.stats.topSpeed = horizSpeed;
     }
@@ -943,7 +951,7 @@ export class KrunkerEngine {
           bot.position.z -= cosYaw * speed * 0.7 * dt;
         }
         // Lateral strafing
-        const strafeDir = Math.sin(this.elapsedSeconds * 3 + bot.id.length);
+        const strafeDir = Math.sin(this.elapsedSeconds * 3 + (Number.parseInt(bot.id.slice(-1), 10) || 0));
         bot.position.x += cosYaw * strafeDir * speed * 0.8 * dt;
         bot.position.z -= sinYaw * strafeDir * speed * 0.8 * dt;
 

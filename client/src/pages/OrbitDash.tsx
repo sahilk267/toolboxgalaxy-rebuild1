@@ -1,16 +1,17 @@
 // Orbit Dash / Orbital Workbench: full-screen game page with a DOM telemetry HUD over a Babylon canvas.
 import GameCanvas from "@/components/GameCanvas";
 import type { ArcadeDifficulty } from "@/game/playability";
+import type { OrbitGameStatus } from "@/game/GameWorld";
 import GameAudioControls from "@/components/GameAudioControls";
 import { OrbitAudio, type SoundEvent } from "@/game/audio";
-import { ArrowLeft, RotateCcw, Trophy, Share2, Swords, Send } from "lucide-react";
+import { ArrowLeft, RotateCcw, Trophy, Share2, Swords, Send, Pause, Play } from "lucide-react";
 import { Link } from "wouter";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 export default function OrbitDash() {
   const [score, setScore] = useState(0);
   const [best, setBest] = useState(0);
-  const [status, setStatus] = useState<"ready" | "playing" | "over">("ready");
+  const [status, setStatus] = useState<OrbitGameStatus>("ready");
   const [copied, setCopied] = useState(false);
   const [difficulty,setDifficulty] = useState<ArcadeDifficulty>("normal");
   const audio = useRef(new OrbitAudio());
@@ -79,13 +80,18 @@ export default function OrbitDash() {
     if (!audio.current.isEnabled()) await audio.current.setEnabled(true);
     window.dispatchEvent(new KeyboardEvent("keydown", { key: " " }));
   };
+  const pauseRun = () => {
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "p" }));
+  };
 
   const instruction =
     status === "ready"
       ? "Choose a difficulty · use ↑ ↓ or W S · move pointer to fly"
       : status === "over"
       ? "Signal lost · press Space or R to restart"
-      : "Collect fragments · clear the gates";
+      : status === "paused"
+      ? "Run paused · press P, Space, or Resume to continue"
+      : "Collect fragments · clear the gates · P to pause";
 
   return (
     <section className="orbit-dash-page">
@@ -109,6 +115,12 @@ export default function OrbitDash() {
             <span className="status-dot" /> ORBIT DASH
           </div>
           <div className="game-hud__actions">
+            {status === "playing" && (
+              <button type="button" onClick={pauseRun} data-game-pause="orbit"
+                className="quiet-button flex items-center gap-1.5" aria-label="Pause Orbit Dash">
+                <Pause size={15} /> Pause
+              </button>
+            )}
             <GameAudioControls audio={audio} />
             <div className="game-score">
               <span>SCORE</span>
@@ -146,14 +158,16 @@ export default function OrbitDash() {
         {status !== "playing" && (
           <div className="game-overlay">
             <p className="mono-label text-[#c7f36b]">
-              {status === "over" ? "RUN COMPLETE" : "ARCADE MODULE 01"}
+              {status === "over" ? "RUN COMPLETE" : status === "paused" ? "RUN PAUSED" : "ARCADE MODULE 01"}
             </p>
             <h1 className="font-display">
-              {status === "over" ? "Reconnect the signal." : "Thread the orbit."}
+              {status === "over" ? "Reconnect the signal." : status === "paused" ? "Signal on hold." : "Thread the orbit."}
             </h1>
             <p>
               {status === "over"
                 ? `You locked in ${score} signal points (Best: ${best}).`
+                : status === "paused"
+                ? "Your score, gate positions, and difficulty clock are frozen. Resume when ready."
                 : "Early gates approach slowly with a protected learning period. Fly through the gaps, collect fragments, then adapt as the speed rises."}
             </p>
 
@@ -227,8 +241,9 @@ export default function OrbitDash() {
                 </select>
               </label>
             )}
-            <button onClick={beginRun} className="signal-button">
-              {status === "over" ? "Run again" : "Start run"}
+            <button onClick={beginRun} className="signal-button" data-game-resume={status === "paused" ? "orbit" : undefined}>
+              {status === "paused" ? <><Play size={15} /> Resume run</> :
+                status === "over" ? "Run again" : "Start run"}
             </button>
           </div>
         )}

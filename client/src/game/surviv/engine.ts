@@ -646,7 +646,7 @@ export class SurvivEngine {
       this.spawnParticle(punchX, punchY, "#ffffff", 4, 0.2);
 
       // Hit obstacles (crates)
-      for (const obs of this.obstacleIndex.near(punchX, punchY, 25)) {
+      for (const obs of this.obstacleIndex.near(punchX, punchY, 55)) {
         if (!obs.active || !obs.destructible) continue;
         const dist = Math.hypot(punchX - obs.x, punchY - obs.y);
         if (dist < (obs.radius || 30) + 25) {

@@ -7,11 +7,11 @@ import { Color3, Color4 } from "@babylonjs/core/Maths/math.color";
 import { Vector3 } from "@babylonjs/core/Maths/math.vector";
 import { Scene } from "@babylonjs/core/scene";
 import type { SoundEvent } from "@/game/audio";
-import { GameWorld } from "@/game/GameWorld";
+import { GameWorld, type OrbitGameStatus } from "@/game/GameWorld";
 import type { ArcadeDifficulty } from "@/game/playability";
 
 export type GameHandle = { scene: Scene; dispose: () => void };
-export type GameCallbacks = { onScore: (score: number, best: number) => void; onStatus: (status: "ready" | "playing" | "over") => void; onSound: (event: SoundEvent) => void };
+export type GameCallbacks = { onScore: (score: number, best: number) => void; onStatus: (status: OrbitGameStatus) => void; onSound: (event: SoundEvent) => void };
 
 export async function createGameScene(engine: Engine, canvas: HTMLCanvasElement, callbacks: GameCallbacks, difficulty: ArcadeDifficulty = "normal"): Promise<GameHandle> {
   const scene = new Scene(engine);

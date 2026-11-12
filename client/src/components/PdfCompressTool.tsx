@@ -359,7 +359,9 @@ export default function PdfCompressTool({
             type="file"
             accept=".pdf,application/pdf"
             onChange={(e) => {
-              if (e.target.files?.[0]) handleFileChange(e.target.files[0]);
+              const file = e.target.files?.[0];
+              e.target.value = "";
+              if (file) void handleFileChange(file);
             }}
             className="hidden"
           />
