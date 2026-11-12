@@ -1,5 +1,13 @@
 # ToolboxGalaxy Repair & Verification Progress Ledger
 
+## PDF Merge/Split guardrails — 12 November 2026
+
+- Merge input queues are limited to 20 PDFs, 30 MB per document and 100 MB combined; uploads use a sequential loader, a race guard and same-file re-selection support.
+- Merge actions cannot overlap or mutate their file queue mid-generation. PDF Split inputs are capped at 50 MB before reading.
+- Split page-range expansion now tracks selected pages in a Set instead of repeatedly scanning all previously selected pages (preserves the original user-specified ordering). File-save object URLs are revoked after a short browser download handoff rather than synchronously.
+- **Release boundary:** GitHub code and ledger updated only; no automated/manual tests, build, Hostinger upload or live deployment performed.
+
+
 ## PDF extraction worker lifecycle and text-table scaling — 12 November 2026
 
 - **PDF text:** release PDF.js page caches and worker/document after extraction; build text fragments as arrays to avoid repeated large string copies, and skip non-text PDF objects.
