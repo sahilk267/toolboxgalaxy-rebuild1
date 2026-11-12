@@ -4418,7 +4418,9 @@ export default function PdfEditorTool({
                     {/* Interactive Detected Text Blocks Layer (Editing Mode) */}
                     {activeTool === "smart-edit" && (
                       <div className="absolute inset-0 pointer-events-none">
-                        {detectedBlocks.map((block) => {
+                        {(activeInlineBlock && !detectedBlocks.some((block) => block.id === activeInlineBlock.id)
+                          ? [...detectedBlocks, activeInlineBlock]
+                          : detectedBlocks).map((block) => {
                           const isHovered = hoveredBlockId === block.id;
                           const isActive = activeInlineBlock?.id === block.id;
 
