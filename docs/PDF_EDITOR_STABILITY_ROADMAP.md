@@ -1,4 +1,14 @@
 # PDF Editor — Stability-First Repair Plan
+
+## Phase 2 checkpoint — Native AcroForm editing (12 November 2026)
+
+- **Implemented:** `client/src/lib/pdfNativeFormEditing.ts` now inspects existing AcroForm fields and applies true PDF field-value updates for text, checkbox, dropdown, radio and single-select list fields. It validates each saved value by reopening the resulting PDF and rejects failures without overwriting the source. Read-only/unsupported fields are preserved; multi-select lists are deliberately not rewritten by a single-value UI.
+- **Implemented UI:** the PDF Editor displays an explicit **Native PDF Form Fields** panel when supported fields exist, with a separate Apply action. PDF byte updates enter document Undo/Redo history, and the existing page preview is invalidated on save.
+- **Memory safety:** history retains at most 12 snapshots and prunes old PDF-buffer revisions above a 96 MiB unique buffer budget. Large PDFs can therefore have a shorter available Undo depth.
+- **Truthful labeling:** ordinary page text editing is renamed to **Visual Text Replacement** and explicitly says the old PDF content remains. AcroForm editing is real underlying field editing; **this does not solve native paragraph/page text editing**.
+- **Not validated:** no TypeScript/build execution, browser tests, real-form PDFs, signature preservation, accessibility or deployment. Existing signed PDFs may be invalidated by modifications.
+
+
 Updated: 12 November 2026
 Branch: `feat/browser-ai-background-remover`
 
