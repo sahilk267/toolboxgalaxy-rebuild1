@@ -1,5 +1,11 @@
 # ToolboxGalaxy Repair & Verification Progress Ledger
 
+## Krunker keyboard/focus lifecycle hardening — 12 November 2026
+
+- **Working branch:** `feat/browser-ai-background-remover`.
+- **Krunker FPS keyboard isolation:** the global keydown handler no longer consumes Tab or class/respawn/ADS/movement shortcuts when a game overlay button, input, select, textarea, editable content, or dialog has focus. Unstarted games, hidden tabs, modifier shortcuts, IME composition, and desktop sessions without pointer lock cannot inject game inputs. Active pointer-locked gameplay preserves the existing keyboard shortcuts and scoreboard Tab behavior.
+- **Scope:** source update and Git push only. No build, tests, manual gameplay verification or deployment performed per user request. This is not a verified runtime result.
+
 ## PDF OCR long-session worker and bitmap lifecycle — 12 November 2026
 
 - Both text OCR and searchable PDF generation now dispose the Tesseract worker and PDF.js document in `finally`, including failure paths after engine setup.
