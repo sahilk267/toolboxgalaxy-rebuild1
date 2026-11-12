@@ -1,4 +1,4 @@
-import { useMemo, useState, type ChangeEvent } from "react";
+import { useMemo, useRef, useState, type ChangeEvent } from "react";
 import { Check, Clipboard, Download, RotateCcw, ShieldCheck } from "lucide-react";
 import {
   utf8ToBase64, base64ToUtf8, encodeBase64, decodeBase64, downloadBytes,
@@ -31,6 +31,7 @@ export function AdvancedBase64Tool() {
   const [inputMode,setInputMode]=useState<"text"|"file">("text");
   const [error,setError]=useState("");
   const [busy,setBusy]=useState(false);
+  const fileRevision=useRef(0);
   const result=useMemo(()=>{
     try{
       if(inputMode==="file"){
@@ -43,14 +44,21 @@ export function AdvancedBase64Tool() {
   async function chooseFile(event:ChangeEvent<HTMLInputElement>) {
     const file=event.target.files?.[0];event.target.value="";
     if(!file)return;
+    const revision=++fileRevision.current;
     setFileBytes(null);setFileName("");setError("");
-    if(file.size>2*1024*1024){setError("Files must not exceed 2 MB.");return;}
+    if(file.size>2*1024*1024){setBusy(false);setError("Files must not exceed 2 MB.");return;}
     setBusy(true);
-    try{const bytes=new Uint8Array(await file.arrayBuffer());setFileBytes(bytes);setFileName(file.name);}
-    catch{setError("Could not read the selected file.");}
-    finally{setBusy(false);}
+    try{
+      const bytes=new Uint8Array(await file.arrayBuffer());
+      if(revision!==fileRevision.current)return;
+      setFileBytes(bytes);setFileName(file.name);
+    }catch{
+      if(revision===fileRevision.current)setError("Could not read the selected file.");
+    }finally{
+      if(revision===fileRevision.current)setBusy(false);
+    }
   }
-  function reset(){setMode("encode");setFlavor("standard");setInput("Hello, Galaxy.");setInputMode("text");setFileBytes(null);setFileName("");setError("");}
+  function reset(){fileRevision.current++;setBusy(false);setMode("encode");setFlavor("standard");setInput("Hello, Galaxy.");setInputMode("text");setFileBytes(null);setFileName("");setError("");}
   function downloadResult() {
     try {
       if(mode==="decode"&&inputMode==="text")downloadBytes(decodeBase64(input,flavor),"toolboxgalaxy-decoded.bin");

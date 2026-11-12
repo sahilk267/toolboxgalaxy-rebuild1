@@ -26,11 +26,12 @@ function toPng(canvas: HTMLCanvasElement): Promise<Blob> {
 async function composeFullResolution(original: File, matte: Blob): Promise<Blob> {
   const source = await createImageBitmap(original);
   let mask: ImageBitmap | undefined;
+  let canvas: HTMLCanvasElement | null = null;
   try {
     mask = await createImageBitmap(matte);
     const error = backgroundDimensionError({ width: source.width, height: source.height });
     if (error) throw new Error(error);
-    const canvas = document.createElement("canvas");
+    canvas = document.createElement("canvas");
     canvas.width = source.width;
     canvas.height = source.height;
     const context = canvas.getContext("2d");
@@ -44,6 +45,7 @@ async function composeFullResolution(original: File, matte: Blob): Promise<Blob>
     context.globalCompositeOperation = "source-over";
     return await toPng(canvas);
   } finally {
+    if (canvas) { canvas.width = 0; canvas.height = 0; }
     source.close();
     mask?.close();
   }
@@ -175,8 +177,9 @@ export default function BackgroundRemoverTool() {
       let blob = output.blob;
       if (mode !== "transparent") {
         const bitmap = await createImageBitmap(blob);
+        let canvas: HTMLCanvasElement | null = null;
         try {
-          const canvas = document.createElement("canvas");
+          canvas = document.createElement("canvas");
           canvas.width = output.width;
           canvas.height = output.height;
           const ctx = canvas.getContext("2d");
@@ -185,7 +188,10 @@ export default function BackgroundRemoverTool() {
           ctx.fillRect(0, 0, canvas.width, canvas.height);
           ctx.drawImage(bitmap, 0, 0);
           blob = await toPng(canvas);
-        } finally { bitmap.close(); }
+        } finally {
+          if (canvas) { canvas.width = 0; canvas.height = 0; }
+          bitmap.close();
+        }
       }
       const url = URL.createObjectURL(blob);
       const anchor = document.createElement("a");
