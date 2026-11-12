@@ -1,5 +1,15 @@
 # ToolboxGalaxy Repair & Verification Progress Ledger
 
+## Deep scalability phase — remaining games & media workflows (12 November 2026)
+
+**Working branch:** `feat/browser-ai-background-remover`. Code implementation and Git push only; tests, manual QA and deployment explicitly deferred by user.
+
+- **Signal Switch:** fixed a source-confirmed immediate game-over bug: the first canvas/key direction selected a random new relay and could lose on the starting gesture. First gesture now starts the round without grading the same input. First relay has 5.2 seconds; time gradually decreases with successful turns down to 1.5 seconds. HUD timer updates max ~10 times/sec instead of every WebGL frame. Keyboard handlers ignore editable controls and dialogs.
+- **Circuit Shift and Signal Switch:** stop browser WebGL render loops while hidden and cap visible renders to ~30 FPS, keeping the game scene alive. Visibility event listeners and loops are removed on component teardown.
+- **Additional large-file and resource edits** are tracked in follow-on commits in this phase.
+- **Verification boundary:** no executed unit tests, gameplay, builds, performance benchmarks or Hostinger deployment; this document records source changes, not verified runtime behavior.
+
+
 ## Implementation & scalability batch 2 — 12 November 2026
 
 **Git branch:** `feat/browser-ai-background-remover`. These are source changes only; testing and deployment are deliberately deferred at the user's request.

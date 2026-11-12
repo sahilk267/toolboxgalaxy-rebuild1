@@ -18,6 +18,24 @@ export default function SignalSwitchCanvas({ callbacks }: { callbacks: SignalSwi
     let isDisposed = false;
     const engine = new Engine(canvas, true, { preserveDrawingBuffer: true, stencil: true, adaptToDeviceRatio: true });
     let handle: SignalSwitchHandle | null = null;
+    let lastRender = 0;
+    const draw = () => {
+      if (isDisposed || !handle || handle.scene.isDisposed || document.hidden) return;
+      const now = performance.now();
+      if (now - lastRender < 1000 / 30) return;
+      lastRender = now;
+      handle.scene.render();
+    };
+    const onVisibility = () => {
+      if (isDisposed) return;
+      if (document.hidden) engine.stopRenderLoop(draw);
+      else {
+        lastRender = 0;
+        engine.resize();
+        if (handle) engine.runRenderLoop(draw);
+      }
+    };
+    document.addEventListener("visibilitychange", onVisibility);
 
     createSignalSwitchScene(engine, canvas, {
       onScore: (score, best) => callbackRef.current.onScore(score, best),
@@ -30,11 +48,7 @@ export default function SignalSwitchCanvas({ callbacks }: { callbacks: SignalSwi
         return;
       }
       handle = game;
-      engine.runRenderLoop(() => {
-        if (!isDisposed && game.scene && !game.scene.isDisposed) {
-          game.scene.render();
-        }
-      });
+      if (!document.hidden) engine.runRenderLoop(draw);
     });
 
     const resize = () => {
@@ -45,6 +59,8 @@ export default function SignalSwitchCanvas({ callbacks }: { callbacks: SignalSwi
     return () => {
       isDisposed = true;
       window.removeEventListener("resize", resize);
+      document.removeEventListener("visibilitychange", onVisibility);
+      engine.stopRenderLoop(draw);
       handle?.dispose();
       engine.dispose();
       started.current = false;
