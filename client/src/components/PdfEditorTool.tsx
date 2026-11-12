@@ -619,12 +619,20 @@ export default function PdfEditorTool({
   }, [initialPdfBytes, initialFileName]);
 
   // Auto-scan PDF typography and layout when smart-edit mode is active
+  const scanSourceRef = useRef<{ bytes: Uint8Array | null; page: number }>({ bytes: null, page: -1 });
   useEffect(() => {
     let cancelled = false;
+    const sourceChanged = scanSourceRef.current.bytes !== pdfBytes ||
+      scanSourceRef.current.page !== currentPage;
+    scanSourceRef.current = { bytes: pdfBytes, page: currentPage };
     if (pdfBytes && activeTool === "smart-edit") {
       setDetectedBlocks([]);
-      setActiveInlineBlock(null);
-      setReeditingAnnotationId(null);
+      // Preserve a reopened replacement when switching from Select to Smart Edit.
+      // Never preserve it when the document or page itself changes.
+      if (sourceChanged || !reeditingAnnotationId) {
+        setActiveInlineBlock(null);
+        setReeditingAnnotationId(null);
+      }
       setIsExtractingBlocks(true);
       extractInteractiveTextBlocks(pdfBytes, currentPage)
         .then((blocks) => {
