@@ -288,13 +288,22 @@ export const KrunkerCanvas: React.FC<KrunkerCanvasProps> = ({ onBackToMenu }) =>
       if (!engineRef.current) return;
       const gameHasKeyboard = document.pointerLockElement === containerRef.current ||
         Boolean(containerRef.current?.contains(document.activeElement));
-      if (!gameHasKeyboard || e.ctrlKey || e.metaKey || e.altKey) return;
-      engineRef.current.keys[e.code] = true;
-
+      // The fullscreen overlay also contains buttons/selects. Game shortcuts must
+      // never steal focus, Tab navigation, or text input from those controls.
+      const target = e.target;
+      const editing = target instanceof HTMLElement &&
+        Boolean(target.closest("input, select, textarea, button, [contenteditable='true'], [role='dialog']"));
+      if (!startedRef.current || !gameHasKeyboard || editing || e.isComposing ||
+          e.ctrlKey || e.metaKey || e.altKey || document.hidden) return;
+      // Pointer lock is the active desktop control mode; an unlocked overlay
+      // must not pass WASD/fire/reload to a suspended match.
+      if (!checkMobile && document.pointerLockElement !== containerRef.current) return;
       if (e.code === "Tab") {
         e.preventDefault();
         setShowTabScoreboard(true);
+        return;
       }
+      engineRef.current.keys[e.code] = true;
 
       // Quick switch classes via number keys [1] - [5]
       if (e.code === "Digit1") handleSelectClass("triggerman");
