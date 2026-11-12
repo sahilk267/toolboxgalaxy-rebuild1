@@ -316,20 +316,29 @@ export class KrunkerEngine {
 
   // A hidden tab must not consume match time, move bots, or apply damage.
   public setSuspended(hidden: boolean) {
+    if (this.isDestroyed || this.isSuspended === hidden) return;
     this.isSuspended = hidden;
-    if (!hidden) this.lastTime = performance.now();
+    if (hidden) {
+      // An inactive/hidden FPS game must not keep a 60 Hz RAF alive.
+      if (this.animationFrameId !== null) cancelAnimationFrame(this.animationFrameId);
+      this.animationFrameId = null;
+      this.keys = {};
+      this.isMouseDown = false;
+      this.isRightMouseDown = false;
+      this.isADS = false;
+    } else {
+      // Resume with zero wall-clock catch-up, and at most one active RAF.
+      this.lastTime = performance.now();
+      if (this.animationFrameId === null) this.animationFrameId = requestAnimationFrame(this.animate);
+    }
   }
 
   // Main Game Loop
   private animate(now: number) {
-    if (this.isDestroyed) return;
-    if (this.isSuspended) {
-      this.lastTime = now;
-      this.animationFrameId = requestAnimationFrame(this.animate);
-      return;
-    }
+    this.animationFrameId = null;
+    if (this.isDestroyed || this.isSuspended) return;
 
-    const dt = Math.min(Math.max(0,(now - this.lastTime) / 1000), 0.1);
+    const dt = Math.min(Math.max(0,(now - this.lastTime) / 1000), 0.066);
     this.lastTime = now;
 
     if (!this.isMatchEnded) {
@@ -343,8 +352,13 @@ export class KrunkerEngine {
 
       // 2. Process Player Movement & Physics (Slide-Hopping & Bhop)
       if (this.isAlive) {
-        this.updatePlayerMovement(dt);
-        this.handleWeaponInput(dt);
+        // Split large visual frame gaps into safe physics/collision slices.
+        // Keep the total frame time fixed to avoid extra movement/damage.
+        const slices = Math.max(1, Math.ceil(dt / (1 / 60)));
+        for (let slice = 0; slice < slices && this.isAlive; slice++) {
+          this.updatePlayerMovement(dt / slices);
+          this.handleWeaponInput(dt / slices);
+        }
       } else {
         // Free cam or death rotation
         this.updateDeathState(dt);
@@ -876,15 +890,15 @@ export class KrunkerEngine {
 
       // 1. Target Acquisition: Find player or other bot
       let targetPos: THREE.Vector3 | null = null;
-      let targetDist = 999;
+      let targetDistSq = Number.POSITIVE_INFINITY;
       let targetIsPlayer = false;
 
       // Check distance to player
       if (this.isAlive && !this.isInvulnerable) {
-        const d = bot.position.distanceTo(this.playerPos);
-        if (d < 45) {
+        const d = bot.position.distanceToSquared(this.playerPos);
+        if (d < 45 * 45) {
           targetPos = this.playerPos;
-          targetDist = d;
+          targetDistSq = d;
           targetIsPlayer = true;
         }
       }
@@ -893,9 +907,9 @@ export class KrunkerEngine {
       if (!targetPos) {
         for (const other of this.bots) {
           if (other.id !== bot.id && other.isAlive && other.invulnerableTimer <= 0) {
-            const d = bot.position.distanceTo(other.position);
-            if (d < targetDist && d < 35) {
-              targetDist = d;
+            const d = bot.position.distanceToSquared(other.position);
+            if (d < targetDistSq && d < 35 * 35) {
+              targetDistSq = d;
               targetPos = other.position;
               targetIsPlayer = false;
             }
@@ -905,28 +919,33 @@ export class KrunkerEngine {
 
       // 2. State Machine & Movement
       if (targetPos) {
+        const targetDist = Math.sqrt(targetDistSq);
         // Turn towards target
         const dx = targetPos.x - bot.position.x;
         const dz = targetPos.z - bot.position.z;
         const targetYaw = Math.atan2(dx, dz);
-        bot.rotationY += (targetYaw - bot.rotationY) * Math.min(1.0, dt * 8.0);
+        // Wrap via the shortest angle; crossing +/-PI must not spin 360 degrees.
+        const angleDiff = Math.atan2(Math.sin(targetYaw - bot.rotationY), Math.cos(targetYaw - bot.rotationY));
+        bot.rotationY += angleDiff * Math.min(1.0, dt * 8.0);
         bot.mesh.rotation.y = bot.rotationY;
 
         // Strafe & Advance
-        const forward = new THREE.Vector3(Math.sin(bot.rotationY), 0, Math.cos(bot.rotationY));
-        const right = new THREE.Vector3(Math.cos(bot.rotationY), 0, -Math.sin(bot.rotationY));
-
+        const sinYaw = Math.sin(bot.rotationY);
+        const cosYaw = Math.cos(bot.rotationY);
         const speed = 5.2 + 3.8 * arcadePressure(this.elapsedSeconds,this.difficulty).enemyPressure;
         if (targetDist > 16) {
           // Advance closer
-          bot.position.addScaledVector(forward, speed * dt);
+          bot.position.x += sinYaw * speed * dt;
+          bot.position.z += cosYaw * speed * dt;
         } else if (targetDist < 8) {
           // Back up
-          bot.position.addScaledVector(forward, -speed * 0.7 * dt);
+          bot.position.x -= sinYaw * speed * 0.7 * dt;
+          bot.position.z -= cosYaw * speed * 0.7 * dt;
         }
         // Lateral strafing
-        const strafeDir = Math.sin(Date.now() * 0.003 + parseInt(bot.id.slice(-1), 10));
-        bot.position.addScaledVector(right, strafeDir * speed * 0.8 * dt);
+        const strafeDir = Math.sin(this.elapsedSeconds * 3 + bot.id.length);
+        bot.position.x += cosYaw * strafeDir * speed * 0.8 * dt;
+        bot.position.z -= sinYaw * strafeDir * speed * 0.8 * dt;
 
         // Walking Leg Animation
         bot.walkCycle += dt * 12.0;
@@ -945,8 +964,8 @@ export class KrunkerEngine {
           bot.stateTimer = 3.0 + Math.random() * 4.0;
         }
         bot.mesh.rotation.y = bot.rotationY;
-        const forward = new THREE.Vector3(Math.sin(bot.rotationY), 0, Math.cos(bot.rotationY));
-        bot.position.addScaledVector(forward, 6.0 * dt);
+        bot.position.x += Math.sin(bot.rotationY) * 6.0 * dt;
+        bot.position.z += Math.cos(bot.rotationY) * 6.0 * dt;
 
         bot.walkCycle += dt * 8.0;
         bot.leftLegMesh.rotation.x = Math.sin(bot.walkCycle) * 0.4;
@@ -1235,7 +1254,16 @@ export class KrunkerEngine {
     this.isDestroyed = true;
     if (this.animationFrameId !== null) {
       cancelAnimationFrame(this.animationFrameId);
+      this.animationFrameId = null;
     }
+    // Release per-match geometry, materials, textures and shadow resources.
+    this.scene.traverse(object => {
+      if (!(object instanceof THREE.Mesh || object instanceof THREE.Line || object instanceof THREE.Points)) return;
+      object.geometry?.dispose();
+      const materials = Array.isArray(object.material) ? object.material : [object.material];
+      for (const material of materials) material?.dispose();
+    });
+    this.scene.clear();
     this.renderer.dispose();
     if (this.renderer.domElement.parentNode) {
       this.renderer.domElement.parentNode.removeChild(this.renderer.domElement);

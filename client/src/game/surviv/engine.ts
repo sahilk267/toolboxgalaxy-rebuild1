@@ -12,6 +12,7 @@ import {
 } from "./constants";
 import { generateIslandMap } from "./map";
 import { firstProjectileImpact } from "./projectileCollision";
+import { SurvivObstacleIndex } from "./obstacleIndex";
 import { resolveSurvivMovement } from "./playerCollision";
 import { arcadePressure, isOpeningProtected, meetsSpawnSeparation, type ArcadeDifficulty } from "../playability";
 import { isStackableSurvivLoot, SURVIV_MEDICAL_INVENTORY_KEY, SURVIV_MEDICAL_LIMITS, transferSurvivLootStack, type SurvivMedicalLoot } from "./lootTransfer";
@@ -41,6 +42,10 @@ export class SurvivEngine {
   public player: PlayerEntity;
   public bots: PlayerEntity[] = [];
   public obstacles: Obstacle[] = [];
+  private readonly obstacleIndex: SurvivObstacleIndex;
+  private combatants: PlayerEntity[] = [];
+  private hudUpdateClock = 0;
+  private lastReportedAlive = -1;
   public loot: GroundLoot[] = [];
   public bullets: BulletEntity[] = [];
   public particles: ParticleEntity[] = [];
@@ -75,6 +80,7 @@ export class SurvivEngine {
     // 1. Generate Island
     const { obstacles, initialLoot } = generateIslandMap();
     this.obstacles = obstacles;
+    this.obstacleIndex = new SurvivObstacleIndex(obstacles);
     this.loot = initialLoot;
 
     // 2. Setup Safe Zone
@@ -175,9 +181,12 @@ export class SurvivEngine {
       });
     }
 
+    // Reuse a stable combatants array during projectile sweeps.
+    this.combatants = [this.player, ...this.bots];
+    this.lastReportedAlive = this.bots.length + 1;
     // The player chooses when the match starts; no background combat on page load.
     this.callbacks.onPlayerUpdate(this.player);
-    this.callbacks.onAliveUpdate(this.bots.length + 1, this.bots.length + 1);
+    this.callbacks.onAliveUpdate(this.lastReportedAlive, this.combatants.length);
     this.callbacks.onZoneUpdate(this.zone);
   }
 
@@ -270,7 +279,10 @@ export class SurvivEngine {
     // 7. Check Alive Survivors
     const aliveBots = this.bots.filter((b) => b.active).length;
     const totalAlive = aliveBots + (this.player.active ? 1 : 0);
-    this.callbacks.onAliveUpdate(totalAlive, this.bots.length + 1);
+    if (totalAlive !== this.lastReportedAlive) {
+      this.lastReportedAlive = totalAlive;
+      this.callbacks.onAliveUpdate(totalAlive, this.combatants.length);
+    }
 
     // 8. Trigger Game Over / Chicken Dinner
     if (!this.isMatchOver) {
@@ -286,9 +298,14 @@ export class SurvivEngine {
       }
     }
 
-    // Notify UI
-    this.callbacks.onPlayerUpdate(this.player);
-    this.callbacks.onZoneUpdate(this.zone);
+    // React HUD refresh at up to 10 Hz rather than rerendering every frame.
+    // The initial snapshot and onGameOver callback remain immediate.
+    this.hudUpdateClock += dt;
+    if (this.hudUpdateClock >= 0.1 || this.isMatchOver) {
+      this.hudUpdateClock = 0;
+      this.callbacks.onPlayerUpdate(this.player);
+      this.callbacks.onZoneUpdate(this.zone);
+    }
   }
 
   // Zone Logic
@@ -436,7 +453,7 @@ export class SurvivEngine {
 
     // Check Bush hiding
     p.inBush = false;
-    for (const obs of this.obstacles) {
+    for (const obs of this.obstacleIndex.near(p.x, p.y, 5)) {
       if (obs.type === "bush") {
         if (Math.hypot(p.x - obs.x, p.y - obs.y) < obs.radius + 5) {
           p.inBush = true;
@@ -464,10 +481,30 @@ export class SurvivEngine {
     const outsideZone = distToZone > this.zone.currentRadius * 0.9;
 
     if (outsideZone) {
-      bot.aiState = "fleeing_zone";
-      bot.targetX = this.zone.currentCenterX + (Math.random() - 0.5) * 150;
-      bot.targetY = this.zone.currentCenterY + (Math.random() - 0.5) * 150;
-    } else if (bot.botThinkTimer <= 0) {
+      // Do not pick a new random waypoint every animation frame: that makes
+      // fleeing bots jitter and wastes AI decisions.
+      if (bot.aiState !== "fleeing_zone" || bot.botThinkTimer <= 0) {
+        bot.aiState = "fleeing_zone";
+        bot.targetEntityId = undefined;
+        bot.targetX = this.zone.currentCenterX + (Math.random() - 0.5) * 150;
+        bot.targetY = this.zone.currentCenterY + (Math.random() - 0.5) * 150;
+        bot.botThinkTimer = 1.2 + Math.random() * 1.2;
+      }
+    } else {
+      // Track moving targets between decision ticks instead of shooting at
+      // positions that can be more than a second out of date.
+      if (bot.aiState === "hunting" && bot.targetEntityId !== undefined) {
+        const target = this.combatants[bot.targetEntityId];
+        if (target?.active && !target.inBush &&
+            (target.isBot || !isOpeningProtected(this.elapsedSeconds, this.difficulty))) {
+          bot.targetX = target.x;
+          bot.targetY = target.y;
+        } else {
+          bot.botThinkTimer = 0;
+        }
+      }
+    }
+    if (!outsideZone && bot.botThinkTimer <= 0) {
       bot.botThinkTimer = 1.0 + Math.random() * 1.5;
 
       // Find nearest enemy (player or other bot)
@@ -495,13 +532,15 @@ export class SurvivEngine {
 
       if (nearestEnemy) {
         bot.aiState = "hunting";
+        bot.targetEntityId = nearestEnemy.id;
         bot.targetX = nearestEnemy.x;
         bot.targetY = nearestEnemy.y;
       } else {
         // Look for loot or crates to break
         bot.aiState = "looting";
+        bot.targetEntityId = undefined;
         let targetFound = false;
-        for (const obs of this.obstacles) {
+        for (const obs of this.obstacleIndex.near(bot.x, bot.y, 400)) {
           if (obs.active && obs.destructible) {
             const d = Math.hypot(obs.x - bot.x, obs.y - bot.y);
             if (d < 400) {
@@ -607,7 +646,7 @@ export class SurvivEngine {
       this.spawnParticle(punchX, punchY, "#ffffff", 4, 0.2);
 
       // Hit obstacles (crates)
-      for (const obs of this.obstacles) {
+      for (const obs of this.obstacleIndex.near(punchX, punchY, 25)) {
         if (!obs.active || !obs.destructible) continue;
         const dist = Math.hypot(punchX - obs.x, punchY - obs.y);
         if (dist < (obs.radius || 30) + 25) {
@@ -652,7 +691,7 @@ export class SurvivEngine {
   }
 
   private checkMeleeHit(attacker: PlayerEntity, hx: number, hy: number, damage: number) {
-    const targets = [this.player, ...this.bots];
+    const targets = this.combatants;
     for (const t of targets) {
       if (t.id === attacker.id || !t.active) continue;
       const dist = Math.hypot(hx - t.x, hy - t.y);
@@ -683,7 +722,7 @@ export class SurvivEngine {
       // Sweep the complete movement segment to stop high-speed bullets tunneling
       // through walls or players. Resolve only the earliest impact.
       const impact = firstProjectileImpact(
-        bullet, from, to, this.obstacles, [this.player, ...this.bots],
+        bullet, from, to, this.obstacleIndex.segment(from, to, bullet.radius), this.combatants,
       );
       if (impact) {
         bullet.x = from.x + (to.x - from.x) * impact.t;

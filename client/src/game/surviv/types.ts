@@ -160,6 +160,8 @@ export interface PlayerEntity {
   aiState?: "looting" | "hunting" | "healing" | "fleeing_zone";
   targetX?: number;
   targetY?: number;
+  /** IDs are stable: player is 0, bots are array index + 1. */
+  targetEntityId?: number;
   botThinkTimer?: number;
 }
 

@@ -230,6 +230,8 @@ export const KrunkerCanvas: React.FC<KrunkerCanvasProps> = ({ onBackToMenu }) =>
       if (locked && startedRef.current) engine.setSuspended(false);
       if (!locked) {
         engine.setSuspended(true);
+        setIsADS(false);
+        setShowTabScoreboard(false);
         lastExitTimeRef.current = Date.now();
       }
     };
@@ -329,7 +331,7 @@ export const KrunkerCanvas: React.FC<KrunkerCanvasProps> = ({ onBackToMenu }) =>
 
     const onWindowBlur = () => {
       if (!engineRef.current) return;
-      if (!checkMobile) engineRef.current.setSuspended(true);
+      engineRef.current.setSuspended(true);
       engineRef.current.keys = {};
       engineRef.current.isMouseDown = false;
       engineRef.current.isRightMouseDown = false;
@@ -344,6 +346,7 @@ export const KrunkerCanvas: React.FC<KrunkerCanvasProps> = ({ onBackToMenu }) =>
     document.addEventListener("visibilitychange", onVisibility);
     if (document.hidden) onVisibility();
     window.addEventListener("blur", onWindowBlur);
+    window.addEventListener("focus", onVisibility);
     window.addEventListener("keydown", onKeyDown);
     window.addEventListener("keyup", onKeyUp);
 
@@ -382,6 +385,7 @@ export const KrunkerCanvas: React.FC<KrunkerCanvasProps> = ({ onBackToMenu }) =>
       window.removeEventListener("contextmenu", onContextMenu);
       document.removeEventListener("visibilitychange", onVisibility);
       window.removeEventListener("blur", onWindowBlur);
+      window.removeEventListener("focus", onVisibility);
       window.removeEventListener("keydown", onKeyDown);
       window.removeEventListener("keyup", onKeyUp);
       window.removeEventListener("resize", onResize);
@@ -998,13 +1002,21 @@ export const KrunkerCanvas: React.FC<KrunkerCanvasProps> = ({ onBackToMenu }) =>
                 }
               }
             }}
-            onTouchEnd={() => {
+            onTouchEnd={(e) => {
+              if (!touchMoveRef.current ||
+                  !Array.from(e.changedTouches).some(t => t.identifier === touchMoveRef.current?.id)) return;
               touchMoveRef.current = null;
               if (engineRef.current) {
                 engineRef.current.keys["KeyW"] = false;
                 engineRef.current.keys["KeyS"] = false;
                 engineRef.current.keys["KeyA"] = false;
                 engineRef.current.keys["KeyD"] = false;
+              }
+            }}
+            onTouchCancel={() => {
+              touchMoveRef.current = null;
+              if (engineRef.current) {
+                for (const key of ["KeyW", "KeyS", "KeyA", "KeyD"]) engineRef.current.keys[key] = false;
               }
             }}
           >
@@ -1031,9 +1043,13 @@ export const KrunkerCanvas: React.FC<KrunkerCanvasProps> = ({ onBackToMenu }) =>
                 }
               }
             }}
-            onTouchEnd={() => {
-              touchLookRef.current = null;
+            onTouchEnd={(e) => {
+              if (touchLookRef.current &&
+                  Array.from(e.changedTouches).some(t => t.identifier === touchLookRef.current?.id)) {
+                touchLookRef.current = null;
+              }
             }}
+            onTouchCancel={() => { touchLookRef.current = null; }}
           />
 
           {/* Right Action Buttons: Fire, Jump, Slide, ADS, Reload */}
@@ -1053,6 +1069,10 @@ export const KrunkerCanvas: React.FC<KrunkerCanvasProps> = ({ onBackToMenu }) =>
                     setIsADS(false);
                   }
                 }}
+                onTouchCancel={() => {
+                  if (engineRef.current) engineRef.current.isRightMouseDown = false;
+                  setIsADS(false);
+                }}
                 className={`w-14 h-14 rounded-full border-2 flex items-center justify-center font-bold text-xs ${
                   isADS
                     ? "bg-amber-500 border-amber-400 text-black"
@@ -1070,6 +1090,9 @@ export const KrunkerCanvas: React.FC<KrunkerCanvasProps> = ({ onBackToMenu }) =>
                 onTouchEnd={() => {
                   if (engineRef.current) engineRef.current.keys["Space"] = false;
                 }}
+                onTouchCancel={() => {
+                  if (engineRef.current) engineRef.current.keys["Space"] = false;
+                }}
                 className="w-14 h-14 rounded-full bg-sky-500/70 border-2 border-sky-400 text-white font-bold text-xs flex items-center justify-center active:scale-95"
               >
                 JUMP
@@ -1085,6 +1108,9 @@ export const KrunkerCanvas: React.FC<KrunkerCanvasProps> = ({ onBackToMenu }) =>
                 onTouchEnd={() => {
                   if (engineRef.current) engineRef.current.keys["ShiftLeft"] = false;
                 }}
+                onTouchCancel={() => {
+                  if (engineRef.current) engineRef.current.keys["ShiftLeft"] = false;
+                }}
                 className="w-14 h-14 rounded-full bg-emerald-500/70 border-2 border-emerald-400 text-white font-bold text-xs flex items-center justify-center active:scale-95"
               >
                 SLIDE
@@ -1096,6 +1122,9 @@ export const KrunkerCanvas: React.FC<KrunkerCanvasProps> = ({ onBackToMenu }) =>
                   if (engineRef.current) engineRef.current.isMouseDown = true;
                 }}
                 onTouchEnd={() => {
+                  if (engineRef.current) engineRef.current.isMouseDown = false;
+                }}
+                onTouchCancel={() => {
                   if (engineRef.current) engineRef.current.isMouseDown = false;
                 }}
                 className="w-16 h-16 rounded-full bg-red-600/90 border-2 border-red-400 text-white font-black text-sm flex items-center justify-center shadow-lg shadow-red-600/40 active:scale-95"
