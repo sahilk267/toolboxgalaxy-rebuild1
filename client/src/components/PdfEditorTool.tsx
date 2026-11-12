@@ -885,6 +885,7 @@ export default function PdfEditorTool({
       setCurrentPage(0);
       setPageRotations([0, 0]);
       setAnnotations([]);
+      resetHistory();
       setSelectedId(null);
       setActiveTool("smart-edit");
       showToast("Interactive sample PDF loaded!");
@@ -1433,6 +1434,7 @@ export default function PdfEditorTool({
       return;
     }
 
+    const beforeMutation = captureSnapshot();
     setIsProcessing(true);
     try {
       const doc = await PDFDocument.load(pdfBytes, { ignoreEncryption: true });
@@ -1444,6 +1446,7 @@ export default function PdfEditorTool({
         .filter((a) => a.pageIndex !== targetIndex)
         .map((a) => (a.pageIndex > targetIndex ? { ...a, pageIndex: a.pageIndex - 1 } : a));
 
+      pushSnapshot(beforeMutation);
       setPdfBytes(updatedBytes);
       setNumPages(numPages - 1);
       setPageRotations(newPageRotations);
@@ -1471,6 +1474,7 @@ export default function PdfEditorTool({
   // Insert clean blank page
   const insertBlankPage = async (atIndex = currentPage + 1) => {
     if (!pdfBytes) return;
+    const beforeMutation = captureSnapshot();
     setIsProcessing(true);
     try {
       const doc = await PDFDocument.load(pdfBytes, { ignoreEncryption: true });
@@ -1481,6 +1485,7 @@ export default function PdfEditorTool({
       const newAnnotations = annotations.map((a) =>
         a.pageIndex >= atIndex ? { ...a, pageIndex: a.pageIndex + 1 } : a
       );
+      pushSnapshot(beforeMutation);
       setPdfBytes(updatedBytes);
       setNumPages(numPages + 1);
       setPageRotations(newRotations);
@@ -1497,6 +1502,7 @@ export default function PdfEditorTool({
   // Duplicate specific page by index
   const duplicatePageAtIndex = async (targetIndex: number) => {
     if (!pdfBytes) return;
+    const beforeMutation = captureSnapshot();
     setIsProcessing(true);
     try {
       const doc = await PDFDocument.load(pdfBytes, { ignoreEncryption: true });
@@ -1506,9 +1512,16 @@ export default function PdfEditorTool({
       const updatedBytes = await doc.save();
       const newRotations = [...pageRotations];
       newRotations.splice(insertAt, 0, pageRotations[targetIndex] || 0);
+      const duplicatedAnnotations = annotations.map((ann) =>
+        ann.pageIndex >= insertAt ? { ...ann, pageIndex: ann.pageIndex + 1 } : ann
+      );
+      duplicatedAnnotations.push(...cloneAnnotations(annotations.filter((ann) => ann.pageIndex === targetIndex))
+        .map((ann) => ({ ...ann, id: `${ann.id}-copy-${Date.now()}`, pageIndex: insertAt })));
+      pushSnapshot(beforeMutation);
       setPdfBytes(updatedBytes);
       setNumPages(numPages + 1);
       setPageRotations(newRotations);
+      setAnnotations(duplicatedAnnotations);
       setCurrentPage(insertAt);
       showToast(`Duplicated page ${targetIndex + 1}`);
     } catch {
@@ -1528,6 +1541,7 @@ export default function PdfEditorTool({
     if (!pdfBytes || numPages <= 1 || fromIdx === toIdx) return;
     if (fromIdx < 0 || fromIdx >= numPages || toIdx < 0 || toIdx >= numPages) return;
 
+    const beforeMutation = captureSnapshot();
     setIsProcessing(true);
     try {
       const doc = await PDFDocument.load(pdfBytes, { ignoreEncryption: true });
@@ -1556,6 +1570,7 @@ export default function PdfEditorTool({
         return a;
       });
 
+      pushSnapshot(beforeMutation);
       setPdfBytes(updatedBytes);
       setPageRotations(newRotations);
       setAnnotations(newAnnotations);
