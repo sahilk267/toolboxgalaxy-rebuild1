@@ -1422,6 +1422,7 @@ export default function PdfEditorTool({
     const rect = overlayRef.current.getBoundingClientRect();
     const mouseX = ((e.clientX - rect.left) / rect.width) * 100;
     const mouseY = ((e.clientY - rect.top) / rect.height) * 100;
+    pushHistorySnapshot(); // Capture geometry before the first pointer movement.
     setResizeHandle(handle);
     setResizeInitialBox({ x: box.x, y: box.y, w: box.width, h: box.height });
     setResizeStartMouse({ x: mouseX, y: mouseY });
@@ -1801,6 +1802,7 @@ export default function PdfEditorTool({
   // Export & Download Modified PDF
   const exportModifiedPdf = async () => {
     if (!pdfBytes) return;
+    let pdfJsDoc: Awaited<ReturnType<typeof pdfjsLib.getDocument>["promise"]> | null = null;
     setIsProcessing(true);
     try {
       const doc = await PDFDocument.load(pdfBytes, { ignoreEncryption: true });
@@ -1827,7 +1829,6 @@ export default function PdfEditorTool({
       }
 
       // If true permanent redaction is enabled and whiteout boxes exist, load pdfjs for raster flattening
-      let pdfJsDoc: any = null;
       if (flattenRedactions && pagesWithWhiteout.size > 0) {
         const loadingTask = pdfjsLib.getDocument({ data: pdfBytes.slice() });
         pdfJsDoc = await loadingTask.promise;
@@ -2248,6 +2249,7 @@ export default function PdfEditorTool({
     } catch (e) {
       showToast("Error compiling edited PDF: " + (e instanceof Error ? e.message : "Unknown error"));
     } finally {
+      await pdfJsDoc?.destroy();
       setIsProcessing(false);
     }
   };
@@ -3901,6 +3903,7 @@ export default function PdfEditorTool({
                                 const rect = overlayRef.current.getBoundingClientRect();
                                 const mouseX = ((e.clientX - rect.left) / rect.width) * 100;
                                 const mouseY = ((e.clientY - rect.top) / rect.height) * 100;
+                                pushHistorySnapshot();
                                 setDragOffset({ x: mouseX - ann.x, y: mouseY - ann.y });
                                 setIsDraggingSelected(true);
                               }
@@ -3972,6 +3975,7 @@ export default function PdfEditorTool({
                                 const rect = overlayRef.current.getBoundingClientRect();
                                 const mouseX = ((e.clientX - rect.left) / rect.width) * 100;
                                 const mouseY = ((e.clientY - rect.top) / rect.height) * 100;
+                                pushHistorySnapshot();
                                 setDragOffset({ x: mouseX - ann.x, y: mouseY - ann.y });
                                 setIsDraggingSelected(true);
                               }
@@ -4018,6 +4022,7 @@ export default function PdfEditorTool({
                                 const rect = overlayRef.current.getBoundingClientRect();
                                 const mouseX = ((e.clientX - rect.left) / rect.width) * 100;
                                 const mouseY = ((e.clientY - rect.top) / rect.height) * 100;
+                                pushHistorySnapshot();
                                 setDragOffset({ x: mouseX - ann.x, y: mouseY - ann.y });
                                 setIsDraggingSelected(true);
                               }
@@ -4063,6 +4068,7 @@ export default function PdfEditorTool({
                                 const rect = overlayRef.current.getBoundingClientRect();
                                 const mouseX = ((e.clientX - rect.left) / rect.width) * 100;
                                 const mouseY = ((e.clientY - rect.top) / rect.height) * 100;
+                                pushHistorySnapshot();
                                 setDragOffset({ x: mouseX - ann.x, y: mouseY - ann.y });
                                 setIsDraggingSelected(true);
                               }
@@ -4114,6 +4120,7 @@ export default function PdfEditorTool({
                                 const rect = overlayRef.current.getBoundingClientRect();
                                 const mouseX = ((e.clientX - rect.left) / rect.width) * 100;
                                 const mouseY = ((e.clientY - rect.top) / rect.height) * 100;
+                                pushHistorySnapshot();
                                 setDragOffset({ x: mouseX - ann.x, y: mouseY - ann.y });
                                 setIsDraggingSelected(true);
                               }
@@ -4161,6 +4168,7 @@ export default function PdfEditorTool({
                                 const rect = overlayRef.current.getBoundingClientRect();
                                 const mouseX = ((e.clientX - rect.left) / rect.width) * 100;
                                 const mouseY = ((e.clientY - rect.top) / rect.height) * 100;
+                                pushHistorySnapshot();
                                 setDragOffset({ x: mouseX - ann.x, y: mouseY - ann.y });
                                 setIsDraggingSelected(true);
                               }
@@ -4212,6 +4220,7 @@ export default function PdfEditorTool({
                                 const rect = overlayRef.current.getBoundingClientRect();
                                 const mouseX = ((e.clientX - rect.left) / rect.width) * 100;
                                 const mouseY = ((e.clientY - rect.top) / rect.height) * 100;
+                                pushHistorySnapshot();
                                 setDragOffset({ x: mouseX - ann.x, y: mouseY - ann.y });
                                 setIsDraggingSelected(true);
                               }
@@ -4307,6 +4316,7 @@ export default function PdfEditorTool({
                                 const rect = overlayRef.current.getBoundingClientRect();
                                 const mouseX = ((e.clientX - rect.left) / rect.width) * 100;
                                 const mouseY = ((e.clientY - rect.top) / rect.height) * 100;
+                                pushHistorySnapshot();
                                 setDragOffset({ x: mouseX - ann.x, y: mouseY - ann.y });
                                 setIsDraggingSelected(true);
                               }
