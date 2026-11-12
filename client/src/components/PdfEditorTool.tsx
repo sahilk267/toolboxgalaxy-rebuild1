@@ -456,9 +456,17 @@ export default function PdfEditorTool({
     "select" | "smart-edit" | "text" | "whiteout" | "draw" | "stamp" | "image" | "link" | "highlight" | "shape"
   >("smart-edit");
   
-  // History Undo / Redo Stack Engine (GAP-01)
-  const undoStackRef = useRef<{ annotations: Annotation[]; pageRotations: number[] }[]>([]);
-  const redoStackRef = useRef<{ annotations: Annotation[]; pageRotations: number[] }[]>([]);
+  // Preserve the actual PDF document as well as visual edits. PDF byte arrays
+  // remain immutable across operations; history can safely share their buffers.
+  type EditorSnapshot = {
+    pdfBytes: Uint8Array | null;
+    numPages: number;
+    currentPage: number;
+    annotations: Annotation[];
+    pageRotations: number[];
+  };
+  const undoStackRef = useRef<EditorSnapshot[]>([]);
+  const redoStackRef = useRef<EditorSnapshot[]>([]);
   const [canUndo, setCanUndo] = useState<boolean>(false);
   const [canRedo, setCanRedo] = useState<boolean>(false);
 
@@ -552,6 +560,7 @@ export default function PdfEditorTool({
   const [isExtractingBlocks, setIsExtractingBlocks] = useState<boolean>(false);
   const [hoveredBlockId, setHoveredBlockId] = useState<string | null>(null);
   const [activeInlineBlock, setActiveInlineBlock] = useState<DetectedTextBlock | null>(null);
+  const [reeditingAnnotationId, setReeditingAnnotationId] = useState<string | null>(null);
   const [inlineDraftText, setInlineDraftText] = useState<string>("");
   const [smartEditSearchQuery, setSmartEditSearchQuery] = useState<string>("");
 
@@ -611,19 +620,29 @@ export default function PdfEditorTool({
 
   // Auto-scan PDF typography and layout when smart-edit mode is active
   useEffect(() => {
+    let cancelled = false;
     if (pdfBytes && activeTool === "smart-edit") {
+      setDetectedBlocks([]);
+      setActiveInlineBlock(null);
+      setReeditingAnnotationId(null);
       setIsExtractingBlocks(true);
       extractInteractiveTextBlocks(pdfBytes, currentPage)
         .then((blocks) => {
-          setDetectedBlocks(blocks);
-          setIsExtractingBlocks(false);
+          if (!cancelled) setDetectedBlocks(blocks);
         })
         .catch(() => {
-          setIsExtractingBlocks(false);
+          if (!cancelled) setDetectedBlocks([]);
+        })
+        .finally(() => {
+          if (!cancelled) setIsExtractingBlocks(false);
         });
-    } else if (activeTool !== "smart-edit") {
+    } else {
+      setDetectedBlocks([]);
+      setIsExtractingBlocks(false);
       setActiveInlineBlock(null);
+      setReeditingAnnotationId(null);
     }
+    return () => { cancelled = true; };
   }, [pdfBytes, currentPage, activeTool]);
 
   // Canvas drawing state
@@ -645,47 +664,60 @@ export default function PdfEditorTool({
     setTimeout(() => setStatusMessage(null), 3500);
   };
 
-  // Push current state into undo stack before mutating (GAP-01)
-  const pushHistorySnapshot = () => {
-    undoStackRef.current.push({
-      annotations: JSON.parse(JSON.stringify(annotations)),
-      pageRotations: [...pageRotations],
-    });
-    if (undoStackRef.current.length > 30) {
-      undoStackRef.current.shift();
-    }
+  const cloneAnnotations = (items: Annotation[]): Annotation[] =>
+    items.map((ann) => ann.type === "image"
+      ? { ...ann, bytes: ann.bytes.slice() }
+      : ann.type === "draw"
+        ? { ...ann, points: ann.points.map((point) => ({ ...point })) }
+        : { ...ann });
+
+  const captureSnapshot = (): EditorSnapshot => ({
+    pdfBytes,
+    numPages,
+    currentPage,
+    annotations: cloneAnnotations(annotations),
+    pageRotations: [...pageRotations],
+  });
+  const resetHistory = () => {
+    undoStackRef.current = [];
+    redoStackRef.current = [];
+    setCanUndo(false);
+    setCanRedo(false);
+  };
+  const pushSnapshot = (snapshot: EditorSnapshot) => {
+    undoStackRef.current.push(snapshot);
+    if (undoStackRef.current.length > 30) undoStackRef.current.shift();
     redoStackRef.current = [];
     setCanUndo(true);
     setCanRedo(false);
   };
-
-  const handleUndo = () => {
-    if (undoStackRef.current.length === 0) return;
-    const prev = undoStackRef.current.pop()!;
-    redoStackRef.current.push({
-      annotations: JSON.parse(JSON.stringify(annotations)),
-      pageRotations: [...pageRotations],
-    });
-    setAnnotations(prev.annotations);
-    setPageRotations(prev.pageRotations);
+  const pushHistorySnapshot = () => pushSnapshot(captureSnapshot());
+  const restoreSnapshot = (snapshot: EditorSnapshot) => {
+    setPdfBytes(snapshot.pdfBytes);
+    setNumPages(snapshot.numPages);
+    setCurrentPage(snapshot.currentPage);
+    setAnnotations(cloneAnnotations(snapshot.annotations));
+    setPageRotations([...snapshot.pageRotations]);
     setSelectedId(null);
     setEditingTextId(null);
+    setActiveInlineBlock(null);
+    setReeditingAnnotationId(null);
+  };
+  const handleUndo = () => {
+    const prev = undoStackRef.current.pop();
+    if (!prev) return;
+    redoStackRef.current.push(captureSnapshot());
+    restoreSnapshot(prev);
     setCanUndo(undoStackRef.current.length > 0);
     setCanRedo(true);
     showToast("Reverted change (Undo)");
   };
-
   const handleRedo = () => {
-    if (redoStackRef.current.length === 0) return;
-    const next = redoStackRef.current.pop()!;
-    undoStackRef.current.push({
-      annotations: JSON.parse(JSON.stringify(annotations)),
-      pageRotations: [...pageRotations],
-    });
-    setAnnotations(next.annotations);
-    setPageRotations(next.pageRotations);
-    setSelectedId(null);
-    setEditingTextId(null);
+    const next = redoStackRef.current.pop();
+    if (!next) return;
+    undoStackRef.current.push(captureSnapshot());
+    if (undoStackRef.current.length > 30) undoStackRef.current.shift();
+    restoreSnapshot(next);
     setCanUndo(true);
     setCanRedo(redoStackRef.current.length > 0);
     showToast("Restored change (Redo)");
@@ -742,7 +774,6 @@ export default function PdfEditorTool({
       // Delete / Backspace: delete selected annotation
       if ((e.key === "Delete" || e.key === "Backspace") && selectedId && !isTyping) {
         e.preventDefault();
-        pushHistorySnapshot();
         deleteAnnotation(selectedId);
         showToast("Annotation deleted");
         return;
@@ -890,6 +921,7 @@ export default function PdfEditorTool({
       setCurrentPage(0);
       setPageRotations(new Array(count).fill(0));
       setAnnotations([]);
+      resetHistory();
       setSelectedId(null);
       setActiveTool("smart-edit");
       showToast(`Loaded ${file.name} (${count} pages)`);
@@ -1110,11 +1142,9 @@ export default function PdfEditorTool({
       setResizeHandle(null);
       setResizeInitialBox(null);
       setResizeStartMouse(null);
-      pushHistorySnapshot();
     }
     if (isDraggingSelected) {
       setIsDraggingSelected(false);
-      pushHistorySnapshot();
     }
     if (activeTool === "draw" && isDrawing) {
       if (currentPath.length > 1) {
@@ -1211,6 +1241,7 @@ export default function PdfEditorTool({
   // Select a detected PDF text block for inline in-place editing (Editing Mode)
   const handleSelectBlockForEdit = (block: DetectedTextBlock, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
+    setReeditingAnnotationId(null);
     setActiveInlineBlock(block);
     setInlineDraftText(block.text);
     setFontSize(block.font.fontSize);
@@ -1259,7 +1290,8 @@ export default function PdfEditorTool({
     setFontFamily(ann.fontFamily);
     setTextColor(ann.color || "#0f172a");
     setTextBgColor(ann.bgColor || "#ffffff");
-    setAnnotations((prev) => prev.filter((a) => a.id !== ann.id));
+    // Keep the existing edit until Save succeeds; Cancel must be lossless.
+    setReeditingAnnotationId(ann.id);
     setActiveTool("smart-edit");
   };
 
@@ -1270,7 +1302,7 @@ export default function PdfEditorTool({
     if (trimmed) {
       pushHistorySnapshot();
       const inPlaceAnn: InPlaceEditAnnotation = {
-        id: `inplace-${Date.now()}`,
+        id: reeditingAnnotationId ?? `inplace-${Date.now()}`,
         pageIndex: currentPage,
         type: "inplace-edit",
         originalText: activeInlineBlock.text,
@@ -1287,7 +1319,10 @@ export default function PdfEditorTool({
         isBold: isBold,
         isItalic: isItalic,
       };
-      setAnnotations((prev) => [...prev, inPlaceAnn]);
+      setAnnotations((prev) => [
+        ...prev.filter((ann) => ann.id !== reeditingAnnotationId),
+        inPlaceAnn,
+      ]);
       setDetectedBlocks((prev) =>
         prev.map((b) =>
           b.id === activeInlineBlock.id
@@ -1310,6 +1345,7 @@ export default function PdfEditorTool({
       showToast(`Updated text with auto-matched font (${activeInlineBlock.font.cleanName})`);
     }
     setActiveInlineBlock(null);
+    setReeditingAnnotationId(null);
   };
 
   // Sample/Eyedropper detected font into the active Text Tool (Option 1 & 2 integration)
