@@ -1,5 +1,15 @@
 # ToolboxGalaxy Repair & Verification Progress Ledger
 
+## PDF native form editing and honest text-mode labels — 12 November 2026
+
+- Working branch: `feat/browser-ai-background-remover` (implementation and Git push only).
+- Added a browser-local AcroForm inspection/change module for existing text fields, checkboxes, dropdowns, radio options and single-select lists. Writes use native PDF values, reject read-only/unsupported fields and verify save by reloading the document before replacing editor bytes; multi-select lists are left unchanged.
+- Exposed native fields with Apply controls in the PDF Editor, integrated changes with Undo/Redo snapshots, and capped history to 12 snapshots / approximately 96 MiB unique retained document bytes to protect long sessions.
+- Renamed ordinary on-page editor to *Visual Text Replacement*, prominently warning that it covers text with a background rectangle rather than modifying original PDF content. The desired Sejda-like arbitrary born-digital text editing remains an **unimplemented architectural requirement**.
+- **No tests, build, real-PDF verification or deployment executed in this checkpoint.** Success is code-push success, not runtime feature certification. See `docs/PDF_EDITOR_STABILITY_ROADMAP.md`.
+
+
+
 ## PDF editor P0 data-integrity stabilization — 12 November 2026
 
 **Working branch:** `feat/browser-ai-background-remover`. Source implementation and Git pushes only. No build, automated tests, browser QA, real-PDF comparison or hosting deployment were performed.
