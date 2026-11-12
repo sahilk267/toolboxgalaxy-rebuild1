@@ -153,7 +153,7 @@ export async function extractInteractiveTextBlocks(
   pdfBytes: Uint8Array,
   pageIndex: number
 ): Promise<DetectedTextBlock[]> {
-  let pdf: Awaited<ReturnType<ReturnType<typeof pdfjsLib.getDocument>["promise"]["then"]>> | null = null;
+  let pdf: Awaited<ReturnType<typeof pdfjsLib.getDocument>["promise"]> | null = null;
   try {
     const loadingTask = pdfjsLib.getDocument({ data: pdfBytes.slice() });
     pdf = await loadingTask.promise;
