@@ -19,6 +19,11 @@ import {
 /* -------------------------------------------------------------
  * 1. PDF MERGER & SPLITTER COMPONENT
  * -----------------------------------------------------------*/
+const MAX_PDF_MERGE_FILES = 20;
+const MAX_PDF_MERGE_BYTES = 100 * 1024 * 1024;
+const MAX_MERGE_ITEM_BYTES = 30 * 1024 * 1024;
+const MAX_SPLIT_PDF_BYTES = 50 * 1024 * 1024;
+
 interface PdfFileItem {
   id: string;
   name: string;
@@ -34,6 +39,7 @@ export function PdfMergeSplitTool() {
   const [files, setFiles] = useState<PdfFileItem[]>([]);
   const [isMerging, setIsMerging] = useState(false);
   const [mergeDone, setMergeDone] = useState(false);
+  const uploadBusyRef = useRef(false);
 
   // Split state
   const [splitFile, setSplitFile] = useState<PdfFileItem | null>(null);
@@ -43,36 +49,48 @@ export function PdfMergeSplitTool() {
 
   // Merge File handlers
   const handleAddMergeFiles = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const inputFiles = e.target.files;
-    if (!inputFiles || inputFiles.length === 0) return;
-
-    const newItems: PdfFileItem[] = [];
-    const skippedFiles: string[] = [];
-    for (let i = 0; i < inputFiles.length; i++) {
-      const file = inputFiles[i];
-      try {
-        const buffer = await file.arrayBuffer();
-        const bytes = new Uint8Array(buffer);
-        const doc = await PDFDocument.load(bytes);
-        newItems.push({
-          id: `${Date.now()}-${i}-${Math.random()}`,
-          name: file.name,
-          size: file.size,
-          pageCount: doc.getPageCount(),
-          bytes,
-        });
-      } catch (err) {
-        skippedFiles.push(file.name);
-      }
-    }
-    if (skippedFiles.length > 0) {
-      alert(`Could not load ${skippedFiles.length} file(s): ${skippedFiles.join(", ")}. Please ensure they are valid, unencrypted PDFs.`);
-    }
-    setFiles((prev) => [...prev, ...newItems]);
+    const selected = Array.from(e.target.files ?? []);
     e.target.value = "";
+    if (!selected.length || uploadBusyRef.current || isMerging) return;
+    if (files.length + selected.length > MAX_PDF_MERGE_FILES) {
+      alert(`You can merge up to ${MAX_PDF_MERGE_FILES} PDF files in one browser session.`);
+      return;
+    }
+    uploadBusyRef.current = true;
+    try {
+      const newItems: PdfFileItem[] = [];
+      const skipped: string[] = [];
+      let bytesQueued = files.reduce((sum, item) => sum + item.size, 0);
+      for (const [index, file] of selected.entries()) {
+        if (!file.size || file.size > MAX_MERGE_ITEM_BYTES ||
+            bytesQueued + file.size > MAX_PDF_MERGE_BYTES) {
+          skipped.push(`${file.name} (over 30 MB per file or 100 MB combined)`);
+          continue;
+        }
+        try {
+          const bytes = new Uint8Array(await file.arrayBuffer());
+          const pdf = await PDFDocument.load(bytes);
+          newItems.push({
+            id: `${Date.now()}-${index}-${Math.random()}`,
+            name: file.name,
+            size: file.size,
+            pageCount: pdf.getPageCount(),
+            bytes,
+          });
+          bytesQueued += file.size;
+        } catch {
+          skipped.push(`${file.name} (invalid, encrypted or unreadable)`);
+        }
+      }
+      if (newItems.length) setFiles(previous => [...previous, ...newItems]);
+      if (skipped.length) alert("Skipped PDFs:\n" + skipped.join("\n"));
+    } finally {
+      uploadBusyRef.current = false;
+    }
   };
 
   const moveFile = (index: number, direction: "up" | "down") => {
+    if (isMerging) return;
     const targetIndex = direction === "up" ? index - 1 : index + 1;
     if (targetIndex < 0 || targetIndex >= files.length) return;
     const updated = [...files];
@@ -83,10 +101,12 @@ export function PdfMergeSplitTool() {
   };
 
   const removeFile = (id: string) => {
+    if (isMerging) return;
     setFiles((prev) => prev.filter((f) => f.id !== id));
   };
 
   const executeMerge = async () => {
+    if (isMerging) return;
     if (files.length < 2) {
       alert("Please upload at least 2 PDF files to merge.");
       return;
@@ -109,7 +129,7 @@ export function PdfMergeSplitTool() {
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
-      URL.revokeObjectURL(url);
+      window.setTimeout(() => URL.revokeObjectURL(url), 2500);
       setMergeDone(true);
       trackPageView(undefined, undefined, "pdf-merged", {
         file_count: files.length,
@@ -126,7 +146,12 @@ export function PdfMergeSplitTool() {
   // Split File handlers
   const handleSplitUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (!file) return;
+    e.target.value = "";
+    if (!file || isSplitting) return;
+    if (file.size <= 0 || file.size > MAX_SPLIT_PDF_BYTES) {
+      alert("Choose a nonempty PDF of 50 MB or less for browser-side splitting.");
+      return;
+    }
     try {
       const buffer = await file.arrayBuffer();
       const bytes = new Uint8Array(buffer);
@@ -154,6 +179,7 @@ export function PdfMergeSplitTool() {
 
       // Parse range string (e.g. "1-3, 5, 7-9") with strict validation
       const pagesToExtract: number[] = [];
+      const seenPages = new Set<number>();
       const parts = pageRange.split(",").map((p) => p.trim()).filter(Boolean);
 
       if (parts.length === 0) {
@@ -170,7 +196,10 @@ export function PdfMergeSplitTool() {
             setIsSplitting(false);
             return;
           }
-          if (!pagesToExtract.includes(num - 1)) pagesToExtract.push(num - 1);
+          if (!seenPages.has(num - 1)) {
+            seenPages.add(num - 1);
+            pagesToExtract.push(num - 1);
+          }
         } else if (/^\d+\s*-\s*\d+$/.test(part)) {
           const [startStr, endStr] = part.split("-").map((s) => s.trim());
           const start = parseInt(startStr, 10);
@@ -186,7 +215,10 @@ export function PdfMergeSplitTool() {
             return;
           }
           for (let i = start; i <= end; i++) {
-            if (!pagesToExtract.includes(i - 1)) pagesToExtract.push(i - 1);
+            if (!seenPages.has(i - 1)) {
+              seenPages.add(i - 1);
+              pagesToExtract.push(i - 1);
+            }
           }
         } else {
           alert(`Malformed page token "${part}". Please provide numbers and ranges like "1-3, 5" without letters or double dashes.`);
@@ -214,7 +246,7 @@ export function PdfMergeSplitTool() {
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
-      URL.revokeObjectURL(url);
+      window.setTimeout(() => URL.revokeObjectURL(url), 2500);
       setSplitDone(true);
       setTimeout(() => setSplitDone(false), 3000);
     } catch (err) {
@@ -257,7 +289,7 @@ export function PdfMergeSplitTool() {
             <div>
               <h3 className="text-base font-semibold text-white">Merge Multiple PDFs</h3>
               <p className="text-xs text-white/60">
-                Order your files and combine them into a single coherent document. 100% in-browser.
+                Order your files and combine them locally (up to 20 PDFs, 30 MB each, 100 MB total).
               </p>
             </div>
             <label className="signal-button inline-flex cursor-pointer items-center gap-2 text-xs">
@@ -350,7 +382,7 @@ export function PdfMergeSplitTool() {
           <div>
             <h3 className="text-base font-semibold text-white">Extract & Split PDF Pages</h3>
             <p className="text-xs text-white/60">
-              Extract specific pages or page ranges from a document into a standalone PDF.
+              Extract pages from a PDF up to 50 MB, entirely in your browser.
             </p>
           </div>
 
