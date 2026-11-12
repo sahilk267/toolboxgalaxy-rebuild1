@@ -81,9 +81,9 @@ export default function ConnectionsPuzzle() {
 
   // Timer
   useEffect(() => {
-    if (isSolved || isGameOver) return;
+    if (isSolved || isGameOver || showRules) return;
     return subscribeVisibleGameSeconds(delta => setSeconds(s => s + delta));
-  }, [isSolved, isGameOver]);
+  }, [isSolved, isGameOver, showRules]);
 
   // Peer-to-Peer Automated Challenge System
   const challengeInfo = useMemo(() => {

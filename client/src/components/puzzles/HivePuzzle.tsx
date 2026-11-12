@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { subscribeVisibleGameSeconds } from "@/game/visibleGameTimer";
+import { shouldIgnorePuzzleKey } from "@/game/puzzleKeyboard";
 import { Link } from "wouter";
 import confetti from "canvas-confetti";
 import { OrbitAudio } from "@/game/audio";
@@ -75,9 +76,9 @@ export default function HivePuzzle() {
 
   // Timer
   useEffect(() => {
-    if (showVictoryModal) return;
+    if (showVictoryModal || showRules || showFoundDrawer) return;
     return subscribeVisibleGameSeconds(delta => setSeconds(s => s + delta));
-  }, [showVictoryModal]);
+  }, [showVictoryModal, showRules, showFoundDrawer]);
 
   // Peer-to-Peer Automated Challenge System
   const challengeInfo = useMemo(() => {
@@ -297,7 +298,7 @@ export default function HivePuzzle() {
   // Keyboard navigation
   const handleKeyDown = useCallback(
     (e: KeyboardEvent) => {
-      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+      if (showRules || showVictoryModal || showFoundDrawer || shouldIgnorePuzzleKey(e)) return;
 
       const key = e.key.toUpperCase();
 
@@ -307,7 +308,7 @@ export default function HivePuzzle() {
       } else if (key === "BACKSPACE" || key === "DELETE") {
         e.preventDefault();
         handleDelete();
-      } else if (key === " " || key === "TAB") {
+      } else if (key === " ") {
         e.preventDefault();
         handleShuffle();
       } else if (/^[A-Z]$/.test(key)) {
@@ -318,7 +319,7 @@ export default function HivePuzzle() {
         }
       }
     },
-    [currentWord, edition, foundWords]
+    [currentWord, edition, foundWords, showRules, showVictoryModal, showFoundDrawer]
   );
 
   useEffect(() => {

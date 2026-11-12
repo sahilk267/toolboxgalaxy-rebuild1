@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { subscribeVisibleGameSeconds } from "@/game/visibleGameTimer";
+import { shouldIgnorePuzzleKey } from "@/game/puzzleKeyboard";
 import { Link } from "wouter";
 import { OrbitAudio } from "@/game/audio";
 import { miniCrosswordEditionForDate, type MiniCrosswordEdition, type CrosswordClue } from "@/game/logicPuzzles/miniCrosswordBank";
@@ -68,9 +69,9 @@ export default function MiniCrosswordPuzzle() {
 
   // Timer
   useEffect(() => {
-    if (isSolved) return;
+    if (isSolved || showRules) return;
     return subscribeVisibleGameSeconds(delta => setSeconds(s => s + delta));
-  }, [isSolved]);
+  }, [isSolved, showRules]);
 
   // Peer-to-Peer Automated Challenge System
   const challengeInfo = useMemo(() => {
@@ -164,16 +165,20 @@ export default function MiniCrosswordPuzzle() {
   // Physical keyboard listener
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.ctrlKey || e.metaKey || e.altKey) return;
+      if (showRules || shouldIgnorePuzzleKey(e)) return;
       if (e.key === "Backspace" || e.key === "Delete") {
         handleKeyPress("BACKSPACE");
       } else if (e.key === "ArrowLeft") {
+        e.preventDefault();
         if (selectedCell.c > 0) setSelectedCell((p) => ({ ...p, c: p.c - 1 }));
       } else if (e.key === "ArrowRight") {
+        e.preventDefault();
         if (selectedCell.c < 4) setSelectedCell((p) => ({ ...p, c: p.c + 1 }));
       } else if (e.key === "ArrowUp") {
+        e.preventDefault();
         if (selectedCell.r > 0) setSelectedCell((p) => ({ ...p, r: p.r - 1 }));
       } else if (e.key === "ArrowDown") {
+        e.preventDefault();
         if (selectedCell.r < 4) setSelectedCell((p) => ({ ...p, r: p.r + 1 }));
       } else if (e.key === " " || e.key === "Spacebar") {
         e.preventDefault();
@@ -184,7 +189,7 @@ export default function MiniCrosswordPuzzle() {
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [handleKeyPress, selectedCell]);
+  }, [handleKeyPress, selectedCell, showRules]);
 
   const handleHint = () => {
     if (isSolved) return;

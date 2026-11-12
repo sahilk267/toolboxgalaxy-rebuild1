@@ -94,9 +94,9 @@ export default function ChessPuzzle() {
 
   // Live Timer
   useEffect(() => {
-    if (isSolved) return;
+    if (isSolved || showRules || showVictoryModal) return;
     return subscribeVisibleGameSeconds(delta => setSeconds(s => s + delta));
-  }, [isSolved]);
+  }, [isSolved, showRules, showVictoryModal]);
 
   const handleReset = () => {
     gameSessionRef.current++;

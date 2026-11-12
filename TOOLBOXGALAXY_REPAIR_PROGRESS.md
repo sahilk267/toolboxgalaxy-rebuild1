@@ -1,5 +1,13 @@
 # ToolboxGalaxy Repair & Verification Progress Ledger
 
+## Puzzle input & game timer lifecycle — 12 November 2026
+
+- **Cross-puzzle keyboard guard:** Wordle, Hive and Mini Crossword ignore keys when focus belongs to fields, buttons, contenteditable or dialogs, as well as IME, modifier shortcuts, hidden tabs and auto-repeat. This prevents global window listeners from hijacking other controls. Hive no longer blocks Tab navigation; Mini Crossword captures arrows only for grid navigation.
+- **Seven puzzle clocks:** Wordle, Connections, Hive, Strands, Mini Crossword, Chess and Nonogram use the existing visible-tab timer and now also suspend counting while help/instructions or relevant result overlays are open. Timer resumes automatically when returning to play.
+- **Strands mobile/desktop pointer lifecycle:** release is handled on window even when pointer ends outside the grid, pointercancel clears drag mode, and reset clears active pointer state. Touch taps can build a path incrementally; drag submission remains available, and keyboard button clicks do not double-append.
+- **Scope:** source implementation and Git push only. No builds, tests, browser QA or live deployment performed; runtime fixes are not yet verified.
+
+
 ## Deep scalability phase — remaining games & media workflows (12 November 2026)
 
 **Working branch:** `feat/browser-ai-background-remover`. Code implementation and Git push only; tests, manual QA and deployment explicitly deferred by user.

@@ -59,6 +59,7 @@ export default function StrandsPuzzle() {
   const [orderOfFound, setOrderOfFound] = useState<("theme" | "spangram" | "hint")[]>([]);
 
   const gridContainerRef = useRef<HTMLDivElement>(null);
+  const pointerMovedRef = useRef(false);
 
   // Total words to find: theme words + 1 spangram
   const totalTargetWords = edition.themeWords.length + 1;
@@ -67,9 +68,9 @@ export default function StrandsPuzzle() {
 
   // Track timer
   useEffect(() => {
-    if (isSolved) return;
+    if (isSolved || showRules) return;
     return subscribeVisibleGameSeconds(delta => setSeconds(s => s + delta));
-  }, [isSolved]);
+  }, [isSolved, showRules]);
 
   // Victory handling
   useEffect(() => {
@@ -218,25 +219,47 @@ export default function StrandsPuzzle() {
 
   // Pointer event handlers for drag connecting
   const handlePointerDown = (c: CellCoord) => {
-    if (isSolved) return;
-    const k = cellKey(c);
-    if (usedCells.has(k)) return;
-
+    if (isSolved || usedCells.has(cellKey(c))) return;
+    pointerMovedRef.current = false;
     setIsPointerDown(true);
-    setCurrentPath([c]);
-    audio.current.play("rotate");
+    // Taps append to the selection; dragging begins from its first cell.
+    if (currentPath.length && !isPointerDown) addCell(c);
+    else {
+      setCurrentPath([c]);
+      audio.current.play("rotate");
+    }
   };
 
   const handlePointerEnter = (c: CellCoord) => {
     if (!isPointerDown || isSolved) return;
+    pointerMovedRef.current = true;
     addCell(c);
   };
 
   const handlePointerUp = () => {
     if (!isPointerDown) return;
     setIsPointerDown(false);
-    submitPath();
+    // A drag submits the selected path; tapping leaves it available for
+    // successive taps or the explicit Submit button on touch devices.
+    if (pointerMovedRef.current) submitPath();
+    pointerMovedRef.current = false;
   };
+
+  useEffect(() => {
+    if (!isPointerDown) return;
+    // Release outside the grid must not leave all cells in drag mode.
+    const release = () => handlePointerUp();
+    const cancel = () => {
+      pointerMovedRef.current = false;
+      setIsPointerDown(false);
+    };
+    window.addEventListener("pointerup", release);
+    window.addEventListener("pointercancel", cancel);
+    return () => {
+      window.removeEventListener("pointerup", release);
+      window.removeEventListener("pointercancel", cancel);
+    };
+  }, [isPointerDown, handlePointerUp]);
 
   // Use Hint
   const handleUseHint = () => {
@@ -257,6 +280,8 @@ export default function StrandsPuzzle() {
   const handleReset = () => {
     audio.current.play("rotate");
     setCurrentPath([]);
+    setIsPointerDown(false);
+    pointerMovedRef.current = false;
     setFoundWords([]);
     setFoundSpangram(null);
     setBonusWordsFound([]);
@@ -458,11 +483,10 @@ Play free at: ${window.location.origin}/games/strands`;
                     handlePointerDown(coord);
                   }}
                   onPointerEnter={() => handlePointerEnter(coord)}
-                  onClick={() => {
-                    // Click fallback for non-drag interaction
-                    if (!isPointerDown) {
-                      addCell(coord);
-                    }
+                  onClick={(event) => {
+                    // Pointer gestures are handled above; keyboard activation
+                    // has detail=0 and must add exactly one cell, not twice.
+                    if (event.detail === 0) addCell(coord);
                   }}
                   disabled={isSolved || !!usedInfo}
                   className={`w-11 h-11 sm:w-14 sm:h-14 rounded-full flex items-center justify-center text-lg sm:text-xl font-bold transition-all border ${cellStyle}`}

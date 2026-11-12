@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { subscribeVisibleGameSeconds } from "@/game/visibleGameTimer";
+import { shouldIgnorePuzzleKey } from "@/game/puzzleKeyboard";
 import { Link } from "wouter";
 import { OrbitAudio } from "@/game/audio";
 import { wordleEditionForDate, type WordleEdition } from "@/game/logicPuzzles/wordleBank";
@@ -69,9 +70,9 @@ export default function WordlePuzzle() {
 
   // Timer
   useEffect(() => {
-    if (isSolved || isGameOver) return;
+    if (isSolved || isGameOver || showRules) return;
     return subscribeVisibleGameSeconds(delta => setSeconds(s => s + delta));
-  }, [isSolved, isGameOver]);
+  }, [isSolved, isGameOver, showRules]);
 
   // Peer-to-Peer Automated Challenge System
   const challengeInfo = useMemo(() => {
@@ -205,7 +206,7 @@ export default function WordlePuzzle() {
   // Physical keyboard listener
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.ctrlKey || e.metaKey || e.altKey) return;
+      if (showRules || shouldIgnorePuzzleKey(e)) return;
       if (e.key === "Enter") {
         handleKeyPress("ENTER");
       } else if (e.key === "Backspace") {
@@ -216,7 +217,7 @@ export default function WordlePuzzle() {
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [handleKeyPress]);
+  }, [handleKeyPress, showRules]);
 
   const getChallengeUrl = () => {
     const origin = typeof window !== "undefined" ? window.location.origin : "https://toolboxgalaxy.com";

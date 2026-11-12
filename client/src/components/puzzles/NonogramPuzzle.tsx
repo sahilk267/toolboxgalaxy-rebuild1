@@ -61,9 +61,9 @@ export default function NonogramPuzzle() {
 
   // Live Timer
   useEffect(() => {
-    if (isSolved) return;
+    if (isSolved || showRules || showVictoryModal) return;
     return subscribeVisibleGameSeconds(delta => setSeconds(s => s + delta));
-  }, [isSolved]);
+  }, [isSolved, showRules, showVictoryModal]);
 
   // Check if grid matches solution
   useEffect(() => {
