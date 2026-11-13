@@ -1,5 +1,14 @@
 # ToolboxGalaxy Repair & Verification Progress Ledger
 
+## PDF editing safety gates — 13 November 2026
+
+- **Fail-fast export:** The visual PDF editor now checks all user-added/replacement text, stamps, headers, footers and watermark text before export. If standard-font sanitization would change even one character, it cancels export with a clear error instead of silently transliterating/removing glyphs. Inline visual replacement similarly rejects unsupported characters at Save.
+- **Replacement provenance:** Re-editing a visual replacement keeps the original underlying text identifier/content in the annotation rather than treating the last overlay string as original PDF text.
+- **Native forms:** Editable dropdowns, multi-select dropdowns and multi-select option lists are left untouched by the current single-choice UI to avoid destroying values.
+- **Protect form-bearing PDFs:** Existing copy-based page duplication and rebuild-based page reorder operations are blocked when interactive form fields exist, since document-level AcroForm objects can otherwise be lost. These operations still require a preservation-safe alternative.
+- **Scope:** All are code-level safety measures pushed to `feat/browser-ai-background-remover`. No typecheck, browser tests, real-PDF verification or deployment performed. True native arbitrary page-text editing remains pending.
+
+
 ## PDF native form editing and honest text-mode labels — 12 November 2026
 
 - Working branch: `feat/browser-ai-background-remover` (implementation and Git push only).
