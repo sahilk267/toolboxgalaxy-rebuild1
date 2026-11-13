@@ -1351,13 +1351,20 @@ export default function PdfEditorTool({
   const handleCommitInlineEdit = () => {
     if (!activeInlineBlock) return;
     const trimmed = inlineDraftText.trim();
+    if (sanitizeWinAnsiText(trimmed) !== trimmed) {
+      showToast("Cannot save: this visual text mode cannot preserve those characters. Use a supported native PDF form field instead.");
+      return;
+    }
     if (trimmed) {
       pushHistorySnapshot();
+      const existingReplacement = annotations.find((ann): ann is InPlaceEditAnnotation =>
+        ann.type === "inplace-edit" && ann.id === reeditingAnnotationId
+      );
       const inPlaceAnn: InPlaceEditAnnotation = {
         id: reeditingAnnotationId ?? `inplace-${Date.now()}`,
         pageIndex: currentPage,
         type: "inplace-edit",
-        originalText: activeInlineBlock.text,
+        originalText: existingReplacement?.originalText ?? activeInlineBlock.text,
         newText: trimmed,
         x: activeInlineBlock.x,
         y: activeInlineBlock.y,
@@ -1872,6 +1879,25 @@ export default function PdfEditorTool({
     let pdfJsDoc: Awaited<ReturnType<typeof pdfjsLib.getDocument>["promise"]> | null = null;
     setIsProcessing(true);
     try {
+      // pdf-lib standard fonts cannot preserve arbitrary Unicode and the
+      // existing sanitizer transliterates/drops glyphs. Never silently write
+      // a PDF whose displayed text differs from the user's input.
+      const drawnText = [
+        ...annotations.flatMap((ann) => ann.type === "text"
+          ? [{ label: "text annotation", value: ann.text }]
+          : ann.type === "inplace-edit"
+            ? [{ label: "visual replacement", value: ann.newText }]
+            : ann.type === "stamp"
+              ? [{ label: "stamp", value: ann.text }]
+              : []),
+        { label: "header", value: headerText.trim() },
+        { label: "footer", value: footerText.trim() },
+        { label: "watermark", value: watermarkText.trim() },
+      ];
+      const incompatible = drawnText.find(({ value }) => sanitizeWinAnsiText(value) !== value);
+      if (incompatible) {
+        throw new Error(`The ${incompatible.label} contains characters unsupported by standard PDF fonts. Export cancelled to prevent silent text corruption.`);
+      }
       const doc = await PDFDocument.load(pdfBytes, { ignoreEncryption: true });
       const helvetica = await doc.embedFont(StandardFonts.Helvetica);
       const helveticaBold = await doc.embedFont(StandardFonts.HelveticaBold);
