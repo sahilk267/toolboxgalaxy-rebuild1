@@ -111,54 +111,78 @@ function inspectSimpleStream(streamBytes: Uint8Array, expectedText: string): Sim
   const original = new TextDecoder("utf-8", { fatal: true }).decode(streamBytes);
   const lines = original.split(/\r?\n/);
   let textOpen = false;
-  let shown = 0;
   let begins = 0;
   let ends = 0;
-  let resource = "";
-  let size = 0;
-  let encodedText = "";
-  let operand = "";
+  let selected: SimpleStream | null = null;
+  let selectedCount = 0;
+  let currentResource = "";
+  let currentSize = 0;
+  let currentTextCount = 0;
+  let hasAbsolutePosition = false;
+  let graphicsDepth = 0;
+
   for (const line of lines) {
     const op = line.trim();
     if (!op) continue;
-    if (op === "q" || op === "Q") {
+    if (op === "q") {
       if (textOpen) unsupported("Graphics state changes inside text are unsupported.");
+      graphicsDepth++;
+    } else if (op === "Q") {
+      if (textOpen || graphicsDepth === 0) unsupported("Unbalanced graphics state changes.");
+      graphicsDepth--;
     } else if (op === "BT") {
-      if (textOpen || ++begins !== 1) unsupported("Multiple or nested text objects are unsupported.");
+      if (textOpen || ++begins > 20) unsupported("Too many or nested text objects.");
       textOpen = true;
+      currentResource = "";
+      currentSize = 0;
+      currentTextCount = 0;
+      hasAbsolutePosition = false;
     } else if (op === "ET") {
-      if (!textOpen) unsupported("Malformed text object.");
+      if (!textOpen || currentTextCount !== 1 || !hasAbsolutePosition) {
+        unsupported("Each text object must have exactly one run and an absolute position.");
+      }
       textOpen = false;
       ends++;
     } else if (FONT.test(op) && textOpen) {
       const match = op.match(FONT)!;
-      if (resource) unsupported("Multiple font selections are unsupported.");
-      resource = match[1];
-      size = Number(match[2]);
-    } else if (SHOW.test(op) && textOpen) {
-      if (!resource || ++shown !== 1) unsupported("Multiple or unstyled text runs are unsupported.");
-      encodedText = op.match(SHOW)![1];
-      operand = `(${encodedText})`;
-    } else if (HEX_SHOW.test(op) && textOpen) {
-      if (!resource || ++shown !== 1) unsupported("Multiple or unstyled text runs are unsupported.");
-      const hex = op.match(HEX_SHOW)![1];
-      if (hex.length % 2 !== 0) unsupported("Odd-length hex text operand.");
-      encodedText = decodeHex(hex);
-      operand = `<${hex}>`;
-    } else if (textOpen && (MATRIX.test(op) || MOVE.test(op) || RGB.test(op) ||
-      CMYK.test(op) || ONE_NUMBER.test(op) || op === "T*")) {
-      // Position, color and spacing operators are retained verbatim.
+      if (currentResource) unsupported("Multiple font selections in one text object.");
+      currentResource = match[1];
+      currentSize = Number(match[2]);
+      if (!Number.isFinite(currentSize) || currentSize <= 0 || currentSize > 300) {
+        unsupported("Invalid font size.");
+      }
+    } else if (MATRIX.test(op) && textOpen) {
+      if (hasAbsolutePosition || currentTextCount) unsupported("Multiple text positions in one run.");
+      hasAbsolutePosition = true;
+    } else if ((SHOW.test(op) || HEX_SHOW.test(op)) && textOpen) {
+      if (!currentResource || !hasAbsolutePosition || ++currentTextCount !== 1) {
+        unsupported("Text must be one run with an explicit font and absolute position.");
+      }
+      const literal = op.match(SHOW);
+      const hex = op.match(HEX_SHOW);
+      if (hex && hex[1].length % 2 !== 0) unsupported("Odd-length hexadecimal text operand.");
+      const text = literal ? literal[1] : decodeHex(hex![1]);
+      if (text === expectedText) {
+        selectedCount++;
+        selected = {
+          original,
+          encodedText: text,
+          operand: literal ? `(${literal[1]})` : `<${hex![1]}>`,
+          fontResource: currentResource,
+          fontSize: currentSize,
+        };
+      }
+    } else if (textOpen && (RGB.test(op) || CMYK.test(op) || ONE_NUMBER.test(op))) {
+      // Only harmless formatting instructions are retained verbatim.
     } else {
-      unsupported("The page uses unsupported text, graphics or positioning operators.");
+      unsupported("The page uses unsupported operators, positions, or embedded graphics.");
     }
   }
-  if (textOpen || begins !== 1 || ends !== 1 || shown !== 1 || !size || size > 300) {
-    unsupported("Expected one complete, simply positioned text run.");
+  if (textOpen || graphicsDepth !== 0 || begins === 0 || begins !== ends ||
+      selectedCount !== 1 || !selected) {
+    unsupported("Expected one unambiguous source run among independently positioned text objects.");
   }
-  if (encodedText !== expectedText) {
-    unsupported("Selected text is not an exact single-run match in the original page stream.");
-  }
-  return { original, encodedText, operand, fontResource: resource, fontSize: size };
+  return selected;
 }
 
 async function readPageText(bytes: Uint8Array, pageIndex: number): Promise<string> {
