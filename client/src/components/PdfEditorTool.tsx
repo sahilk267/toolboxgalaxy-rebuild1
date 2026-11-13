@@ -1565,6 +1565,9 @@ export default function PdfEditorTool({
     setIsProcessing(true);
     try {
       const doc = await PDFDocument.load(pdfBytes, { ignoreEncryption: true });
+      if (doc.getForm().getFields().length > 0) {
+        throw new Error("Duplicating pages in a PDF with native form fields may break field references. This operation is disabled until preservation-safe duplication is available.");
+      }
       const [copiedPage] = await doc.copyPages(doc, [targetIndex]);
       const insertAt = targetIndex + 1;
       doc.insertPage(insertAt, copiedPage);
@@ -1584,7 +1587,7 @@ export default function PdfEditorTool({
       setCurrentPage(insertAt);
       showToast(`Duplicated page ${targetIndex + 1}`);
     } catch {
-      showToast("Failed to duplicate page");
+      showToast("Failed to duplicate page; form-bearing documents need a preservation-safe page copier.");
     } finally {
       setIsProcessing(false);
     }
@@ -1604,6 +1607,9 @@ export default function PdfEditorTool({
     setIsProcessing(true);
     try {
       const doc = await PDFDocument.load(pdfBytes, { ignoreEncryption: true });
+      if (doc.getForm().getFields().length > 0) {
+        throw new Error("Page reorder would discard interactive form structure. This operation is disabled for PDFs containing form fields.");
+      }
       const newDoc = await PDFDocument.create();
       const order = Array.from({ length: numPages }, (_, i) => i);
       const [movedItem] = order.splice(fromIdx, 1);
@@ -1636,7 +1642,7 @@ export default function PdfEditorTool({
       setCurrentPage(toIdx);
       showToast(`Moved page ${fromIdx + 1} to position ${toIdx + 1}`);
     } catch {
-      showToast("Failed to reorder page");
+      showToast("Could not reorder pages; interactive forms require a preservation-safe operation.");
     } finally {
       setIsProcessing(false);
     }
