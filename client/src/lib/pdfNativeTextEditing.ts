@@ -39,140 +39,11 @@ const unsupported = (reason: string): never => {
 const DECIMAL = "-?(?:\\d+(?:\\.\\d*)?|\\.\\d+)";
 const RGB = new RegExp(`^${DECIMAL}\\s+${DECIMAL}\\s+${DECIMAL}\\s+(?:rg|RG)$`);
 const CMYK = new RegExp(`^${DECIMAL}\\s+${DECIMAL}\\s+${DECIMAL}\\s+${DECIMAL}\\s+(?:k|K)$`);
-// Non-identity text matrices affect width/position, so reject them.
-const MATRIX = new RegExp(`^1\\s+0\\s+0\\s+1\\s+${DECIMAL}\\s+${DECIMAL}\\s+Tmimport {
-  PDFArray,
-  PDFDict,
-  PDFDocument,
-  PDFName,
-  PDFRawStream,
-  PDFRef,
-  StandardFonts,
-} from "pdf-lib";
-import * as pdfjsLib from "pdfjs-dist";
-import { ensurePdfWorkerConfigured } from "./pdfWorkerSetup";
-
-export class NativeTextUnsupportedError extends Error {
-  constructor(reason: string) {
-    super(reason);
-    this.name = "NativeTextUnsupportedError";
-  }
-}
-
-export interface NativeTextResult {
-  bytes: Uint8Array;
-  originalText: string;
-  replacementText: string;
-  pageIndex: number;
-  fontName: string;
-  fontSize: number;
-}
-
-type SimpleStream = {
-  original: string;
-  encodedText: string;
-  fontResource: string;
-  fontSize: number;
-};
-
-const unsupported = (reason: string): never => {
-  throw new NativeTextUnsupportedError(reason);
-};
-const DECIMAL = "-?(?:\\d+(?:\\.\\d*)?|\\.\\d+)";
-const RGB = new RegExp(`^${DECIMAL}\\s+${DECIMAL}\\s+${DECIMAL}\\s+(?:rg|RG)$`);
-const CMYK = new RegExp(`^${DECIMAL}\\s+${DECIMAL}\\s+${DECIMAL}\\s+${DECIMAL}\\s+(?:k|K)$`);
-);
+const MATRIX = new RegExp(`^1\\s+0\\s+0\\s+1\\s+${DECIMAL}\\s+${DECIMAL}\\s+Tm$`);
 const MOVE = new RegExp(`^${DECIMAL}\\s+${DECIMAL}\\s+Td$`);
 const FONT = /^\/([A-Za-z0-9_.-]+)\s+(\d+(?:\.\d+)?)\s+Tf$/;
 const SHOW = /^\(([A-Za-z0-9 .,!?'\/-]+)\)\s+Tj$/;
-const ONE_NUMBER = new RegExp(`^${DECIMAL}\\s+(?:TL|g|G)import {
-  PDFArray,
-  PDFDict,
-  PDFDocument,
-  PDFName,
-  PDFRawStream,
-  PDFRef,
-  StandardFonts,
-} from "pdf-lib";
-import * as pdfjsLib from "pdfjs-dist";
-import { ensurePdfWorkerConfigured } from "./pdfWorkerSetup";
-
-export class NativeTextUnsupportedError extends Error {
-  constructor(reason: string) {
-    super(reason);
-    this.name = "NativeTextUnsupportedError";
-  }
-}
-
-export interface NativeTextResult {
-  bytes: Uint8Array;
-  originalText: string;
-  replacementText: string;
-  pageIndex: number;
-  fontName: string;
-  fontSize: number;
-}
-
-type SimpleStream = {
-  original: string;
-  encodedText: string;
-  fontResource: string;
-  fontSize: number;
-};
-
-const unsupported = (reason: string): never => {
-  throw new NativeTextUnsupportedError(reason);
-};
-const DECIMAL = "-?(?:\\d+(?:\\.\\d*)?|\\.\\d+)";
-const RGB = new RegExp(`^${DECIMAL}\\s+${DECIMAL}\\s+${DECIMAL}\\s+(?:rg|RG)$`);
-const CMYK = new RegExp(`^${DECIMAL}\\s+${DECIMAL}\\s+${DECIMAL}\\s+${DECIMAL}\\s+(?:k|K)$`);
-// Non-identity text matrices affect width/position, so reject them.
-const MATRIX = new RegExp(`^1\\s+0\\s+0\\s+1\\s+${DECIMAL}\\s+${DECIMAL}\\s+Tmimport {
-  PDFArray,
-  PDFDict,
-  PDFDocument,
-  PDFName,
-  PDFRawStream,
-  PDFRef,
-  StandardFonts,
-} from "pdf-lib";
-import * as pdfjsLib from "pdfjs-dist";
-import { ensurePdfWorkerConfigured } from "./pdfWorkerSetup";
-
-export class NativeTextUnsupportedError extends Error {
-  constructor(reason: string) {
-    super(reason);
-    this.name = "NativeTextUnsupportedError";
-  }
-}
-
-export interface NativeTextResult {
-  bytes: Uint8Array;
-  originalText: string;
-  replacementText: string;
-  pageIndex: number;
-  fontName: string;
-  fontSize: number;
-}
-
-type SimpleStream = {
-  original: string;
-  encodedText: string;
-  fontResource: string;
-  fontSize: number;
-};
-
-const unsupported = (reason: string): never => {
-  throw new NativeTextUnsupportedError(reason);
-};
-const DECIMAL = "-?(?:\\d+(?:\\.\\d*)?|\\.\\d+)";
-const RGB = new RegExp(`^${DECIMAL}\\s+${DECIMAL}\\s+${DECIMAL}\\s+(?:rg|RG)$`);
-const CMYK = new RegExp(`^${DECIMAL}\\s+${DECIMAL}\\s+${DECIMAL}\\s+${DECIMAL}\\s+(?:k|K)$`);
-);
-const MOVE = new RegExp(`^${DECIMAL}\\s+${DECIMAL}\\s+Td$`);
-const FONT = /^\/([A-Za-z0-9_.-]+)\s+(\d+(?:\.\d+)?)\s+Tf$/;
-const SHOW = /^\(([A-Za-z0-9 .,!?'\/-]+)\)\s+Tj$/;
-);
+const ONE_NUMBER = new RegExp(`^${DECIMAL}\\s+(?:TL|g|G)$`);
 const ASCII = /^[\x20-\x7e]+$/;
 const MAX_STREAM = 128 * 1024;
 const MAX_DOCUMENT = 12 * 1024 * 1024;
@@ -243,10 +114,7 @@ async function readPageText(bytes: Uint8Array, pageIndex: number): Promise<strin
     const doc = await task.promise;
     const page = await doc.getPage(pageIndex + 1);
     const text = await page.getTextContent();
-    return text.items
-      .filter((item) => "str" in item && typeof item.str === "string")
-      .map((item) => "str" in item ? item.str : "")
-      .join("");
+    return text.items.filter((item) => "str" in item).map((item) => "str" in item ? item.str : "").join("");
   } finally {
     await task.destroy();
   }
@@ -346,28 +214,21 @@ export async function replaceSimpleNativePdfText(
   const replaced = parsed.original.slice(0, offset) +
     `(${replacementText})` + parsed.original.slice(offset + sourceLine.length);
   const bytes = new TextEncoder().encode(replaced);
-  const newRef = doc.context.register(doc.context.stream(bytes));
-  // Never delete a content object another page still references.
   if (originalRef) {
     for (let i = 0; i < doc.getPageCount(); i++) {
       if (i === pageIndex) continue;
-      const otherContentRef = doc.getPage(i).node.get(PDFName.of("Contents"));
-      if (otherContentRef === originalRef) {
-        unsupported("The original content stream is shared by multiple pages.");
-      }
-      const otherContent = doc.context.lookup(otherContentRef);
-      if (otherContent instanceof PDFArray) {
-        for (let j = 0; j < otherContent.size(); j++) {
-          if (otherContent.get(j) === originalRef) {
-            unsupported("The original content stream is shared by multiple pages.");
-          }
+      const otherRef = doc.getPage(i).node.get(PDFName.of("Contents"));
+      if (otherRef === originalRef) unsupported("The content stream is shared by multiple pages.");
+      const other = doc.context.lookup(otherRef);
+      if (other instanceof PDFArray) {
+        for (let j = 0; j < other.size(); j++) {
+          if (other.get(j) === originalRef) unsupported("The content stream is shared by multiple pages.");
         }
       }
     }
   }
+  const newRef = doc.context.register(doc.context.stream(bytes));
   page.node.set(PDFName.of("Contents"), newRef);
-  // pdf-lib serializes registered indirect objects, including otherwise orphaned
-  // original streams. Remove the replaced object from that registry.
   if (originalRef) doc.context.delete(originalRef);
   const saved = await doc.save();
   const verified = await readPageText(saved, pageIndex);
