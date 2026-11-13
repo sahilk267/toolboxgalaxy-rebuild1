@@ -1,5 +1,15 @@
 # PDF Editor — Stability-First Repair Plan
 
+## Safety checkpoint — 13 November 2026
+
+- Fail-fast WinAnsi fidelity: prevent the visual overlay exporter from silently changing unsupported Unicode, accents, currency and symbols; block a source-text overlay edit on Save if characters would be changed. This is a **temporary safety guard, not Unicode support**.
+- Re-edits retain the true original-text provenance across multiple overlay modifications.
+- Native AcroForm UI excludes editable and multiselect dropdowns and multiselect list boxes until their full value semantics can be preserved.
+- Page duplicate and reorder are intentionally unavailable on documents containing interactive PDF form fields; lossless cross-page form/reference preservation is an unresolved feature gap.
+- Next architecture milestone: evaluate true content-stream rewrite with embedded-font mapping, original glyph encoding, resource isolation, safe parser of content operators, and independent text/render comparison. Any unsupported encoding, scan, rotated glyph transformation or multiple-run match must be rejected rather than covered by whiteout while claiming native editing.
+- Verification pending: build/typecheck, PDF.js UI, real PDF corpus and native form round trips.
+
+
 ## Phase 2 checkpoint — Native AcroForm editing (12 November 2026)
 
 - **Implemented:** `client/src/lib/pdfNativeFormEditing.ts` now inspects existing AcroForm fields and applies true PDF field-value updates for text, checkbox, dropdown, radio and single-select list fields. It validates each saved value by reopening the resulting PDF and rejects failures without overwriting the source. Read-only/unsupported fields are preserved; multi-select lists are deliberately not rewritten by a single-value UI.
