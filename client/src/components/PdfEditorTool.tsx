@@ -92,6 +92,7 @@ import {
   updateNativeFormField,
   type NativeFormField,
 } from "../lib/pdfNativeFormEditing";
+import { replaceSimpleNativePdfText } from "../lib/pdfNativeTextEditing";
 import {
   extractInteractiveTextBlocks,
   DetectedTextBlock,
@@ -1405,6 +1406,34 @@ export default function PdfEditorTool({
     }
     setActiveInlineBlock(null);
     setReeditingAnnotationId(null);
+  };
+
+  // Genuine source-text editing, only for a verified single uncompressed Tj
+  // stream using a standard Type1 font. Rejections never create whiteouts.
+  const handleNativeTextReplacement = async () => {
+    if (!pdfBytes || !activeInlineBlock || isProcessing || reeditingAnnotationId) return;
+    if (annotations.some((ann) => ann.pageIndex === currentPage &&
+      ann.type === "inplace-edit")) {
+      showToast("Native edit blocked: this page already has pending visual replacements.");
+      return;
+    }
+    const before = captureSnapshot();
+    setIsProcessing(true);
+    try {
+      const result = await replaceSimpleNativePdfText(
+        pdfBytes, currentPage, activeInlineBlock.text, inlineDraftText,
+      );
+      pushSnapshot(before);
+      setPdfBytes(result.bytes);
+      setActiveInlineBlock(null);
+      setSelectedId(null);
+      showToast("Native PDF text rewritten and extracted text verified. Export to download.");
+    } catch (error) {
+      showToast("Native text edit unavailable: " +
+        (error instanceof Error ? error.message : "Unsupported PDF"));
+    } finally {
+      setIsProcessing(false);
+    }
   };
 
   // Sample/Eyedropper detected font into the active Text Tool (Option 1 & 2 integration)
@@ -3038,6 +3067,22 @@ export default function PdfEditorTool({
                         />
                       </div>
 
+                      <div className="rounded border border-sky-400/30 bg-sky-400/[0.06] p-2 text-[11px] text-sky-200">
+                        <p className="font-semibold">Native source-text replacement (limited preview)</p>
+                        <p className="mt-1 text-white/70">
+                          Only simple uncompressed, single-text-run pages with standard fonts and
+                          same-or-shorter ASCII replacements. Other PDFs are rejected without
+                          changing the original. This does not support paragraph reflow.
+                        </p>
+                        <button
+                          type="button"
+                          disabled={isProcessing || Boolean(reeditingAnnotationId)}
+                          onClick={() => void handleNativeTextReplacement()}
+                          className="mt-2 rounded border border-sky-400/50 px-2 py-1.5 text-xs font-semibold text-sky-200 hover:bg-sky-400/10 disabled:opacity-40"
+                        >
+                          Try genuine text replacement
+                        </button>
+                      </div>
                       <div className="flex gap-2 pt-1">
                         <button
                           type="button"
