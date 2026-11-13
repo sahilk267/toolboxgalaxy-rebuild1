@@ -1,5 +1,22 @@
 # PDF Editor — Stability-First Repair Plan
 
+## Prototype checkpoint — Native single-run editing (13 November 2026)
+
+The first native editing path is in `client/src/lib/pdfNativeTextEditing.ts`. It uses pdf-lib's low-level page content stream objects and PDF.js before/after text extraction, not whiteout masking.
+
+### Supported source subset
+- Single, unshared page content stream (plain or one FlateDecode filter) with exactly one simple `BT ... (text) Tj ... ET` text run, supported positioning/color operators and standard Type1 font.
+- Printable ASCII text with no PDF escaped literal operands; same or shorter rendered width; no rotation, crop, page annotations, interactive forms or unsupported font encoding.
+- Document size ≤12 MiB and decoded page stream ≤128 KiB; no unknown decompression parameters; browser must provide `DecompressionStream`.
+- Reject on ambiguous source references, unexpected operators, unsupported glyphs or any PDF.js extracted-text mismatch. No overlay fallback when native editing is requested.
+
+### Non-goals and known limits
+Native editing is **not** guaranteed for normal PDFs with multiple `Tj/TJ` runs, subset/embedded fonts, graphics, Form XObjects, content-stream arrays, arbitrary transforms, clipping, kerning, long replacement requiring reflow or script shaping. Font appearance is retained by reusing the existing font resource and unchanged original position, with conservative width rejection. Page-text replacement is not a security redaction and does not guarantee the string is absent from unrelated metadata or attachments.
+
+### Release blockers
+TypeScript compile; synthetic PDF fixture passing; real single-run exported PDF round-trip; verify original content stream no longer serializes; inspect unchanged metadata and unaffected pages; verify Unicode and unsupported documents fail without mutations; browser memory testing; multi-stream / font-mapped engine and regression corpus. No tests or deployment executed in this checkpoint.
+
+
 ## Safety checkpoint — 13 November 2026
 
 - Fail-fast WinAnsi fidelity: prevent the visual overlay exporter from silently changing unsupported Unicode, accents, currency and symbols; block a source-text overlay edit on Save if characters would be changed. This is a **temporary safety guard, not Unicode support**.
