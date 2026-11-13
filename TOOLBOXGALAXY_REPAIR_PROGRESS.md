@@ -1,5 +1,16 @@
 # ToolboxGalaxy Repair & Verification Progress Ledger
 
+## Native page-text editing prototype — 13 November 2026
+
+- **Implementation:** added `client/src/lib/pdfNativeTextEditing.ts` with an independent PDF content-stream text replacement path. It rewrites the literal `Tj` operand instead of drawing a background rectangle, and removes the obsolete indirect stream object when safe.
+- **Strict support gates:** up to 12 MiB PDFs, single page content stream (raw or single FlateDecode), one complete plain-ASCII `Tj` text run, simple standard Type1 font, ordinary identity text geometry, non-rotated/non-cropped pages, no page annotations or interactive form fields. Replacement must fit the original measured width. Unsupported structures fail closed.
+- **Extraction verification:** before modifying the source, PDF.js must extract exactly the expected original line. After serializing, PDF.js must extract exactly the replacement line. No source byte change or annotation is committed when the engine rejects a PDF.
+- **Editor integration:** a separate *Try genuine text replacement* action appears next to the existing visual overlay workflow. Accepted replacements update the original PDF bytes and enter Undo/Redo; rejected ones do **not** automatically fall back to overlay mode.
+- **Compression:** browser-native `DecompressionStream("deflate")` supports a single FlateDecode stream with a 128 KiB decompressed limit. Unknown compression filters or decoding settings fail closed.
+- **Technical boundary:** this is a very narrow **source-level prototype**, not the Sejda-equivalent editor requested. Arbitrary page text, multiple glyph runs, embedded/subset fonts, multiline paragraphs, Unicode and reflow remain unimplemented.
+- **Verification:** no typecheck/build, runtime PDF fixtures, browser testing or deployment executed in this iteration; Git push is not proof of functional correctness.
+
+
 ## PDF editing safety gates — 13 November 2026
 
 - **Fail-fast export:** The visual PDF editor now checks all user-added/replacement text, stamps, headers, footers and watermark text before export. If standard-font sanitization would change even one character, it cancels export with a clear error instead of silently transliterating/removing glyphs. Inline visual replacement similarly rejects unsupported characters at Save.
