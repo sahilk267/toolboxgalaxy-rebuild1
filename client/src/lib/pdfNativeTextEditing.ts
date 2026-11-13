@@ -48,6 +48,45 @@ const ASCII = /^[\x20-\x7e]+$/;
 const MAX_STREAM = 128 * 1024;
 const MAX_DOCUMENT = 12 * 1024 * 1024;
 
+async function decodeSimplePageStream(raw: PDFRawStream): Promise<Uint8Array> {
+  if (raw.dict.get(PDFName.of("DecodeParms"))) {
+    unsupported("Streams with custom decompression parameters are unsupported.");
+  }
+  const filter = raw.dict.get(PDFName.of("Filter"));
+  if (!filter) return raw.getContents();
+  if (!(filter instanceof PDFName) || filter.asString() !== "FlateDecode") {
+    unsupported("Only plain or single FlateDecode content streams are supported.");
+  }
+  if (typeof DecompressionStream === "undefined") {
+    unsupported("This browser does not support local FlateDecode decompression.");
+  }
+  // A 128 KiB decompressed stream is the maximum allowed. Abort reading
+  // immediately when expansion crosses that limit (zip-bomb protection).
+  const response = new Response(new Blob([raw.getContents()]).stream().pipeThrough(new DecompressionStream("deflate")));
+  const reader = response.body?.getReader();
+  if (!reader) unsupported("Cannot decode this PDF stream locally.");
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      total += value.byteLength;
+      if (total > MAX_STREAM) unsupported("Decompressed page stream exceeds the safe edit limit.");
+      chunks.push(value);
+    }
+  } finally {
+    await reader.cancel().catch(() => {});
+  }
+  const output = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    output.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return output;
+}
+
 /**
  * A deliberately narrow, **real page-content edit**. We replace a literal
  * Tj operand in an uncompressed, single-stream, single-text-run page.
@@ -165,10 +204,8 @@ export async function replaceSimpleNativePdfText(
     }
   }
   if (!raw) unsupported("Page must contain exactly one raw content stream.");
-  if (raw.dict.get(PDFName.of("Filter")) || raw.dict.get(PDFName.of("DecodeParms"))) {
-    unsupported("Compressed or encoded content streams are not supported.");
-  }
-  const parsed = inspectSimpleStream(raw.getContents(), expectedText);
+  const decoded = await decodeSimplePageStream(raw);
+  const parsed = inspectSimpleStream(decoded, expectedText);
 
   const inherited = page.node.getInheritableAttribute(PDFName.of("Resources"));
   const resources = doc.context.lookup(inherited);
