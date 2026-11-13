@@ -29,6 +29,7 @@ export interface NativeTextResult {
 type SimpleStream = {
   original: string;
   encodedText: string;
+  operand: string;
   fontResource: string;
   fontSize: number;
 };
@@ -43,6 +44,12 @@ const MATRIX = new RegExp(`^1\\s+0\\s+0\\s+1\\s+${DECIMAL}\\s+${DECIMAL}\\s+Tm$`
 const MOVE = new RegExp(`^${DECIMAL}\\s+${DECIMAL}\\s+Td$`);
 const FONT = /^\/([A-Za-z0-9_.-]+)\s+(\d+(?:\.\d+)?)\s+Tf$/;
 const SHOW = /^\(([A-Za-z0-9 .,!?'\/-]+)\)\s+Tj$/;
+const HEX_SHOW = /^<([0-9a-fA-F]+)>\s+Tj$/;
+const pdfName = (name: PDFName): string => name.asString().replace(/^\//, "");
+const encodeHex = (value: string): string =>
+  Array.from(value).map((character) => character.charCodeAt(0).toString(16).padStart(2, "0")).join("").toUpperCase();
+const decodeHex = (value: string): string =>
+  value.match(/.{2}/g)?.map((byte) => String.fromCharCode(parseInt(byte, 16))).join("") ?? "";
 const ONE_NUMBER = new RegExp(`^${DECIMAL}\\s+(?:TL|g|G)$`);
 const ASCII = /^[\x20-\x7e]+$/;
 const MAX_STREAM = 128 * 1024;
@@ -54,7 +61,7 @@ async function decodeSimplePageStream(raw: PDFRawStream): Promise<Uint8Array> {
   }
   const filter = raw.dict.get(PDFName.of("Filter"));
   if (!filter) return raw.getContents();
-  if (!(filter instanceof PDFName) || filter.asString() !== "FlateDecode") {
+  if (!(filter instanceof PDFName) || pdfName(filter) !== "FlateDecode") {
     unsupported("Only plain or single FlateDecode content streams are supported.");
   }
   if (typeof DecompressionStream === "undefined") {
@@ -110,6 +117,7 @@ function inspectSimpleStream(streamBytes: Uint8Array, expectedText: string): Sim
   let resource = "";
   let size = 0;
   let encodedText = "";
+  let operand = "";
   for (const line of lines) {
     const op = line.trim();
     if (!op) continue;
@@ -130,6 +138,13 @@ function inspectSimpleStream(streamBytes: Uint8Array, expectedText: string): Sim
     } else if (SHOW.test(op) && textOpen) {
       if (!resource || ++shown !== 1) unsupported("Multiple or unstyled text runs are unsupported.");
       encodedText = op.match(SHOW)![1];
+      operand = `(${encodedText})`;
+    } else if (HEX_SHOW.test(op) && textOpen) {
+      if (!resource || ++shown !== 1) unsupported("Multiple or unstyled text runs are unsupported.");
+      const hex = op.match(HEX_SHOW)![1];
+      if (hex.length % 2 !== 0) unsupported("Odd-length hex text operand.");
+      encodedText = decodeHex(hex);
+      operand = `<${hex}>`;
     } else if (textOpen && (MATRIX.test(op) || MOVE.test(op) || RGB.test(op) ||
       CMYK.test(op) || ONE_NUMBER.test(op) || op === "T*")) {
       // Position, color and spacing operators are retained verbatim.
@@ -143,7 +158,7 @@ function inspectSimpleStream(streamBytes: Uint8Array, expectedText: string): Sim
   if (encodedText !== expectedText) {
     unsupported("Selected text is not an exact single-run match in the original page stream.");
   }
-  return { original, encodedText, fontResource: resource, fontSize: size };
+  return { original, encodedText, operand, fontResource: resource, fontSize: size };
 }
 
 async function readPageText(bytes: Uint8Array, pageIndex: number): Promise<string> {
@@ -216,7 +231,7 @@ export async function replaceSimpleNativePdfText(
   if (!(sourceFont instanceof PDFDict)) unsupported("The selected font resource is missing.");
   const subtype = sourceFont.get(PDFName.of("Subtype"));
   const baseFont = sourceFont.get(PDFName.of("BaseFont"));
-  if (!(subtype instanceof PDFName) || subtype.asString() !== "Type1" ||
+  if (!(subtype instanceof PDFName) || pdfName(subtype) !== "Type1" ||
       !(baseFont instanceof PDFName)) {
     unsupported("Only simple standard Type1 fonts are supported.");
   }
@@ -226,10 +241,10 @@ export async function replaceSimpleNativePdfText(
     unsupported("Custom font mappings and widths are unsupported.");
   }
   const encoding = sourceFont.get(PDFName.of("Encoding"));
-  if (encoding && (!(encoding instanceof PDFName) || encoding.asString() !== "WinAnsiEncoding")) {
+  if (encoding && (!(encoding instanceof PDFName) || pdfName(encoding) !== "WinAnsiEncoding")) {
     unsupported("Non-WinAnsi font encodings are not supported.");
   }
-  const fontName = baseFont.asString();
+  const fontName = pdfName(baseFont);
   const allowed = Object.values(StandardFonts) as string[];
   if (!allowed.includes(fontName)) unsupported("The PDF uses a custom or subset font.");
   const metricFont = await doc.embedFont(fontName as StandardFonts);
@@ -243,13 +258,18 @@ export async function replaceSimpleNativePdfText(
   if (extractedBefore !== expectedText) {
     unsupported("PDF.js text extraction does not match the selected source run exactly.");
   }
-  const sourceLine = `(${parsed.encodedText})`;
-  const offset = parsed.original.indexOf(sourceLine);
-  if (offset < 0 || parsed.original.indexOf(sourceLine, offset + sourceLine.length) !== -1) {
-    unsupported("The source text operand is ambiguous.");
-  }
-  const replaced = parsed.original.slice(0, offset) +
-    `(${replacementText})` + parsed.original.slice(offset + sourceLine.length);
+  const sourceLine = parsed.operand;
+  const newOperand = sourceLine.startsWith("<") ?
+    `<${encodeHex(replacementText)}>` : `(${replacementText})`;
+  // Select an entire Tj instruction, never the same string in comments or
+  // unrelated resource content. The parser only accepts one source Tj.
+  const escaped = sourceLine.replace(/[.*+?^\u0024{}()|[\]\\]/g, "\\$&");
+  const instruction = new RegExp(`(^|\\r?\\n)([ \\t]*)${escaped}([ \\t]+Tj)(?=\\r?\\n|$)`, "g");
+  const matches = Array.from(parsed.original.matchAll(instruction));
+  if (matches.length !== 1) unsupported("The source text operation is ambiguous.");
+  const replaced = parsed.original.replace(instruction,
+    (_full, prefix: string, indent: string, suffix: string) =>
+      prefix + indent + newOperand + suffix);
   const bytes = new TextEncoder().encode(replaced);
   if (originalRef) {
     for (let i = 0; i < doc.getPageCount(); i++) {
