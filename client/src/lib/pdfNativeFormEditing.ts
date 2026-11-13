@@ -33,7 +33,11 @@ export async function inspectNativeFormFields(bytes: Uint8Array): Promise<Native
     } else if (field instanceof PDFCheckBox) {
       result.push({ name, kind: "checkbox", value: field.isChecked(), readOnly });
     } else if (field instanceof PDFDropdown) {
-      result.push({ name, kind: "dropdown", value: field.getSelected()[0] ?? "", options: field.getOptions(), readOnly });
+      // Editable and multi-select dropdowns need a different UI contract.
+      // A single-select dropdown must not erase values or free-form text.
+      if (!field.isMultiselect() && !field.isEditable() && field.getSelected().length <= 1) {
+        result.push({ name, kind: "dropdown", value: field.getSelected()[0] ?? "", options: field.getOptions(), readOnly });
+      }
     } else if (field instanceof PDFRadioGroup) {
       result.push({ name, kind: "radio", value: field.getSelected() ?? "", options: field.getOptions(), readOnly });
     } else if (field instanceof PDFOptionList) {
@@ -70,6 +74,12 @@ export async function updateNativeFormField(
   } else if (field instanceof PDFDropdown || field instanceof PDFRadioGroup || field instanceof PDFOptionList) {
     if (typeof next !== "string" || !field.getOptions().includes(next)) {
       throw new Error("Choose one of the existing PDF form options.");
+    }
+    if (field instanceof PDFDropdown && (field.isEditable() || field.isMultiselect())) {
+      throw new Error("Editable or multi-select dropdowns are not supported by this single-value editor.");
+    }
+    if (field instanceof PDFOptionList && field.isMultiselect()) {
+      throw new Error("Multi-select list boxes require a multi-value editor.");
     }
     field.select(next);
   } else {
