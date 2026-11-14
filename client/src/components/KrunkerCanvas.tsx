@@ -22,6 +22,7 @@ import {
 } from "@/game/krunker/types";
 import { WEAPON_DEFS } from "@/game/krunker/constants";
 import { krunkerAudio } from "@/game/krunker/audio";
+import type { ArcadeDifficulty } from "@/game/playability";
 
 interface KrunkerCanvasProps {
   onBackToMenu?: () => void;
@@ -33,6 +34,9 @@ export const KrunkerCanvas: React.FC<KrunkerCanvasProps> = ({ onBackToMenu }) =>
 
   // UI States
   const [isLocked, setIsLocked] = useState<boolean>(false);
+  const [started,setStarted] = useState(false);
+  const startedRef = useRef(false);
+  const [difficulty,setDifficulty] = useState<ArcadeDifficulty>("normal");
   const [isMuted, setIsMuted] = useState<boolean>(false);
   const [health, setHealth] = useState<number>(100);
   const [maxHealth] = useState<number>(100);
@@ -131,6 +135,16 @@ export const KrunkerCanvas: React.FC<KrunkerCanvasProps> = ({ onBackToMenu }) =>
     }
   }, [isAlive, requestLock]);
 
+  const handleStartGame = () => {
+    const engine=engineRef.current;
+    if(!engine)return;
+    engine.setDifficulty(difficulty);
+    startedRef.current=true;
+    setStarted(true);
+    if(isMobile)engine.setSuspended(false);
+    else requestLock();
+  };
+
   // Setup Three.js Engine & Listeners
   useEffect(() => {
     if (!containerRef.current) return;
@@ -207,12 +221,17 @@ export const KrunkerCanvas: React.FC<KrunkerCanvasProps> = ({ onBackToMenu }) =>
 
     const engine = new KrunkerEngine(containerRef.current, callbacks);
     engineRef.current = engine;
+    engine.setSuspended(true); // Actual match begins only after explicit Start.
 
     // Pointer Lock Change Listener
     const onPointerLockChange = () => {
       const locked = document.pointerLockElement === containerRef.current;
       setIsLocked(locked);
+      if (locked && startedRef.current) engine.setSuspended(false);
       if (!locked) {
+        engine.setSuspended(true);
+        setIsADS(false);
+        setShowTabScoreboard(false);
         lastExitTimeRef.current = Date.now();
       }
     };
@@ -269,13 +288,22 @@ export const KrunkerCanvas: React.FC<KrunkerCanvasProps> = ({ onBackToMenu }) =>
       if (!engineRef.current) return;
       const gameHasKeyboard = document.pointerLockElement === containerRef.current ||
         Boolean(containerRef.current?.contains(document.activeElement));
-      if (!gameHasKeyboard || e.ctrlKey || e.metaKey || e.altKey) return;
-      engineRef.current.keys[e.code] = true;
-
+      // The fullscreen overlay also contains buttons/selects. Game shortcuts must
+      // never steal focus, Tab navigation, or text input from those controls.
+      const target = e.target;
+      const editing = target instanceof HTMLElement &&
+        Boolean(target.closest("input, select, textarea, button, [contenteditable='true'], [role='dialog']"));
+      if (!startedRef.current || !gameHasKeyboard || editing || e.isComposing ||
+          e.ctrlKey || e.metaKey || e.altKey || document.hidden) return;
+      // Pointer lock is the active desktop control mode; an unlocked overlay
+      // must not pass WASD/fire/reload to a suspended match.
+      if (!checkMobile && document.pointerLockElement !== containerRef.current) return;
       if (e.code === "Tab") {
         e.preventDefault();
         setShowTabScoreboard(true);
+        return;
       }
+      engineRef.current.keys[e.code] = true;
 
       // Quick switch classes via number keys [1] - [5]
       if (e.code === "Digit1") handleSelectClass("triggerman");
@@ -312,13 +340,22 @@ export const KrunkerCanvas: React.FC<KrunkerCanvasProps> = ({ onBackToMenu }) =>
 
     const onWindowBlur = () => {
       if (!engineRef.current) return;
+      engineRef.current.setSuspended(true);
       engineRef.current.keys = {};
       engineRef.current.isMouseDown = false;
       engineRef.current.isRightMouseDown = false;
       setShowTabScoreboard(false);
       setIsADS(false);
     };
+    const onVisibility = () => {
+      engine.setSuspended(document.hidden || !startedRef.current ||
+        (!checkMobile && document.pointerLockElement !== containerRef.current));
+      if (document.hidden) onWindowBlur();
+    };
+    document.addEventListener("visibilitychange", onVisibility);
+    if (document.hidden) onVisibility();
     window.addEventListener("blur", onWindowBlur);
+    window.addEventListener("focus", onVisibility);
     window.addEventListener("keydown", onKeyDown);
     window.addEventListener("keyup", onKeyUp);
 
@@ -355,7 +392,9 @@ export const KrunkerCanvas: React.FC<KrunkerCanvasProps> = ({ onBackToMenu }) =>
       window.removeEventListener("mousedown", onMouseDown);
       window.removeEventListener("mouseup", onMouseUp);
       window.removeEventListener("contextmenu", onContextMenu);
+      document.removeEventListener("visibilitychange", onVisibility);
       window.removeEventListener("blur", onWindowBlur);
+      window.removeEventListener("focus", onVisibility);
       window.removeEventListener("keydown", onKeyDown);
       window.removeEventListener("keyup", onKeyUp);
       window.removeEventListener("resize", onResize);
@@ -378,13 +417,13 @@ export const KrunkerCanvas: React.FC<KrunkerCanvasProps> = ({ onBackToMenu }) =>
       ref={containerRef}
       className="relative w-full h-[720px] max-h-[85vh] bg-black select-none overflow-hidden font-mono text-white rounded-xl border border-white/10 shadow-2xl cursor-crosshair"
       onClick={() => {
-        if (!isLocked && !matchEnded && isAlive) {
+        if (started && !isLocked && !matchEnded && isAlive && !isMobile) {
           requestLock();
         }
       }}
     >
       {/* 1. Click to Lock / Start Overlay (Desktop) */}
-      {!isLocked && isAlive && !matchEnded && (
+      {(!started || (!isLocked && !isMobile)) && isAlive && !matchEnded && (
         <div className="absolute inset-0 z-40 flex flex-col items-center justify-center bg-black/65 backdrop-blur-xs p-6 text-center">
           <div className="max-w-md bg-zinc-900/90 border border-amber-500/40 rounded-2xl p-6 shadow-2xl space-y-4">
             <div className="w-14 h-14 mx-auto rounded-full bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-amber-400 animate-pulse">
@@ -395,12 +434,12 @@ export const KrunkerCanvas: React.FC<KrunkerCanvasProps> = ({ onBackToMenu }) =>
                 Krunker Voxel FPS
               </h2>
               <p className="text-xs text-amber-400/90 font-mono mt-1">
-                FAST-PACED SLIDE-HOPPING · HITSCAN ARENA
+                LEARN FIRST · CHALLENGE RAMPS UP OVER TIME
               </p>
             </div>
 
             <p className="text-xs text-zinc-300 leading-relaxed">
-              Click anywhere inside the screen to capture mouse look. Press{" "}
+              Start in a protected round. Opponent speed, accuracy and firing pressure increase gradually. Click the screen to capture mouse look. Press{" "}
               <kbd className="px-1.5 py-0.5 bg-zinc-800 rounded border border-zinc-700 text-amber-300">
                 Shift
               </kbd>{" "}
@@ -411,11 +450,20 @@ export const KrunkerCanvas: React.FC<KrunkerCanvasProps> = ({ onBackToMenu }) =>
               to slide-hop and build intense bhop velocity!
             </p>
 
+            {!started && <label className="block text-left text-xs text-zinc-200">Difficulty
+              <select data-game-difficulty="krunker" value={difficulty} onChange={e=>setDifficulty(e.target.value as ArcadeDifficulty)}
+                className="mt-1 w-full rounded-lg border border-amber-500/30 bg-zinc-800 p-3">
+                <option value="easy">Easy — longer opening shield</option>
+                <option value="normal">Normal — gradual challenge</option>
+                <option value="hard">Hard — faster AI ramp</option>
+              </select>
+            </label>}
             <button
-              onClick={() => requestLock()}
+              type="button"
+              onClick={handleStartGame}
               className="w-full py-3 bg-amber-500 hover:bg-amber-400 text-zinc-950 font-black tracking-wider uppercase rounded-xl transition-all shadow-lg shadow-amber-500/20 flex items-center justify-center gap-2 cursor-pointer"
             >
-              <Target size={18} /> Click To Lock & Play
+              <Target size={18} /> {started ? "Resume match" : "Start match"}
             </button>
 
             <div className="flex items-center justify-center gap-4 text-[11px] text-zinc-400 pt-2 border-t border-zinc-800">
@@ -963,13 +1011,21 @@ export const KrunkerCanvas: React.FC<KrunkerCanvasProps> = ({ onBackToMenu }) =>
                 }
               }
             }}
-            onTouchEnd={() => {
+            onTouchEnd={(e) => {
+              if (!touchMoveRef.current ||
+                  !Array.from(e.changedTouches).some(t => t.identifier === touchMoveRef.current?.id)) return;
               touchMoveRef.current = null;
               if (engineRef.current) {
                 engineRef.current.keys["KeyW"] = false;
                 engineRef.current.keys["KeyS"] = false;
                 engineRef.current.keys["KeyA"] = false;
                 engineRef.current.keys["KeyD"] = false;
+              }
+            }}
+            onTouchCancel={() => {
+              touchMoveRef.current = null;
+              if (engineRef.current) {
+                for (const key of ["KeyW", "KeyS", "KeyA", "KeyD"]) engineRef.current.keys[key] = false;
               }
             }}
           >
@@ -996,9 +1052,13 @@ export const KrunkerCanvas: React.FC<KrunkerCanvasProps> = ({ onBackToMenu }) =>
                 }
               }
             }}
-            onTouchEnd={() => {
-              touchLookRef.current = null;
+            onTouchEnd={(e) => {
+              if (touchLookRef.current &&
+                  Array.from(e.changedTouches).some(t => t.identifier === touchLookRef.current?.id)) {
+                touchLookRef.current = null;
+              }
             }}
+            onTouchCancel={() => { touchLookRef.current = null; }}
           />
 
           {/* Right Action Buttons: Fire, Jump, Slide, ADS, Reload */}
@@ -1018,6 +1078,10 @@ export const KrunkerCanvas: React.FC<KrunkerCanvasProps> = ({ onBackToMenu }) =>
                     setIsADS(false);
                   }
                 }}
+                onTouchCancel={() => {
+                  if (engineRef.current) engineRef.current.isRightMouseDown = false;
+                  setIsADS(false);
+                }}
                 className={`w-14 h-14 rounded-full border-2 flex items-center justify-center font-bold text-xs ${
                   isADS
                     ? "bg-amber-500 border-amber-400 text-black"
@@ -1035,6 +1099,9 @@ export const KrunkerCanvas: React.FC<KrunkerCanvasProps> = ({ onBackToMenu }) =>
                 onTouchEnd={() => {
                   if (engineRef.current) engineRef.current.keys["Space"] = false;
                 }}
+                onTouchCancel={() => {
+                  if (engineRef.current) engineRef.current.keys["Space"] = false;
+                }}
                 className="w-14 h-14 rounded-full bg-sky-500/70 border-2 border-sky-400 text-white font-bold text-xs flex items-center justify-center active:scale-95"
               >
                 JUMP
@@ -1050,6 +1117,9 @@ export const KrunkerCanvas: React.FC<KrunkerCanvasProps> = ({ onBackToMenu }) =>
                 onTouchEnd={() => {
                   if (engineRef.current) engineRef.current.keys["ShiftLeft"] = false;
                 }}
+                onTouchCancel={() => {
+                  if (engineRef.current) engineRef.current.keys["ShiftLeft"] = false;
+                }}
                 className="w-14 h-14 rounded-full bg-emerald-500/70 border-2 border-emerald-400 text-white font-bold text-xs flex items-center justify-center active:scale-95"
               >
                 SLIDE
@@ -1061,6 +1131,9 @@ export const KrunkerCanvas: React.FC<KrunkerCanvasProps> = ({ onBackToMenu }) =>
                   if (engineRef.current) engineRef.current.isMouseDown = true;
                 }}
                 onTouchEnd={() => {
+                  if (engineRef.current) engineRef.current.isMouseDown = false;
+                }}
+                onTouchCancel={() => {
                   if (engineRef.current) engineRef.current.isMouseDown = false;
                 }}
                 className="w-16 h-16 rounded-full bg-red-600/90 border-2 border-red-400 text-white font-black text-sm flex items-center justify-center shadow-lg shadow-red-600/40 active:scale-95"

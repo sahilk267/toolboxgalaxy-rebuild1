@@ -1,4 +1,6 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from "react";
+import { subscribeVisibleGameSeconds } from "@/game/visibleGameTimer";
+import { shouldIgnorePuzzleKey } from "@/game/puzzleKeyboard";
 import { Link } from "wouter";
 import { OrbitAudio } from "@/game/audio";
 import { wordleEditionForDate, type WordleEdition } from "@/game/logicPuzzles/wordleBank";
@@ -68,10 +70,9 @@ export default function WordlePuzzle() {
 
   // Timer
   useEffect(() => {
-    if (isSolved || isGameOver) return;
-    const interval = window.setInterval(() => setSeconds((s) => s + 1), 1000);
-    return () => window.clearInterval(interval);
-  }, [isSolved, isGameOver]);
+    if (isSolved || isGameOver || showRules) return;
+    return subscribeVisibleGameSeconds(delta => setSeconds(s => s + delta));
+  }, [isSolved, isGameOver, showRules]);
 
   // Peer-to-Peer Automated Challenge System
   const challengeInfo = useMemo(() => {
@@ -205,7 +206,7 @@ export default function WordlePuzzle() {
   // Physical keyboard listener
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.ctrlKey || e.metaKey || e.altKey) return;
+      if (showRules || shouldIgnorePuzzleKey(e)) return;
       if (e.key === "Enter") {
         handleKeyPress("ENTER");
       } else if (e.key === "Backspace") {
@@ -216,7 +217,7 @@ export default function WordlePuzzle() {
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [handleKeyPress]);
+  }, [handleKeyPress, showRules]);
 
   const getChallengeUrl = () => {
     const origin = typeof window !== "undefined" ? window.location.origin : "https://toolboxgalaxy.com";
@@ -272,7 +273,7 @@ export default function WordlePuzzle() {
   };
 
   return (
-    <div className="logic-game-page flex flex-col h-screen max-h-screen overflow-hidden select-none bg-[#090d16] text-[#f4f2ea]">
+    <div className="logic-game-page flex flex-col min-h-[100dvh] h-auto overflow-y-auto md:h-screen md:max-h-screen md:overflow-hidden select-none bg-[#090d16] text-[#f4f2ea]">
       {/* Compact Standard Header Bar matching Queens/Mini-Sudoku */}
       <header className="shrink-0 h-14 border-b border-white/10 bg-slate-950/80 backdrop-blur-md px-3 sm:px-6 flex items-center justify-between z-30">
         <div className="flex items-center gap-2 sm:gap-3">

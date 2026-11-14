@@ -101,15 +101,43 @@ function PuzzleFrame({
   extraControls
 }: PuzzleFrameProps) {
   const [seconds, setSeconds] = useState(0);
+  const [runRevision, setRunRevision] = useState(0);
   const [copied, setCopied] = useState(false);
   const [showRules, setShowRules] = useState(false);
 
-  // Live Timer
+  // Single-screen puzzles need an active-play timer: resetting the board starts
+  // a fresh run, and a hidden browser tab does not silently keep scoring time.
   useEffect(() => {
     if (solved) return;
-    const interval = window.setInterval(() => setSeconds((s) => s + 1), 1000);
-    return () => window.clearInterval(interval);
-  }, [solved]);
+    let anchor = performance.now();
+    const tick = () => {
+      const now = performance.now();
+      const elapsed = Math.floor((now - anchor) / 1000);
+      if (elapsed > 0) {
+        setSeconds((previous) => previous + Math.min(elapsed, 60));
+        anchor += elapsed * 1000;
+      }
+    };
+    const onVisibility = () => {
+      if (!document.hidden) anchor = performance.now();
+    };
+    const interval = window.setInterval(() => {
+      if (!document.hidden) tick();
+    }, 250);
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => {
+      window.clearInterval(interval);
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
+  }, [solved, runRevision]);
+
+  const resetRun = () => {
+    setRunRevision(n => n + 1);
+    setSeconds(0);
+    setCopied(false);
+    setShowRules(false);
+    onReset();
+  };
 
   // Check Lightning Solver badge on victory
   useEffect(() => {
@@ -186,7 +214,7 @@ function PuzzleFrame({
   };
 
   return (
-    <div className="logic-game-page flex flex-col h-screen max-h-screen overflow-hidden select-none">
+    <div className="logic-game-page flex flex-col min-h-[100dvh] h-auto overflow-y-auto md:h-screen md:max-h-screen md:overflow-hidden select-none">
       {/* Compact Top Navigation Bar */}
       <header className="shrink-0 h-14 border-b border-white/10 bg-slate-950/80 backdrop-blur-md px-3 sm:px-6 flex items-center justify-between z-30">
         <div className="flex items-center gap-2 sm:gap-3">
@@ -235,7 +263,7 @@ function PuzzleFrame({
           <button 
             type="button" 
             className="logic-action" 
-            onClick={onReset} 
+            onClick={resetRun} 
             title="Reset board"
           >
             <RotateCcw size={14} />
@@ -255,7 +283,7 @@ function PuzzleFrame({
       </header>
 
       {/* Main Single-Screen Playfield Container */}
-      <main className="flex-1 flex flex-col items-center justify-between p-2 sm:p-4 max-w-4xl w-full mx-auto overflow-hidden relative">
+      <main className="flex-1 flex flex-col items-center justify-between p-2 sm:p-4 max-w-4xl w-full mx-auto overflow-visible md:overflow-hidden relative">
         {/* Automated Peer-to-Peer Challenge Inbound Banner */}
         {challengeInfo && (
           <div className="w-full mb-1.5 p-2 px-3 bg-gradient-to-r from-amber-500/15 via-emerald-500/10 to-amber-500/15 border border-amber-500/40 rounded-xl flex items-center justify-between text-xs animate-in fade-in shrink-0 shadow-md">
@@ -403,7 +431,7 @@ function PuzzleFrame({
               </button>
               <button
                 type="button"
-                onClick={onReset}
+                onClick={resetRun}
                 className="logic-action text-xs py-1.5 px-4"
               >
                 Play Again

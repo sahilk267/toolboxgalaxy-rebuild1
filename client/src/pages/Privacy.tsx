@@ -60,6 +60,17 @@ export default function Privacy() {
           </p>
         </section>
 
+        <section className="policy-ledger-section" aria-labelledby="policy-background-ai">
+          <div className="policy-ledger-head">
+            <span>AI</span>
+            <h2 id="policy-background-ai">Browser-only AI Background Remover</h2>
+            <b>LOCAL INFERENCE</b>
+          </div>
+          <p>
+            Background Remover loads version-pinned, Apache-2.0-licensed AI model and ONNX runtime files from our own site. Those downloads may be cached by your browser as model assets; the files you choose and the edited PNG output stay on your device and are never submitted to an inference API. Only you choose if and when to download a finished PNG. AI processing requires available memory and a supported browser, and can be less accurate on fine hair and transparent materials.
+          </p>
+        </section>
+
         <section className="policy-ledger-section" aria-labelledby="policy-share">
           <div className="policy-ledger-head">
             <span>03</span>

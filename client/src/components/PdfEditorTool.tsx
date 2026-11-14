@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { PDFDocument, rgb, StandardFonts, degrees, PDFString } from "pdf-lib";
 import * as pdfjsLib from "pdfjs-dist";
 import { trackPageView } from "../lib/analytics";
@@ -87,6 +87,13 @@ import {
   DocumentStructure,
 } from "../lib/pdfLayoutEngine";
 import { sanitizeWinAnsiText } from "../lib/pdfTextSanitizer";
+import {
+  inspectNativeFormFields,
+  updateNativeFormField,
+  type NativeFormField,
+} from "../lib/pdfNativeFormEditing";
+import { replaceSimpleNativePdfText } from "../lib/pdfNativeTextEditing";
+import { inspectPdfGlyphFonts, type PdfGlyphFontReport } from "../lib/pdfGlyphMapping";
 import {
   extractInteractiveTextBlocks,
   DetectedTextBlock,
@@ -265,39 +272,75 @@ function PdfPageThumbnail({
   onDrop,
 }: PdfPageThumbnailProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const thumbnailRef = useRef<HTMLDivElement | null>(null);
+  const [visible, setVisible] = useState(false);
 
   useEffect(() => {
-    let isCancelled = false;
+    const element = thumbnailRef.current;
+    if (!element) return;
+    if (typeof IntersectionObserver === "undefined") {
+      setVisible(true);
+      return;
+    }
+    // A 200-page PDF should not create 200 workers or full-file copies on load.
+    const observer = new IntersectionObserver(entries => {
+      if (entries.some(entry => entry.isIntersecting)) {
+        setVisible(true);
+        observer.disconnect();
+      }
+    }, { rootMargin: "240px" });
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, []);
+
+  useEffect(() => {
+    if (!visible) return;
+    let cancelled = false;
+    let loadingTask: ReturnType<typeof pdfjsLib.getDocument> | null = null;
+    let renderTask: { cancel: () => void } | null = null;
     const renderThumb = async () => {
       try {
-        const loadingTask = pdfjsLib.getDocument({ data: pdfBytes.slice() });
+        loadingTask = pdfjsLib.getDocument({ data: pdfBytes.slice() });
         const pdf = await loadingTask.promise;
-        if (isCancelled) return;
-        const page = await pdf.getPage(pageIndex + 1);
-        const viewport = page.getViewport({ scale: 0.22, rotation });
-        const canvas = canvasRef.current;
-        if (!canvas) return;
-        const ctx = canvas.getContext("2d");
-        if (!ctx) return;
-        canvas.width = viewport.width;
-        canvas.height = viewport.height;
-        await (page.render as any)({
-          canvasContext: ctx,
-          viewport,
-          canvas,
-        }).promise;
+        try {
+          if (cancelled) return;
+          const page = await pdf.getPage(pageIndex + 1);
+          if (cancelled) return;
+          const full = page.getViewport({ scale: 0.22, rotation });
+          // Pages can have unusual dimensions; thumbnails cap their backing
+          // bitmap independently of CSS display dimensions.
+          const pixels = Math.max(1, full.width * full.height);
+          const scale = 0.22 * Math.min(1, Math.sqrt(1_000_000 / pixels));
+          const viewport = scale < 0.22 ? page.getViewport({ scale, rotation }) : full;
+          const canvas = canvasRef.current;
+          if (!canvas || cancelled) return;
+          const ctx = canvas.getContext("2d");
+          if (!ctx) return;
+          canvas.width = Math.max(1, Math.ceil(viewport.width));
+          canvas.height = Math.max(1, Math.ceil(viewport.height));
+          renderTask = (page.render as any)({ canvasContext: ctx, viewport, canvas });
+          await (renderTask as any).promise;
+          page.cleanup();
+        } finally {
+          // pdf.js page proxies, file copies and workers must not survive
+          // longer than this visible thumbnail render.
+          await pdf.destroy();
+        }
       } catch {
-        // ignore cancelled renders
+        // Cancelled or unsupported thumbnail: keep a blank placeholder.
       }
     };
-    renderThumb();
+    void renderThumb();
     return () => {
-      isCancelled = true;
+      cancelled = true;
+      renderTask?.cancel();
+      void loadingTask?.destroy().catch(() => {});
     };
-  }, [pdfBytes, pageIndex, rotation]);
+  }, [visible, pdfBytes, pageIndex, rotation]);
 
   return (
     <div
+      ref={thumbnailRef}
       draggable
       onDragStart={onDragStart}
       onDragOver={onDragOver}
@@ -410,13 +453,27 @@ export default function PdfEditorTool({
   const [currentPage, setCurrentPage] = useState<number>(0);
   const [pageRotations, setPageRotations] = useState<number[]>([]);
   const [annotations, setAnnotations] = useState<Annotation[]>([]);
+  const annotationCounts = useMemo(() => {
+    const counts = new Map<number, number>();
+    for (const item of annotations)
+      counts.set(item.pageIndex, (counts.get(item.pageIndex) ?? 0) + 1);
+    return counts;
+  }, [annotations]);
   const [activeTool, setActiveTool] = useState<
     "select" | "smart-edit" | "text" | "whiteout" | "draw" | "stamp" | "image" | "link" | "highlight" | "shape"
   >("smart-edit");
   
-  // History Undo / Redo Stack Engine (GAP-01)
-  const undoStackRef = useRef<{ annotations: Annotation[]; pageRotations: number[] }[]>([]);
-  const redoStackRef = useRef<{ annotations: Annotation[]; pageRotations: number[] }[]>([]);
+  // Preserve the actual PDF document as well as visual edits. PDF byte arrays
+  // remain immutable across operations; history can safely share their buffers.
+  type EditorSnapshot = {
+    pdfBytes: Uint8Array | null;
+    numPages: number;
+    currentPage: number;
+    annotations: Annotation[];
+    pageRotations: number[];
+  };
+  const undoStackRef = useRef<EditorSnapshot[]>([]);
+  const redoStackRef = useRef<EditorSnapshot[]>([]);
   const [canUndo, setCanUndo] = useState<boolean>(false);
   const [canRedo, setCanRedo] = useState<boolean>(false);
 
@@ -510,8 +567,14 @@ export default function PdfEditorTool({
   const [isExtractingBlocks, setIsExtractingBlocks] = useState<boolean>(false);
   const [hoveredBlockId, setHoveredBlockId] = useState<string | null>(null);
   const [activeInlineBlock, setActiveInlineBlock] = useState<DetectedTextBlock | null>(null);
+  const [reeditingAnnotationId, setReeditingAnnotationId] = useState<string | null>(null);
   const [inlineDraftText, setInlineDraftText] = useState<string>("");
   const [smartEditSearchQuery, setSmartEditSearchQuery] = useState<string>("");
+  const [nativeFormFields, setNativeFormFields] = useState<NativeFormField[]>([]);
+  const [nativeFormDrafts, setNativeFormDrafts] = useState<Record<string, string | boolean>>({});
+  const [nativeFormsError, setNativeFormsError] = useState<string | null>(null);
+  const [glyphFontReports, setGlyphFontReports] = useState<PdfGlyphFontReport[]>([]);
+  const [glyphFontError, setGlyphFontError] = useState<string | null>(null);
 
   // Sync initialPdfBytes or sessionStorage load on mount
   useEffect(() => {
@@ -568,20 +631,75 @@ export default function PdfEditorTool({
   }, [initialPdfBytes, initialFileName]);
 
   // Auto-scan PDF typography and layout when smart-edit mode is active
+  const scanSourceRef = useRef<{ bytes: Uint8Array | null; page: number }>({ bytes: null, page: -1 });
   useEffect(() => {
+    let cancelled = false;
+    const sourceChanged = scanSourceRef.current.bytes !== pdfBytes ||
+      scanSourceRef.current.page !== currentPage;
+    scanSourceRef.current = { bytes: pdfBytes, page: currentPage };
     if (pdfBytes && activeTool === "smart-edit") {
+      setDetectedBlocks([]);
+      // Preserve a reopened replacement when switching from Select to Smart Edit.
+      // Never preserve it when the document or page itself changes.
+      if (sourceChanged || !reeditingAnnotationId) {
+        setActiveInlineBlock(null);
+        setReeditingAnnotationId(null);
+      }
       setIsExtractingBlocks(true);
       extractInteractiveTextBlocks(pdfBytes, currentPage)
         .then((blocks) => {
-          setDetectedBlocks(blocks);
-          setIsExtractingBlocks(false);
+          if (!cancelled) setDetectedBlocks(blocks);
         })
         .catch(() => {
-          setIsExtractingBlocks(false);
+          if (!cancelled) setDetectedBlocks([]);
+        })
+        .finally(() => {
+          if (!cancelled) setIsExtractingBlocks(false);
         });
-    } else if (activeTool !== "smart-edit") {
+    } else {
+      setDetectedBlocks([]);
+      setIsExtractingBlocks(false);
       setActiveInlineBlock(null);
+      setReeditingAnnotationId(null);
     }
+    return () => { cancelled = true; };
+  }, [pdfBytes, currentPage, activeTool]);
+
+  // Form fields are genuine PDF objects; never confuse them with whiteout edits.
+  useEffect(() => {
+    let cancelled = false;
+    setNativeFormFields([]);
+    setNativeFormDrafts({});
+    setNativeFormsError(null);
+    if (pdfBytes) {
+      inspectNativeFormFields(pdfBytes)
+        .then((fields) => {
+          if (cancelled) return;
+          setNativeFormFields(fields);
+          setNativeFormDrafts(Object.fromEntries(fields.map((field) => [field.name, field.value])));
+        })
+        .catch((error) => {
+          if (!cancelled) setNativeFormsError(error instanceof Error ? error.message : "Could not inspect PDF forms.");
+        });
+    }
+    return () => { cancelled = true; };
+  }, [pdfBytes]);
+
+  // Read-only font preflight, scoped to the active smart-edit page. The
+  // diagnostic never changes PDF bytes or attempts reverse glyph encoding.
+  useEffect(() => {
+    let cancelled = false;
+    setGlyphFontReports([]);
+    setGlyphFontError(null);
+    if (pdfBytes && activeTool === "smart-edit") {
+      inspectPdfGlyphFonts(pdfBytes, currentPage)
+        .then((report) => { if (!cancelled) setGlyphFontReports(report); })
+        .catch((err) => {
+          if (!cancelled) setGlyphFontError(
+            err instanceof Error ? err.message : "Could not inspect PDF fonts.");
+        });
+    }
+    return () => { cancelled = true; };
   }, [pdfBytes, currentPage, activeTool]);
 
   // Canvas drawing state
@@ -603,47 +721,75 @@ export default function PdfEditorTool({
     setTimeout(() => setStatusMessage(null), 3500);
   };
 
-  // Push current state into undo stack before mutating (GAP-01)
-  const pushHistorySnapshot = () => {
-    undoStackRef.current.push({
-      annotations: JSON.parse(JSON.stringify(annotations)),
-      pageRotations: [...pageRotations],
-    });
-    if (undoStackRef.current.length > 30) {
-      undoStackRef.current.shift();
-    }
+  const cloneAnnotations = (items: Annotation[]): Annotation[] =>
+    items.map((ann) => ann.type === "image"
+      ? { ...ann, bytes: ann.bytes.slice() }
+      : ann.type === "draw"
+        ? { ...ann, points: ann.points.map((point) => ({ ...point })) }
+        : { ...ann });
+
+  const captureSnapshot = (): EditorSnapshot => ({
+    pdfBytes,
+    numPages,
+    currentPage,
+    annotations: cloneAnnotations(annotations),
+    pageRotations: [...pageRotations],
+  });
+  const resetHistory = () => {
+    undoStackRef.current = [];
+    redoStackRef.current = [];
+    setCanUndo(false);
+    setCanRedo(false);
+  };
+  // Bounded history: native form edits may create a complete new PDF revision.
+  // Avoid retaining up to 30 * 50 MB PDF buffers during long editing sessions.
+  const capHistory = (items: EditorSnapshot[]) => {
+    while (items.length > 12) items.shift();
+    const unique = new Set<Uint8Array>();
+    const size = () => {
+      unique.clear();
+      for (const item of items) if (item.pdfBytes) unique.add(item.pdfBytes);
+      let bytes = 0;
+      for (const buffer of unique) bytes += buffer.byteLength;
+      return bytes;
+    };
+    while (items.length > 1 && size() > 96 * 1024 * 1024) items.shift();
+  };
+  const pushSnapshot = (snapshot: EditorSnapshot) => {
+    undoStackRef.current.push(snapshot);
+    capHistory(undoStackRef.current);
     redoStackRef.current = [];
     setCanUndo(true);
     setCanRedo(false);
   };
-
-  const handleUndo = () => {
-    if (undoStackRef.current.length === 0) return;
-    const prev = undoStackRef.current.pop()!;
-    redoStackRef.current.push({
-      annotations: JSON.parse(JSON.stringify(annotations)),
-      pageRotations: [...pageRotations],
-    });
-    setAnnotations(prev.annotations);
-    setPageRotations(prev.pageRotations);
+  const pushHistorySnapshot = () => pushSnapshot(captureSnapshot());
+  const restoreSnapshot = (snapshot: EditorSnapshot) => {
+    setPdfBytes(snapshot.pdfBytes);
+    setNumPages(snapshot.numPages);
+    setCurrentPage(snapshot.currentPage);
+    setAnnotations(cloneAnnotations(snapshot.annotations));
+    setPageRotations([...snapshot.pageRotations]);
     setSelectedId(null);
     setEditingTextId(null);
+    setActiveInlineBlock(null);
+    setReeditingAnnotationId(null);
+  };
+  const handleUndo = () => {
+    const prev = undoStackRef.current.pop();
+    if (!prev) return;
+    redoStackRef.current.push(captureSnapshot());
+    capHistory(redoStackRef.current);
+    restoreSnapshot(prev);
     setCanUndo(undoStackRef.current.length > 0);
     setCanRedo(true);
     showToast("Reverted change (Undo)");
   };
-
   const handleRedo = () => {
-    if (redoStackRef.current.length === 0) return;
-    const next = redoStackRef.current.pop()!;
-    undoStackRef.current.push({
-      annotations: JSON.parse(JSON.stringify(annotations)),
-      pageRotations: [...pageRotations],
-    });
-    setAnnotations(next.annotations);
-    setPageRotations(next.pageRotations);
-    setSelectedId(null);
-    setEditingTextId(null);
+    const next = redoStackRef.current.pop();
+    if (!next) return;
+    undoStackRef.current.push(captureSnapshot());
+    capHistory(undoStackRef.current);
+    restoreSnapshot(next);
     setCanUndo(true);
     setCanRedo(redoStackRef.current.length > 0);
     showToast("Restored change (Redo)");
@@ -700,7 +846,6 @@ export default function PdfEditorTool({
       // Delete / Backspace: delete selected annotation
       if ((e.key === "Delete" || e.key === "Backspace") && selectedId && !isTyping) {
         e.preventDefault();
-        pushHistorySnapshot();
         deleteAnnotation(selectedId);
         showToast("Annotation deleted");
         return;
@@ -812,6 +957,7 @@ export default function PdfEditorTool({
       setCurrentPage(0);
       setPageRotations([0, 0]);
       setAnnotations([]);
+      resetHistory();
       setSelectedId(null);
       setActiveTool("smart-edit");
       showToast("Interactive sample PDF loaded!");
@@ -825,7 +971,12 @@ export default function PdfEditorTool({
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
+    e.target.value = "";
     if (!file) return;
+    if (file.size > 50 * 1024 * 1024) {
+      showToast("PDF exceeds the 50 MB browser editing limit.");
+      return;
+    }
     setIsProcessing(true);
     try {
       const buffer = await file.arrayBuffer();
@@ -843,6 +994,7 @@ export default function PdfEditorTool({
       setCurrentPage(0);
       setPageRotations(new Array(count).fill(0));
       setAnnotations([]);
+      resetHistory();
       setSelectedId(null);
       setActiveTool("smart-edit");
       showToast(`Loaded ${file.name} (${count} pages)`);
@@ -856,41 +1008,46 @@ export default function PdfEditorTool({
   // Render current page to canvas using pdfjs-dist
   useEffect(() => {
     if (!pdfBytes || numPages === 0) return;
-    let isCancelled = false;
+    let cancelled = false;
+    let loadingTask: ReturnType<typeof pdfjsLib.getDocument> | null = null;
+    let renderTask: { cancel: () => void } | null = null;
 
     const renderPage = async () => {
       try {
-        const loadingTask = pdfjsLib.getDocument({ data: pdfBytes.slice() });
+        loadingTask = pdfjsLib.getDocument({ data: pdfBytes.slice() });
         const pdf = await loadingTask.promise;
-        if (isCancelled) return;
-        
-        const page = await pdf.getPage(currentPage + 1);
-        const rotation = pageRotations[currentPage] || 0;
-        const viewport = page.getViewport({ scale: 1.5 * zoomScale, rotation });
-        
-        const canvas = canvasRef.current;
-        if (!canvas) return;
-        
-        const context = canvas.getContext("2d");
-        if (!context) return;
-        
-        canvas.height = viewport.height;
-        canvas.width = viewport.width;
-        
-        const renderContext = {
-          canvasContext: context,
-          viewport: viewport,
-          canvas: canvas,
-        };
-        await (page.render as any)(renderContext).promise;
-      } catch (e) {
-        console.warn("Canvas render notice:", e);
+        try {
+          if (cancelled) return;
+          const page = await pdf.getPage(currentPage + 1);
+          if (cancelled) return;
+          const rotation = pageRotations[currentPage] || 0;
+          const viewport = page.getViewport({ scale: 1.5 * zoomScale, rotation });
+          // Avoid allocating multi-hundred-megapixel canvases on extreme
+          // page dimensions / zoom. Keep the original PDF data unchanged.
+          if (Math.ceil(viewport.width) * Math.ceil(viewport.height) > 24_000_000)
+            throw new Error("Page zoom exceeds browser canvas budget; zoom out.");
+          const canvas = canvasRef.current;
+          if (!canvas || cancelled) return;
+          const context = canvas.getContext("2d");
+          if (!context) return;
+          canvas.height = Math.max(1, Math.ceil(viewport.height));
+          canvas.width = Math.max(1, Math.ceil(viewport.width));
+          renderTask = (page.render as any)({ canvasContext: context, viewport, canvas });
+          await (renderTask as any).promise;
+          page.cleanup();
+        } finally {
+          await pdf.destroy();
+        }
+      } catch (reason) {
+        if (!cancelled) console.warn("Canvas render notice:", reason);
       }
     };
 
-    renderPage();
+    void renderPage();
     return () => {
-      isCancelled = true;
+      cancelled = true;
+      renderTask?.cancel();
+      void loadingTask?.destroy().catch(() => {});
     };
   }, [pdfBytes, currentPage, pageRotations, zoomScale]);
 
@@ -1058,11 +1215,9 @@ export default function PdfEditorTool({
       setResizeHandle(null);
       setResizeInitialBox(null);
       setResizeStartMouse(null);
-      pushHistorySnapshot();
     }
     if (isDraggingSelected) {
       setIsDraggingSelected(false);
-      pushHistorySnapshot();
     }
     if (activeTool === "draw" && isDrawing) {
       if (currentPath.length > 1) {
@@ -1159,6 +1314,7 @@ export default function PdfEditorTool({
   // Select a detected PDF text block for inline in-place editing (Editing Mode)
   const handleSelectBlockForEdit = (block: DetectedTextBlock, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
+    setReeditingAnnotationId(null);
     setActiveInlineBlock(block);
     setInlineDraftText(block.text);
     setFontSize(block.font.fontSize);
@@ -1207,7 +1363,8 @@ export default function PdfEditorTool({
     setFontFamily(ann.fontFamily);
     setTextColor(ann.color || "#0f172a");
     setTextBgColor(ann.bgColor || "#ffffff");
-    setAnnotations((prev) => prev.filter((a) => a.id !== ann.id));
+    // Keep the existing edit until Save succeeds; Cancel must be lossless.
+    setReeditingAnnotationId(ann.id);
     setActiveTool("smart-edit");
   };
 
@@ -1215,13 +1372,20 @@ export default function PdfEditorTool({
   const handleCommitInlineEdit = () => {
     if (!activeInlineBlock) return;
     const trimmed = inlineDraftText.trim();
+    if (sanitizeWinAnsiText(trimmed) !== trimmed) {
+      showToast("Cannot save: this visual text mode cannot preserve those characters. Use a supported native PDF form field instead.");
+      return;
+    }
     if (trimmed) {
       pushHistorySnapshot();
+      const existingReplacement = annotations.find((ann): ann is InPlaceEditAnnotation =>
+        ann.type === "inplace-edit" && ann.id === reeditingAnnotationId
+      );
       const inPlaceAnn: InPlaceEditAnnotation = {
-        id: `inplace-${Date.now()}`,
+        id: reeditingAnnotationId ?? `inplace-${Date.now()}`,
         pageIndex: currentPage,
         type: "inplace-edit",
-        originalText: activeInlineBlock.text,
+        originalText: existingReplacement?.originalText ?? activeInlineBlock.text,
         newText: trimmed,
         x: activeInlineBlock.x,
         y: activeInlineBlock.y,
@@ -1235,7 +1399,10 @@ export default function PdfEditorTool({
         isBold: isBold,
         isItalic: isItalic,
       };
-      setAnnotations((prev) => [...prev, inPlaceAnn]);
+      setAnnotations((prev) => [
+        ...prev.filter((ann) => ann.id !== reeditingAnnotationId),
+        inPlaceAnn,
+      ]);
       setDetectedBlocks((prev) =>
         prev.map((b) =>
           b.id === activeInlineBlock.id
@@ -1258,6 +1425,35 @@ export default function PdfEditorTool({
       showToast(`Updated text with auto-matched font (${activeInlineBlock.font.cleanName})`);
     }
     setActiveInlineBlock(null);
+    setReeditingAnnotationId(null);
+  };
+
+  // Genuine source-text editing, only for a verified single uncompressed Tj
+  // stream using a standard Type1 font. Rejections never create whiteouts.
+  const handleNativeTextReplacement = async () => {
+    if (!pdfBytes || !activeInlineBlock || isProcessing || reeditingAnnotationId) return;
+    if (annotations.some((ann) => ann.pageIndex === currentPage &&
+      ann.type === "inplace-edit")) {
+      showToast("Native edit blocked: this page already has pending visual replacements.");
+      return;
+    }
+    const before = captureSnapshot();
+    setIsProcessing(true);
+    try {
+      const result = await replaceSimpleNativePdfText(
+        pdfBytes, currentPage, activeInlineBlock.text, inlineDraftText,
+      );
+      pushSnapshot(before);
+      setPdfBytes(result.bytes);
+      setActiveInlineBlock(null);
+      setSelectedId(null);
+      showToast("Native PDF text rewritten and extracted text verified. Export to download.");
+    } catch (error) {
+      showToast("Native text edit unavailable: " +
+        (error instanceof Error ? error.message : "Unsupported PDF"));
+    } finally {
+      setIsProcessing(false);
+    }
   };
 
   // Sample/Eyedropper detected font into the active Text Tool (Option 1 & 2 integration)
@@ -1333,6 +1529,7 @@ export default function PdfEditorTool({
     const rect = overlayRef.current.getBoundingClientRect();
     const mouseX = ((e.clientX - rect.left) / rect.width) * 100;
     const mouseY = ((e.clientY - rect.top) / rect.height) * 100;
+    pushHistorySnapshot(); // Capture geometry before the first pointer movement.
     setResizeHandle(handle);
     setResizeInitialBox({ x: box.x, y: box.y, w: box.width, h: box.height });
     setResizeStartMouse({ x: mouseX, y: mouseY });
@@ -1345,6 +1542,7 @@ export default function PdfEditorTool({
       return;
     }
 
+    const beforeMutation = captureSnapshot();
     setIsProcessing(true);
     try {
       const doc = await PDFDocument.load(pdfBytes, { ignoreEncryption: true });
@@ -1356,6 +1554,7 @@ export default function PdfEditorTool({
         .filter((a) => a.pageIndex !== targetIndex)
         .map((a) => (a.pageIndex > targetIndex ? { ...a, pageIndex: a.pageIndex - 1 } : a));
 
+      pushSnapshot(beforeMutation);
       setPdfBytes(updatedBytes);
       setNumPages(numPages - 1);
       setPageRotations(newPageRotations);
@@ -1383,6 +1582,7 @@ export default function PdfEditorTool({
   // Insert clean blank page
   const insertBlankPage = async (atIndex = currentPage + 1) => {
     if (!pdfBytes) return;
+    const beforeMutation = captureSnapshot();
     setIsProcessing(true);
     try {
       const doc = await PDFDocument.load(pdfBytes, { ignoreEncryption: true });
@@ -1393,6 +1593,7 @@ export default function PdfEditorTool({
       const newAnnotations = annotations.map((a) =>
         a.pageIndex >= atIndex ? { ...a, pageIndex: a.pageIndex + 1 } : a
       );
+      pushSnapshot(beforeMutation);
       setPdfBytes(updatedBytes);
       setNumPages(numPages + 1);
       setPageRotations(newRotations);
@@ -1409,22 +1610,33 @@ export default function PdfEditorTool({
   // Duplicate specific page by index
   const duplicatePageAtIndex = async (targetIndex: number) => {
     if (!pdfBytes) return;
+    const beforeMutation = captureSnapshot();
     setIsProcessing(true);
     try {
       const doc = await PDFDocument.load(pdfBytes, { ignoreEncryption: true });
+      if (doc.getForm().getFields().length > 0) {
+        throw new Error("Duplicating pages in a PDF with native form fields may break field references. This operation is disabled until preservation-safe duplication is available.");
+      }
       const [copiedPage] = await doc.copyPages(doc, [targetIndex]);
       const insertAt = targetIndex + 1;
       doc.insertPage(insertAt, copiedPage);
       const updatedBytes = await doc.save();
       const newRotations = [...pageRotations];
       newRotations.splice(insertAt, 0, pageRotations[targetIndex] || 0);
+      const duplicatedAnnotations = annotations.map((ann) =>
+        ann.pageIndex >= insertAt ? { ...ann, pageIndex: ann.pageIndex + 1 } : ann
+      );
+      duplicatedAnnotations.push(...cloneAnnotations(annotations.filter((ann) => ann.pageIndex === targetIndex))
+        .map((ann) => ({ ...ann, id: `${ann.id}-copy-${Date.now()}`, pageIndex: insertAt })));
+      pushSnapshot(beforeMutation);
       setPdfBytes(updatedBytes);
       setNumPages(numPages + 1);
       setPageRotations(newRotations);
+      setAnnotations(duplicatedAnnotations);
       setCurrentPage(insertAt);
       showToast(`Duplicated page ${targetIndex + 1}`);
     } catch {
-      showToast("Failed to duplicate page");
+      showToast("Failed to duplicate page; form-bearing documents need a preservation-safe page copier.");
     } finally {
       setIsProcessing(false);
     }
@@ -1440,9 +1652,13 @@ export default function PdfEditorTool({
     if (!pdfBytes || numPages <= 1 || fromIdx === toIdx) return;
     if (fromIdx < 0 || fromIdx >= numPages || toIdx < 0 || toIdx >= numPages) return;
 
+    const beforeMutation = captureSnapshot();
     setIsProcessing(true);
     try {
       const doc = await PDFDocument.load(pdfBytes, { ignoreEncryption: true });
+      if (doc.getForm().getFields().length > 0) {
+        throw new Error("Page reorder would discard interactive form structure. This operation is disabled for PDFs containing form fields.");
+      }
       const newDoc = await PDFDocument.create();
       const order = Array.from({ length: numPages }, (_, i) => i);
       const [movedItem] = order.splice(fromIdx, 1);
@@ -1468,13 +1684,14 @@ export default function PdfEditorTool({
         return a;
       });
 
+      pushSnapshot(beforeMutation);
       setPdfBytes(updatedBytes);
       setPageRotations(newRotations);
       setAnnotations(newAnnotations);
       setCurrentPage(toIdx);
       showToast(`Moved page ${fromIdx + 1} to position ${toIdx + 1}`);
     } catch {
-      showToast("Failed to reorder page");
+      showToast("Could not reorder pages; interactive forms require a preservation-safe operation.");
     } finally {
       setIsProcessing(false);
     }
@@ -1695,11 +1912,47 @@ export default function PdfEditorTool({
     };
   };
 
+  const saveNativeFormField = async (field: NativeFormField, value: string | boolean) => {
+    if (!pdfBytes || isProcessing) return;
+    const original = captureSnapshot();
+    setIsProcessing(true);
+    try {
+      const updated = await updateNativeFormField(pdfBytes, field.name, value);
+      pushSnapshot(original);
+      setPdfBytes(updated);
+      showToast(`Saved native PDF form field: ${field.name}`);
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : "Could not save PDF field.");
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
   // Export & Download Modified PDF
   const exportModifiedPdf = async () => {
     if (!pdfBytes) return;
+    let pdfJsDoc: Awaited<ReturnType<typeof pdfjsLib.getDocument>["promise"]> | null = null;
     setIsProcessing(true);
     try {
+      // pdf-lib standard fonts cannot preserve arbitrary Unicode and the
+      // existing sanitizer transliterates/drops glyphs. Never silently write
+      // a PDF whose displayed text differs from the user's input.
+      const drawnText = [
+        ...annotations.flatMap((ann) => ann.type === "text"
+          ? [{ label: "text annotation", value: ann.text }]
+          : ann.type === "inplace-edit"
+            ? [{ label: "visual replacement", value: ann.newText }]
+            : ann.type === "stamp"
+              ? [{ label: "stamp", value: ann.text }]
+              : []),
+        { label: "header", value: headerText.trim() },
+        { label: "footer", value: footerText.trim() },
+        { label: "watermark", value: watermarkText.trim() },
+      ];
+      const incompatible = drawnText.find(({ value }) => sanitizeWinAnsiText(value) !== value);
+      if (incompatible) {
+        throw new Error(`The ${incompatible.label} contains characters unsupported by standard PDF fonts. Export cancelled to prevent silent text corruption.`);
+      }
       const doc = await PDFDocument.load(pdfBytes, { ignoreEncryption: true });
       const helvetica = await doc.embedFont(StandardFonts.Helvetica);
       const helveticaBold = await doc.embedFont(StandardFonts.HelveticaBold);
@@ -1724,7 +1977,6 @@ export default function PdfEditorTool({
       }
 
       // If true permanent redaction is enabled and whiteout boxes exist, load pdfjs for raster flattening
-      let pdfJsDoc: any = null;
       if (flattenRedactions && pagesWithWhiteout.size > 0) {
         const loadingTask = pdfjsLib.getDocument({ data: pdfBytes.slice() });
         pdfJsDoc = await loadingTask.promise;
@@ -2145,6 +2397,7 @@ export default function PdfEditorTool({
     } catch (e) {
       showToast("Error compiling edited PDF: " + (e instanceof Error ? e.message : "Unknown error"));
     } finally {
+      await pdfJsDoc?.destroy();
       setIsProcessing(false);
     }
   };
@@ -2627,15 +2880,73 @@ export default function PdfEditorTool({
                 </div>
               </div>
 
+              {/* Native PDF AcroForm editor: writes real field values to document bytes. */}
+              {(nativeFormFields.length > 0 || nativeFormsError) && (
+                <section className="rounded-lg border border-emerald-500/30 bg-emerald-500/[0.05] p-3 space-y-3">
+                  <div className="text-xs font-semibold text-emerald-300">Native PDF Form Fields</div>
+                  <p className="text-[11px] text-white/70">
+                    These controls change existing PDF form values, not visual text overlays.
+                    Saved values are checked by reopening the PDF. Signed PDFs may lose signature validity when changed.
+                  </p>
+                  {nativeFormsError && <p role="alert" className="text-xs text-amber-300">{nativeFormsError}</p>}
+                  <div className="max-h-72 overflow-y-auto space-y-3">
+                    {nativeFormFields.map((field) => (
+                      <div key={field.name} className="rounded border border-white/10 bg-black/20 p-2 space-y-1.5">
+                        <label className="block text-[11px] font-medium text-white/90 break-all">{field.name}</label>
+                        {field.kind === "text" ? (
+                          <textarea
+                            value={String(nativeFormDrafts[field.name] ?? "")}
+                            disabled={field.readOnly || isProcessing}
+                            onChange={(event) => setNativeFormDrafts((prev) => ({ ...prev, [field.name]: event.target.value }))}
+                            maxLength={20000}
+                            rows={2}
+                            className="w-full rounded border border-white/20 bg-black/40 p-2 text-xs text-white disabled:opacity-50"
+                          />
+                        ) : field.kind === "checkbox" ? (
+                          <label className="flex items-center gap-2 text-xs text-white/80">
+                            <input
+                              type="checkbox"
+                              checked={Boolean(nativeFormDrafts[field.name])}
+                              disabled={field.readOnly || isProcessing}
+                              onChange={(event) => setNativeFormDrafts((prev) => ({ ...prev, [field.name]: event.target.checked }))}
+                            />
+                            Checked
+                          </label>
+                        ) : (
+                          <select
+                            value={String(nativeFormDrafts[field.name] ?? "")}
+                            disabled={field.readOnly || isProcessing}
+                            onChange={(event) => setNativeFormDrafts((prev) => ({ ...prev, [field.name]: event.target.value }))}
+                            className="w-full rounded border border-white/20 bg-black/40 p-2 text-xs text-white disabled:opacity-50"
+                          >
+                            {field.value === "" && <option value="">Choose a value</option>}
+                            {field.options.map((option) => <option key={option} value={option}>{option}</option>)}
+                          </select>
+                        )}
+                        <button
+                          type="button"
+                          disabled={isProcessing || field.readOnly || nativeFormDrafts[field.name] === field.value}
+                          onClick={() => void saveNativeFormField(field, nativeFormDrafts[field.name] ?? field.value)}
+                          className="rounded border border-emerald-400/40 px-2 py-1 text-[11px] text-emerald-200 disabled:opacity-40 hover:bg-emerald-400/10"
+                        >
+                          Apply to PDF
+                        </button>
+                        {field.readOnly && <span className="ml-2 text-[10px] text-white/50">Read-only</span>}
+                      </div>
+                    ))}
+                  </div>
+                </section>
+              )}
+
               {/* Intelligent Auto-Font & In-Place Text Editing (Editing Mode) */}
               {activeTool === "smart-edit" && (
                 <div className="space-y-3 rounded-lg border border-sky-500/30 bg-sky-500/[0.05] p-3.5 shadow-inner">
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-semibold text-white/90 flex items-center gap-1.5">
-                      <Sparkles size={14} className="text-[#c7f36b]" /> Editing Mode
+                      <Sparkles size={14} className="text-[#c7f36b]" /> Visual Text Replacement
                     </span>
                     <span className="text-[10px] font-mono text-[#c7f36b] bg-[#c7f36b]/15 px-1.5 py-0.5 rounded border border-[#c7f36b]/30">
-                      DEFAULT · ACTIVE
+                      OVERLAY MODE
                     </span>
                   </div>
 
@@ -2646,7 +2957,7 @@ export default function PdfEditorTool({
                     </div>
                   ) : (
                     <p className="text-[11px] text-white/70 leading-relaxed">
-                      💡 <b>Hover and click directly on any text</b> on the page. The engine will detect its original font family, size, weight, and color so you can edit it in place.
+                      <b>Visual replacement only:</b> clicking source text creates a cover-and-add overlay. Original PDF words remain searchable/copyable, and backgrounds/fonts may not match. Use Native PDF Form Fields above when available.
                     </p>
                   )}
 
@@ -2776,6 +3087,42 @@ export default function PdfEditorTool({
                         />
                       </div>
 
+                      <div className="rounded border border-sky-400/30 bg-sky-400/[0.06] p-2 text-[11px] text-sky-200">
+                        <p className="font-semibold">Native source-text replacement (limited preview)</p>
+                        <p className="mt-1 text-white/70">
+                          Supports simple ASCII Tj and zero-kerning TJ segments in a plain/Flate
+                          stream, with independently positioned text objects (up to 20).
+                          New text must fit the original width. Embedded/subset fonts, nonzero
+                          kerning and paragraph reflow are unsupported. Rejected edits leave
+                          the original document unchanged.
+                        </p>
+                        {(glyphFontReports.length > 0 || glyphFontError) && (
+                          <div className="mt-2 rounded border border-white/15 bg-black/30 p-2 space-y-1.5">
+                            <p className="font-semibold text-white/90">Original PDF font inspection (read-only)</p>
+                            {glyphFontError && <p role="status" className="text-amber-300">{glyphFontError}</p>}
+                            {glyphFontReports.map((font) => (
+                              <div key={font.resource} className="text-[10px] text-white/70 border-t border-white/10 pt-1">
+                                <span className="font-medium text-white">{font.baseFont || font.resource}</span>
+                                {" · "}{font.subtype || "Unknown subtype"}
+                                {font.subset ? " · subset" : ""}
+                                {font.embedded ? " · embedded" : ""}
+                                {" · "}{font.mappingStatus === "parsed"
+                                  ? `${font.mappedCodes} extraction glyph mappings`
+                                  : font.hasToUnicode ? "complex/unsupported ToUnicode" : "no ToUnicode"}
+                                <p className="mt-0.5">{font.reason}</p>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                        <button
+                          type="button"
+                          disabled={isProcessing || Boolean(reeditingAnnotationId)}
+                          onClick={() => void handleNativeTextReplacement()}
+                          className="mt-2 rounded border border-sky-400/50 px-2 py-1.5 text-xs font-semibold text-sky-200 hover:bg-sky-400/10 disabled:opacity-40"
+                        >
+                          Try genuine text replacement
+                        </button>
+                      </div>
                       <div className="flex gap-2 pt-1">
                         <button
                           type="button"
@@ -3715,7 +4062,7 @@ export default function PdfEditorTool({
                       pdfBytes={pdfBytes!}
                       isActive={currentPage === idx}
                       rotation={pageRotations[idx] || 0}
-                      annotationCount={annotations.filter((a) => a.pageIndex === idx).length}
+                      annotationCount={annotationCounts.get(idx) || 0}
                       onClick={() => {
                         setCurrentPage(idx);
                         setSelectedId(null);
@@ -3798,6 +4145,7 @@ export default function PdfEditorTool({
                                 const rect = overlayRef.current.getBoundingClientRect();
                                 const mouseX = ((e.clientX - rect.left) / rect.width) * 100;
                                 const mouseY = ((e.clientY - rect.top) / rect.height) * 100;
+                                pushHistorySnapshot();
                                 setDragOffset({ x: mouseX - ann.x, y: mouseY - ann.y });
                                 setIsDraggingSelected(true);
                               }
@@ -3869,6 +4217,7 @@ export default function PdfEditorTool({
                                 const rect = overlayRef.current.getBoundingClientRect();
                                 const mouseX = ((e.clientX - rect.left) / rect.width) * 100;
                                 const mouseY = ((e.clientY - rect.top) / rect.height) * 100;
+                                pushHistorySnapshot();
                                 setDragOffset({ x: mouseX - ann.x, y: mouseY - ann.y });
                                 setIsDraggingSelected(true);
                               }
@@ -3915,6 +4264,7 @@ export default function PdfEditorTool({
                                 const rect = overlayRef.current.getBoundingClientRect();
                                 const mouseX = ((e.clientX - rect.left) / rect.width) * 100;
                                 const mouseY = ((e.clientY - rect.top) / rect.height) * 100;
+                                pushHistorySnapshot();
                                 setDragOffset({ x: mouseX - ann.x, y: mouseY - ann.y });
                                 setIsDraggingSelected(true);
                               }
@@ -3960,6 +4310,7 @@ export default function PdfEditorTool({
                                 const rect = overlayRef.current.getBoundingClientRect();
                                 const mouseX = ((e.clientX - rect.left) / rect.width) * 100;
                                 const mouseY = ((e.clientY - rect.top) / rect.height) * 100;
+                                pushHistorySnapshot();
                                 setDragOffset({ x: mouseX - ann.x, y: mouseY - ann.y });
                                 setIsDraggingSelected(true);
                               }
@@ -4011,6 +4362,7 @@ export default function PdfEditorTool({
                                 const rect = overlayRef.current.getBoundingClientRect();
                                 const mouseX = ((e.clientX - rect.left) / rect.width) * 100;
                                 const mouseY = ((e.clientY - rect.top) / rect.height) * 100;
+                                pushHistorySnapshot();
                                 setDragOffset({ x: mouseX - ann.x, y: mouseY - ann.y });
                                 setIsDraggingSelected(true);
                               }
@@ -4058,6 +4410,7 @@ export default function PdfEditorTool({
                                 const rect = overlayRef.current.getBoundingClientRect();
                                 const mouseX = ((e.clientX - rect.left) / rect.width) * 100;
                                 const mouseY = ((e.clientY - rect.top) / rect.height) * 100;
+                                pushHistorySnapshot();
                                 setDragOffset({ x: mouseX - ann.x, y: mouseY - ann.y });
                                 setIsDraggingSelected(true);
                               }
@@ -4109,6 +4462,7 @@ export default function PdfEditorTool({
                                 const rect = overlayRef.current.getBoundingClientRect();
                                 const mouseX = ((e.clientX - rect.left) / rect.width) * 100;
                                 const mouseY = ((e.clientY - rect.top) / rect.height) * 100;
+                                pushHistorySnapshot();
                                 setDragOffset({ x: mouseX - ann.x, y: mouseY - ann.y });
                                 setIsDraggingSelected(true);
                               }
@@ -4204,6 +4558,7 @@ export default function PdfEditorTool({
                                 const rect = overlayRef.current.getBoundingClientRect();
                                 const mouseX = ((e.clientX - rect.left) / rect.width) * 100;
                                 const mouseY = ((e.clientY - rect.top) / rect.height) * 100;
+                                pushHistorySnapshot();
                                 setDragOffset({ x: mouseX - ann.x, y: mouseY - ann.y });
                                 setIsDraggingSelected(true);
                               }
@@ -4305,7 +4660,9 @@ export default function PdfEditorTool({
                     {/* Interactive Detected Text Blocks Layer (Editing Mode) */}
                     {activeTool === "smart-edit" && (
                       <div className="absolute inset-0 pointer-events-none">
-                        {detectedBlocks.map((block) => {
+                        {(activeInlineBlock && !detectedBlocks.some((block) => block.id === activeInlineBlock.id)
+                          ? [...detectedBlocks, activeInlineBlock]
+                          : detectedBlocks).map((block) => {
                           const isHovered = hoveredBlockId === block.id;
                           const isActive = activeInlineBlock?.id === block.id;
 

@@ -1,4 +1,6 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from "react";
+import { subscribeVisibleGameSeconds } from "@/game/visibleGameTimer";
+import { shouldIgnorePuzzleKey } from "@/game/puzzleKeyboard";
 import { Link } from "wouter";
 import confetti from "canvas-confetti";
 import { OrbitAudio } from "@/game/audio";
@@ -74,11 +76,9 @@ export default function HivePuzzle() {
 
   // Timer
   useEffect(() => {
-    const interval = window.setInterval(() => {
-      setSeconds((s) => s + 1);
-    }, 1000);
-    return () => window.clearInterval(interval);
-  }, []);
+    if (showVictoryModal || showRules || showFoundDrawer) return;
+    return subscribeVisibleGameSeconds(delta => setSeconds(s => s + delta));
+  }, [showVictoryModal, showRules, showFoundDrawer]);
 
   // Peer-to-Peer Automated Challenge System
   const challengeInfo = useMemo(() => {
@@ -298,7 +298,7 @@ export default function HivePuzzle() {
   // Keyboard navigation
   const handleKeyDown = useCallback(
     (e: KeyboardEvent) => {
-      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+      if (showRules || showVictoryModal || showFoundDrawer || shouldIgnorePuzzleKey(e)) return;
 
       const key = e.key.toUpperCase();
 
@@ -308,7 +308,7 @@ export default function HivePuzzle() {
       } else if (key === "BACKSPACE" || key === "DELETE") {
         e.preventDefault();
         handleDelete();
-      } else if (key === " " || key === "TAB") {
+      } else if (key === " ") {
         e.preventDefault();
         handleShuffle();
       } else if (/^[A-Z]$/.test(key)) {
@@ -319,7 +319,7 @@ export default function HivePuzzle() {
         }
       }
     },
-    [currentWord, edition, foundWords]
+    [currentWord, edition, foundWords, showRules, showVictoryModal, showFoundDrawer]
   );
 
   useEffect(() => {
@@ -400,7 +400,7 @@ export default function HivePuzzle() {
   }, [foundWords]);
 
   return (
-    <div className="logic-game-page flex flex-col h-screen max-h-screen overflow-hidden select-none bg-[#090d16] text-[#f4f2ea]">
+    <div className="logic-game-page flex flex-col min-h-[100dvh] h-auto overflow-y-auto md:h-screen md:max-h-screen md:overflow-hidden select-none bg-[#090d16] text-[#f4f2ea]">
       {/* Top Standard Action Bar */}
       <header className="shrink-0 h-14 border-b border-white/10 bg-slate-950/80 backdrop-blur-md px-3 sm:px-6 flex items-center justify-between z-30">
         <div className="flex items-center gap-2 sm:gap-3">

@@ -6,6 +6,7 @@ const APP_SHELL = ["/", "/offline.html", "/manifest.webmanifest", "/pdf.worker.m
 const STATIC_EXT_REGEX = /\.(?:js|mjs|css|png|jpg|jpeg|svg|webp|ico|woff2|woff|wasm|webmanifest)$/i;
 
 function isStaticAssetRequest(url) {
+  if (url.pathname.startsWith("/models/") || url.pathname.startsWith("/ai-runtime/")) return false;
   if (url.pathname.startsWith("/api/") || url.pathname.startsWith("/contact/")) {
     return false;
   }
@@ -31,6 +32,8 @@ self.addEventListener("fetch", (event) => {
   // Strictly skip non-GET, cross-origin, and private/API endpoints
   if (request.method !== "GET" || url.origin !== self.location.origin) return;
   if (url.pathname.startsWith("/api/") || url.pathname.startsWith("/contact/")) return;
+  // Transformers.js handles its own versioned browser model cache; do not double-cache large ONNX files.
+  if (url.pathname.startsWith("/models/") || url.pathname.startsWith("/ai-runtime/")) return;
 
   // Bypass cache if request contains Authorization or cookie header
   if (request.headers.get("Authorization") || request.headers.get("Cookie")) return;

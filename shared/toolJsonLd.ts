@@ -59,6 +59,7 @@ export function getToolApplicationCategory(tool: ToolDefinition): string {
     case "randomNumber":
     case "usernameGen":
       return "UtilitiesApplication";
+    case "backgroundRemoval":
     case "imageResize":
     case "imageTransform":
     case "imageMetadata":

@@ -153,9 +153,10 @@ export async function extractInteractiveTextBlocks(
   pdfBytes: Uint8Array,
   pageIndex: number
 ): Promise<DetectedTextBlock[]> {
+  let pdf: Awaited<ReturnType<typeof pdfjsLib.getDocument>["promise"]> | null = null;
   try {
     const loadingTask = pdfjsLib.getDocument({ data: pdfBytes.slice() });
-    const pdf = await loadingTask.promise;
+    pdf = await loadingTask.promise;
     if (pageIndex < 0 || pageIndex >= pdf.numPages) return [];
 
     const page = await pdf.getPage(pageIndex + 1);
@@ -461,5 +462,7 @@ export async function extractInteractiveTextBlocks(
   } catch (err) {
     console.warn("Failed to extract interactive text blocks:", err);
     return [];
+  } finally {
+    await pdf?.destroy();
   }
 }

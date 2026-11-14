@@ -22,6 +22,7 @@ import { buildBotCharacter, buildFPSViewmodel } from "./characterBuilder";
 import { krunkerAudio } from "./audio";
 import { freshKrunkerMatchStats, KRUNKER_MATCH_DURATION_SECONDS, resetKrunkerBotForMatch } from "./matchReset";
 import { rayAabbDistance } from "./rayAabb";
+import { arcadePressure, krunkerBotHitChance, type ArcadeDifficulty } from "../playability";
 
 export class KrunkerEngine {
   // Three.js Core
@@ -89,8 +90,12 @@ export class KrunkerEngine {
 
   // Internal Loop
   private lastTime: number = 0;
+  private speedHudClock = 0;
   private animationFrameId: number | null = null;
   private isDestroyed: boolean = false;
+  private isSuspended: boolean = false;
+  public elapsedSeconds = 0;
+  public difficulty: ArcadeDifficulty = "normal";
 
   constructor(container: HTMLElement, callbacks: KrunkerCallbacks) {
     this.container = container;
@@ -138,7 +143,9 @@ export class KrunkerEngine {
 
   // Spawn or Respawn Player at safe spawn point
   public spawnPlayer() {
-    const sp = this.spawnPoints[Math.floor(Math.random() * this.spawnPoints.length)];
+    const safeSpawns=this.spawnPoints.filter(point=>this.bots.every(bot=>!bot.isAlive || bot.position.distanceTo(point)>=20));
+    const candidates=safeSpawns.length?safeSpawns:this.spawnPoints;
+    const sp=candidates[Math.floor(Math.random() * candidates.length)];
     this.playerPos.set(sp.x, sp.y + 0.5, sp.z);
     this.playerVelocity.set(0, 0, 0);
     this.health = 100;
@@ -150,7 +157,7 @@ export class KrunkerEngine {
     this.currentAmmo = this.currentWeapon.magSize;
     this.isReloading = false;
     this.isInvulnerable = true;
-    this.invulnerableTimer = PHYSICS.INVULNERABLE_DURATION;
+    this.invulnerableTimer = this.elapsedSeconds === 0 ? Math.max(PHYSICS.INVULNERABLE_DURATION,arcadePressure(0,this.difficulty).protectionRemaining) : Math.max(4,PHYSICS.INVULNERABLE_DURATION);
 
     this.camera.position.copy(this.playerPos);
     this.camera.position.y += this.currentCameraHeight;
@@ -163,6 +170,8 @@ export class KrunkerEngine {
   /** Start a genuinely new round, not just a respawn into the previous scoreboard. */
   public restartMatch(): void {
     if (this.isDestroyed) return;
+    this.elapsedSeconds=0;
+    this.speedHudClock = 0;
     this.matchTimeRemaining = KRUNKER_MATCH_DURATION_SECONDS;
     this.isMatchEnded = false;
     this.stats = freshKrunkerMatchStats();
@@ -251,7 +260,9 @@ export class KrunkerEngine {
       const name = BOT_NAMES[i % BOT_NAMES.length];
       const color = BOT_COLORS[i % BOT_COLORS.length];
       const botClass = classes[i % classes.length];
-      const sp = this.spawnPoints[(i + 1) % this.spawnPoints.length];
+      const separated = this.spawnPoints.filter(point=>point.distanceTo(this.playerPos)>=22);
+      const candidateSpawns = separated.length ? separated : this.spawnPoints;
+      const sp = candidateSpawns[i % candidateSpawns.length];
 
       const visuals = buildBotCharacter(color, botClass);
       visuals.group.position.copy(sp);
@@ -293,14 +304,48 @@ export class KrunkerEngine {
     }
   }
 
+  public setDifficulty(mode: ArcadeDifficulty) {
+    if (this.elapsedSeconds===0 && this.isSuspended) {
+      this.difficulty=mode;
+      this.invulnerableTimer=Math.max(this.invulnerableTimer,arcadePressure(0,mode).protectionRemaining);
+      this.isInvulnerable=true;
+    }
+  }
+
+  public getOpeningProtectionRemaining(){
+    return arcadePressure(this.elapsedSeconds,this.difficulty).protectionRemaining;
+  }
+
+  // A hidden tab must not consume match time, move bots, or apply damage.
+  public setSuspended(hidden: boolean) {
+    if (this.isDestroyed || this.isSuspended === hidden) return;
+    this.isSuspended = hidden;
+    if (hidden) {
+      // An inactive/hidden FPS game must not keep a 60 Hz RAF alive.
+      if (this.animationFrameId !== null) cancelAnimationFrame(this.animationFrameId);
+      this.animationFrameId = null;
+      this.keys = {};
+      this.isMouseDown = false;
+      this.isRightMouseDown = false;
+      this.isADS = false;
+    } else {
+      // Resume with zero wall-clock catch-up, and at most one active RAF.
+      this.lastTime = performance.now();
+      if (this.animationFrameId === null) this.animationFrameId = requestAnimationFrame(this.animate);
+    }
+  }
+
   // Main Game Loop
   private animate(now: number) {
-    if (this.isDestroyed) return;
+    this.animationFrameId = null;
+    if (this.isDestroyed || this.isSuspended) return;
 
-    const dt = Math.min((now - this.lastTime) / 1000, 0.1);
+    const dt = Math.min(Math.max(0,(now - this.lastTime) / 1000), 0.066);
     this.lastTime = now;
 
     if (!this.isMatchEnded) {
+      this.elapsedSeconds += dt;
+      this.speedHudClock += dt;
       // 1. Update Match Timer
       this.matchTimeRemaining -= dt;
       if (this.matchTimeRemaining <= 0) {
@@ -310,8 +355,13 @@ export class KrunkerEngine {
 
       // 2. Process Player Movement & Physics (Slide-Hopping & Bhop)
       if (this.isAlive) {
-        this.updatePlayerMovement(dt);
-        this.handleWeaponInput(dt);
+        // Split large visual frame gaps into safe physics/collision slices.
+        // Keep the total frame time fixed to avoid extra movement/damage.
+        const slices = Math.max(1, Math.ceil(dt / (1 / 60)));
+        for (let slice = 0; slice < slices && this.isAlive; slice++) {
+          this.updatePlayerMovement(dt / slices);
+          this.handleWeaponInput(dt / slices);
+        }
       } else {
         // Free cam or death rotation
         this.updateDeathState(dt);
@@ -319,6 +369,12 @@ export class KrunkerEngine {
 
       // 3. Process Bots AI & Movement
       this.updateBots(dt);
+      if (this.speedHudClock >= 0.1) {
+        this.speedHudClock = 0;
+        this.callbacks.onSpeedUpdate(Math.round(
+          Math.hypot(this.playerVelocity.x, this.playerVelocity.z) * 10,
+        ));
+      }
 
       // 4. Process Weapon Viewmodel Animations
       this.updateViewmodel(dt);
@@ -458,7 +514,6 @@ export class KrunkerEngine {
     const horizSpeed = Math.sqrt(
       this.playerVelocity.x * this.playerVelocity.x + this.playerVelocity.z * this.playerVelocity.z
     );
-    this.callbacks.onSpeedUpdate(Math.round(horizSpeed * 10));
     if (horizSpeed > this.stats.topSpeed) {
       this.stats.topSpeed = horizSpeed;
     }
@@ -843,15 +898,15 @@ export class KrunkerEngine {
 
       // 1. Target Acquisition: Find player or other bot
       let targetPos: THREE.Vector3 | null = null;
-      let targetDist = 999;
+      let targetDistSq = Number.POSITIVE_INFINITY;
       let targetIsPlayer = false;
 
       // Check distance to player
       if (this.isAlive && !this.isInvulnerable) {
-        const d = bot.position.distanceTo(this.playerPos);
-        if (d < 45) {
+        const d = bot.position.distanceToSquared(this.playerPos);
+        if (d < 45 * 45) {
           targetPos = this.playerPos;
-          targetDist = d;
+          targetDistSq = d;
           targetIsPlayer = true;
         }
       }
@@ -860,9 +915,9 @@ export class KrunkerEngine {
       if (!targetPos) {
         for (const other of this.bots) {
           if (other.id !== bot.id && other.isAlive && other.invulnerableTimer <= 0) {
-            const d = bot.position.distanceTo(other.position);
-            if (d < targetDist && d < 35) {
-              targetDist = d;
+            const d = bot.position.distanceToSquared(other.position);
+            if (d < targetDistSq && d < 35 * 35) {
+              targetDistSq = d;
               targetPos = other.position;
               targetIsPlayer = false;
             }
@@ -872,28 +927,33 @@ export class KrunkerEngine {
 
       // 2. State Machine & Movement
       if (targetPos) {
+        const targetDist = Math.sqrt(targetDistSq);
         // Turn towards target
         const dx = targetPos.x - bot.position.x;
         const dz = targetPos.z - bot.position.z;
         const targetYaw = Math.atan2(dx, dz);
-        bot.rotationY += (targetYaw - bot.rotationY) * Math.min(1.0, dt * 8.0);
+        // Wrap via the shortest angle; crossing +/-PI must not spin 360 degrees.
+        const angleDiff = Math.atan2(Math.sin(targetYaw - bot.rotationY), Math.cos(targetYaw - bot.rotationY));
+        bot.rotationY += angleDiff * Math.min(1.0, dt * 8.0);
         bot.mesh.rotation.y = bot.rotationY;
 
         // Strafe & Advance
-        const forward = new THREE.Vector3(Math.sin(bot.rotationY), 0, Math.cos(bot.rotationY));
-        const right = new THREE.Vector3(Math.cos(bot.rotationY), 0, -Math.sin(bot.rotationY));
-
-        let speed = 9.0;
+        const sinYaw = Math.sin(bot.rotationY);
+        const cosYaw = Math.cos(bot.rotationY);
+        const speed = 5.2 + 3.8 * arcadePressure(this.elapsedSeconds,this.difficulty).enemyPressure;
         if (targetDist > 16) {
           // Advance closer
-          bot.position.addScaledVector(forward, speed * dt);
+          bot.position.x += sinYaw * speed * dt;
+          bot.position.z += cosYaw * speed * dt;
         } else if (targetDist < 8) {
           // Back up
-          bot.position.addScaledVector(forward, -speed * 0.7 * dt);
+          bot.position.x -= sinYaw * speed * 0.7 * dt;
+          bot.position.z -= cosYaw * speed * 0.7 * dt;
         }
         // Lateral strafing
-        const strafeDir = Math.sin(Date.now() * 0.003 + parseInt(bot.id.slice(-1), 10));
-        bot.position.addScaledVector(right, strafeDir * speed * 0.8 * dt);
+        const strafeDir = Math.sin(this.elapsedSeconds * 3 + (Number.parseInt(bot.id.slice(-1), 10) || 0));
+        bot.position.x += cosYaw * strafeDir * speed * 0.8 * dt;
+        bot.position.z -= sinYaw * strafeDir * speed * 0.8 * dt;
 
         // Walking Leg Animation
         bot.walkCycle += dt * 12.0;
@@ -902,7 +962,7 @@ export class KrunkerEngine {
 
         // 3. Bot Shooting
         if (bot.fireCooldown <= 0 && targetDist < 40) {
-          bot.fireCooldown = 0.5 + Math.random() * 0.8;
+          bot.fireCooldown = (0.7 + Math.random() * 0.9) / Math.max(0.25, arcadePressure(this.elapsedSeconds,this.difficulty).enemyPressure);
           this.botFire(bot, targetPos, targetIsPlayer);
         }
       } else {
@@ -912,8 +972,8 @@ export class KrunkerEngine {
           bot.stateTimer = 3.0 + Math.random() * 4.0;
         }
         bot.mesh.rotation.y = bot.rotationY;
-        const forward = new THREE.Vector3(Math.sin(bot.rotationY), 0, Math.cos(bot.rotationY));
-        bot.position.addScaledVector(forward, 6.0 * dt);
+        bot.position.x += Math.sin(bot.rotationY) * 6.0 * dt;
+        bot.position.z += Math.cos(bot.rotationY) * 6.0 * dt;
 
         bot.walkCycle += dt * 8.0;
         bot.leftLegMesh.rotation.x = Math.sin(bot.walkCycle) * 0.4;
@@ -962,9 +1022,17 @@ export class KrunkerEngine {
     });
 
     // If targeting player, deal damage
-    if (isTargetPlayer && this.isAlive && !this.isInvulnerable) {
+    if (isTargetPlayer && this.isAlive && !this.isInvulnerable &&
+      this.getOpeningProtectionRemaining()<=0) {
       const botDef = WEAPON_DEFS[bot.weaponClass];
-      const damage = Math.round(botDef.damage * 0.75); // slight damage tuning for bots
+      // Prior code unconditionally damaged the player on every bot shot:
+      // projectile-like tracers are visual only, so add genuine miss chance.
+      // This permits dodging, especially while moving during the learning phase.
+      const range=bot.position.distanceTo(this.playerPos);
+      const pressure=arcadePressure(this.elapsedSeconds,this.difficulty).enemyPressure;
+      const accuracy=krunkerBotHitChance(pressure,range,this.playerVelocity.length());
+      if(Math.random()>=accuracy)return;
+      const damage = Math.max(1,Math.round(botDef.damage * 0.65 * Math.min(1.1,pressure)));
       this.health -= damage;
       this.callbacks.onPlayerDamaged(Math.max(0, this.health), this.maxHealth);
 
@@ -976,7 +1044,9 @@ export class KrunkerEngine {
 
   // Bot respawns at random spawn
   private respawnBot(bot: BotEntity) {
-    const sp = this.spawnPoints[Math.floor(Math.random() * this.spawnPoints.length)];
+    const safe=this.spawnPoints.filter(point=>point.distanceTo(this.playerPos)>=18);
+    const choices=safe.length?safe:this.spawnPoints;
+    const sp = choices[Math.floor(Math.random() * choices.length)];
     bot.position.copy(sp);
     bot.health = 100;
     bot.isAlive = true;
@@ -1192,7 +1262,16 @@ export class KrunkerEngine {
     this.isDestroyed = true;
     if (this.animationFrameId !== null) {
       cancelAnimationFrame(this.animationFrameId);
+      this.animationFrameId = null;
     }
+    // Release per-match geometry, materials, textures and shadow resources.
+    this.scene.traverse(object => {
+      if (!(object instanceof THREE.Mesh || object instanceof THREE.Line || object instanceof THREE.Points)) return;
+      object.geometry?.dispose();
+      const materials = Array.isArray(object.material) ? object.material : [object.material];
+      for (const material of materials) material?.dispose();
+    });
+    this.scene.clear();
     this.renderer.dispose();
     if (this.renderer.domElement.parentNode) {
       this.renderer.domElement.parentNode.removeChild(this.renderer.domElement);

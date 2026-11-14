@@ -16,6 +16,25 @@ export default function CircuitShiftCanvas({ callbacks, difficulty, mode }: { ca
     let isDisposed = false;
     const engine = new Engine(canvas, true, { preserveDrawingBuffer: true, stencil: true, adaptToDeviceRatio: true });
     let handle: CircuitShiftHandle | null = null;
+    let lastRender = 0;
+    const draw = () => {
+      if (isDisposed || !handle || handle.scene.isDisposed || document.hidden) return;
+      const now = performance.now();
+      // Static puzzle meshes need no 60 FPS continuous GPU redraw.
+      if (now - lastRender < 1000 / 30) return;
+      lastRender = now;
+      handle.scene.render();
+    };
+    const onVisibility = () => {
+      if (isDisposed) return;
+      if (document.hidden) engine.stopRenderLoop(draw);
+      else {
+        lastRender = 0;
+        engine.resize();
+        if (handle) engine.runRenderLoop(draw);
+      }
+    };
+    document.addEventListener("visibilitychange", onVisibility);
 
     createCircuitShiftScene(
       engine,
@@ -35,11 +54,7 @@ export default function CircuitShiftCanvas({ callbacks, difficulty, mode }: { ca
         return;
       }
       handle = game;
-      engine.runRenderLoop(() => {
-        if (!isDisposed && game.scene && !game.scene.isDisposed) {
-          game.scene.render();
-        }
-      });
+      if (!document.hidden) engine.runRenderLoop(draw);
     });
 
     const resize = () => {
@@ -50,6 +65,8 @@ export default function CircuitShiftCanvas({ callbacks, difficulty, mode }: { ca
     return () => {
       isDisposed = true;
       window.removeEventListener("resize", resize);
+      document.removeEventListener("visibilitychange", onVisibility);
+      engine.stopRenderLoop(draw);
       handle?.dispose();
       engine.dispose();
     };

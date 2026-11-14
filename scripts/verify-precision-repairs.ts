@@ -637,27 +637,27 @@ console.log("\n[TASK O] Verifying Service Worker Caching Allowlist & Bypass...")
 }
 
 // -------------------------------------------------------------
-// TASK P: Accurate 61 Utility Count & MCP Catalog Integrity (ISS-047)
+// TASK P: Accurate 62 Utility Count & MCP Catalog Integrity (ISS-047)
 // -------------------------------------------------------------
-console.log("\n[TASK P] Verifying Accurate 61 Tool Count & MCP Server Card...");
+console.log("\n[TASK P] Verifying Accurate 62 Tool Count & MCP Server Card...");
 {
   const fs = await import("fs");
   const { tools } = await import("../shared/toolsData");
-  assert(tools.length === 61, `toolsData.ts contains exactly 61 verified tools (actual: ${tools.length})`);
+  assert(tools.length === 62, `toolsData.ts contains exactly 62 registered tools (actual: ${tools.length})`);
 
   const indexHtml = fs.readFileSync("client/index.html", "utf-8");
   assert(!indexHtml.includes("120+"), "index.html does not claim 120+ utilities");
-  assert(indexHtml.includes("61 developer utilities") || indexHtml.includes("61 utilities"), "index.html accurately claims 61 utilities");
+  assert(indexHtml.includes("62 developer utilities") || indexHtml.includes("62 utilities"), "index.html accurately claims 62 utilities");
 
   const homeSource = fs.readFileSync("client/src/pages/Home.tsx", "utf-8");
   assert(!homeSource.includes("120+"), "Home.tsx does not claim 120+ utilities");
-  assert(homeSource.includes("61 offline tools"), "Home.tsx accurately references 61 offline tools");
+  assert(homeSource.includes("62 offline tools"), "Home.tsx accurately references 62 offline tools");
 
   const serverCard = JSON.parse(fs.readFileSync("client/public/.well-known/mcp/server-card.json", "utf-8"));
   assert(serverCard.tools.length >= 4, "MCP server-card.json defines at least 4 registered agent tools");
   assert(serverCard.tools.some((t: { name: string }) => t.name === "search_tools"), "MCP defines search_tools");
   assert(!JSON.stringify(serverCard).includes("120+"), "MCP server card does not claim 120+ tools");
-  assert(JSON.stringify(serverCard).includes("61"), "MCP server card references 61 tools");
+  assert(JSON.stringify(serverCard).includes("62"), "MCP server card references 62 tools");
 
   const serverIndex = fs.readFileSync("server/index.ts", "utf-8");
   assert(serverIndex.includes('app.post("/api/mcp"'), "server/index.ts exposes real /api/mcp JSON-RPC endpoint");
@@ -1573,6 +1573,9 @@ console.log("\n[GAMES] Testing Surviv in-flight weapon names and Diep eliminatio
 
   // When a player dies from the first of two colliding shapes,
   // further shapes and ramming in the same frame must not damage them again.
+  // The new opening shield intentionally prevents a game-over in the first
+  // seconds; exercise collision lethality AFTER the protected learning phase.
+  diep.elapsedSeconds = 30;
   player.active = true;
   player.health = 1;
   player.x = 100; player.y = 100;

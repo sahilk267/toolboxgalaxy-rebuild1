@@ -1,5 +1,210 @@
 # ToolboxGalaxy Repair & Verification Progress Ledger
 
+## Embedded PDF font mapping foundations — 14 November 2026
+
+- Implemented `client/src/lib/pdfGlyphMapping.ts`: a browser-local, **read-only** PDF font-resource inspector for the active PDF page. It identifies resource name, base PostScript name, subtype, encoding, subset prefix, embedded font-file presence and ToUnicode availability.
+- Added a bounded ToUnicode CMap diagnostic parser for explicit `bfchar` pairs and conservative `bfrange` scalar/array maps, decoding Unicode destinations as UTF-16BE. Unknown mappings, malformed blocks, conflicting codes, unsupported filters and oversized files fail closed; glyph counts are **diagnostic only**.
+- Added async font-inspection UI to PDF Editor's native text mode, displaying resource characteristics and why a glyph-aware engine would be required. Stale async results are ignored when switching page, document or mode.
+- **Security/fidelity boundary:** `ToUnicode` maps PDF codes to extracted Unicode. It does not establish writable glyph codes, embedded outlines, widths, kerning or shaping. No reverse encoding or replacement of embedded/subset fonts was enabled. Existing standard Type1 safe subset remains unchanged.
+- **No build/typecheck, manual browser QA, real-PDF corpus testing or deployment** was performed in this batch. Changes were committed directly to the working branch `feat/browser-ai-background-remover`.
+
+
+## Native PDF text-run safety expansion — 14 November 2026
+
+- Extended the strict native text engine to recognize `TJ` arrays containing **multiple printable text segments with zero-only numeric adjustments**, including hexadecimal segments. Concatenated replacement is permitted only when its existing Type1 font width fits; nonzero kerning is still rejected because flattening would shift glyphs.
+- Added a **bounded document-wide indirect-object reference scan** before deleting the obsolete page-content stream. If another PDF object still refers to the old stream, native replacement aborts rather than breaking the document graph. This replaces the previous page-only reference scan.
+- Updated the PDF Editor on-screen capability message. The actual content stream changes only for supported standard-font text; embedded/subset fonts, mappings, shaping, multiline reflow and general PDF transforms remain unresolved.
+- GitHub implementation and documentation pushed to `feat/browser-ai-background-remover`. **No TypeScript build, real PDF round-trip testing, manual browser QA or deployment performed**. Source changes are implementation candidates, not production-certification evidence.
+
+
+## Native PDF text engine expansion — 14 November 2026
+
+- Added **single-element `TJ` array** handling alongside literal and hex-encoded `Tj`. Numeric kerning arrays, escaped literal operands, complex encodings and mixed font runs remain intentionally unsupported.
+- Added **multiple independently positioned text objects** in one page stream (maximum 20). Each must contain exactly one text operation and an explicit identity-geometry `Tm`; selected text must match uniquely. Other text objects are preserved verbatim.
+- Fixed PDF name normalization for `/FlateDecode`, `/Type1`, `/WinAnsiEncoding` and base font resource names so leading-slash PDF names don't trigger mistaken rejection.
+- Replaced the prior one-run-only text verification with **full-page PDF.js text comparison**: extracted content before/after must differ only by the requested replacement. Any collateral extracted-text change aborts the operation without updating the editor's original bytes.
+- Restricted signed/permission-constrained PDFs in this mode; kept independent UI action, no silent whiteout fallback, standard Type1 font/width constraints, stream size budget and browser-local processing.
+- **Scope:** Still a narrow implementation candidate for standard-encoding PDF content streams, not arbitrary embedded font/Unicode/paragraph editing. **No typecheck, real-PDF runtime testing, browser QA, merge or deployment** performed.
+
+
+## Native page-text editing prototype — 13 November 2026
+
+- **Implementation:** added `client/src/lib/pdfNativeTextEditing.ts` with an independent PDF content-stream text replacement path. It rewrites the literal `Tj` operand instead of drawing a background rectangle, and removes the obsolete indirect stream object when safe.
+- **Strict support gates:** up to 12 MiB PDFs, single page content stream (raw or single FlateDecode), one complete plain-ASCII `Tj` text run, simple standard Type1 font, ordinary identity text geometry, non-rotated/non-cropped pages, no page annotations or interactive form fields. Replacement must fit the original measured width. Unsupported structures fail closed.
+- **Extraction verification:** before modifying the source, PDF.js must extract exactly the expected original line. After serializing, PDF.js must extract exactly the replacement line. No source byte change or annotation is committed when the engine rejects a PDF.
+- **Editor integration:** a separate *Try genuine text replacement* action appears next to the existing visual overlay workflow. Accepted replacements update the original PDF bytes and enter Undo/Redo; rejected ones do **not** automatically fall back to overlay mode.
+- **Compression:** browser-native `DecompressionStream("deflate")` supports a single FlateDecode stream with a 128 KiB decompressed limit. Unknown compression filters or decoding settings fail closed.
+- **Technical boundary:** this is a very narrow **source-level prototype**, not the Sejda-equivalent editor requested. Arbitrary page text, multiple glyph runs, embedded/subset fonts, multiline paragraphs, Unicode and reflow remain unimplemented.
+- **Verification:** no typecheck/build, runtime PDF fixtures, browser testing or deployment executed in this iteration; Git push is not proof of functional correctness.
+
+
+## PDF editing safety gates — 13 November 2026
+
+- **Fail-fast export:** The visual PDF editor now checks all user-added/replacement text, stamps, headers, footers and watermark text before export. If standard-font sanitization would change even one character, it cancels export with a clear error instead of silently transliterating/removing glyphs. Inline visual replacement similarly rejects unsupported characters at Save.
+- **Replacement provenance:** Re-editing a visual replacement keeps the original underlying text identifier/content in the annotation rather than treating the last overlay string as original PDF text.
+- **Native forms:** Editable dropdowns, multi-select dropdowns and multi-select option lists are left untouched by the current single-choice UI to avoid destroying values.
+- **Protect form-bearing PDFs:** Existing copy-based page duplication and rebuild-based page reorder operations are blocked when interactive form fields exist, since document-level AcroForm objects can otherwise be lost. These operations still require a preservation-safe alternative.
+- **Scope:** All are code-level safety measures pushed to `feat/browser-ai-background-remover`. No typecheck, browser tests, real-PDF verification or deployment performed. True native arbitrary page-text editing remains pending.
+
+
+## PDF native form editing and honest text-mode labels — 12 November 2026
+
+- Working branch: `feat/browser-ai-background-remover` (implementation and Git push only).
+- Added a browser-local AcroForm inspection/change module for existing text fields, checkboxes, dropdowns, radio options and single-select lists. Writes use native PDF values, reject read-only/unsupported fields and verify save by reloading the document before replacing editor bytes; multi-select lists are left unchanged.
+- Exposed native fields with Apply controls in the PDF Editor, integrated changes with Undo/Redo snapshots, and capped history to 12 snapshots / approximately 96 MiB unique retained document bytes to protect long sessions.
+- Renamed ordinary on-page editor to *Visual Text Replacement*, prominently warning that it covers text with a background rectangle rather than modifying original PDF content. The desired Sejda-like arbitrary born-digital text editing remains an **unimplemented architectural requirement**.
+- **No tests, build, real-PDF verification or deployment executed in this checkpoint.** Success is code-push success, not runtime feature certification. See `docs/PDF_EDITOR_STABILITY_ROADMAP.md`.
+
+
+
+## PDF editor P0 data-integrity stabilization — 12 November 2026
+
+**Working branch:** `feat/browser-ai-background-remover`. Source implementation and Git pushes only. No build, automated tests, browser QA, real-PDF comparison or hosting deployment were performed.
+
+- **History now includes the document:** Undo/Redo stores immutable PDF byte references, page count/index, page rotations and copied annotations, rather than annotations/rotations only. Document page delete/insert/duplicate/reorder actions record pre-mutation snapshots after successful save. New sample/upload sessions clear outdated history.
+- **Image annotation safety:** History copies `Uint8Array` image bytes and drawing points without JSON serialization, avoiding typed-array corruption. Page duplication remaps following-page annotations and duplicates the source page's unsaved visual annotations.
+- **In-place text re-edit/cancel:** Reopening an edited annotation no longer deletes it before Save. Save replaces the matching annotation ID; Cancel retains the prior edit. This is still a visual overlay workflow, **not a native PDF text-stream replacement**.
+- **Async extraction:** PDF.js text scanning results from superseded page/file/tool sessions are ignored; stale highlights are cleared and extraction completion only updates its active session. PDF.js extraction documents are destroyed in `finally`.
+- **Pointer history:** Existing mouse drag/resize operations snapshot geometry at interaction start instead of after change. This restores a useful Undo target but mobile touch/pointer behavior still needs subsequent work.
+- **Export renderer cleanup:** The optional PDF.js renderer used for raster redactions is destroyed in an export `finally` block, including failure paths.
+- **Known gaps not solved:** White rectangular masking, accurate original-text replacement, Unicode font embedding, secure redaction certification, ACRO form editing, large-PDF benchmarks and visual fidelity remain open.
+- **Release boundary:** Treat all modifications as *unverified implementation candidates* until typecheck, browser workflows, controlled real-PDF outputs and memory checks complete.
+
+## PDF Merge/Split guardrails — 12 November 2026
+
+- Merge input queues are limited to 20 PDFs, 30 MB per document and 100 MB combined; uploads use a sequential loader, a race guard and same-file re-selection support.
+- Merge actions cannot overlap or mutate their file queue mid-generation. PDF Split inputs are capped at 50 MB before reading.
+- Split page-range expansion now tracks selected pages in a Set instead of repeatedly scanning all previously selected pages (preserves the original user-specified ordering). File-save object URLs are revoked after a short browser download handoff rather than synchronously.
+- **Release boundary:** GitHub code and ledger updated only; no automated/manual tests, build, Hostinger upload or live deployment performed.
+
+
+## PDF extraction worker lifecycle and text-table scaling — 12 November 2026
+
+- **PDF text:** release PDF.js page caches and worker/document after extraction; build text fragments as arrays to avoid repeated large string copies, and skip non-text PDF objects.
+- **PDF table export:** sort text vertically and group rows in one pass instead of scanning previous rows per text item. Release PDF.js worker and page caches even after errors.
+- **Scope:** source code updates and Git push only; no build, unit tests, manual QA or deployment.
+
+
+## Krunker keyboard/focus lifecycle hardening — 12 November 2026
+
+- **Working branch:** `feat/browser-ai-background-remover`.
+- **Krunker FPS keyboard isolation:** the global keydown handler no longer consumes Tab or class/respawn/ADS/movement shortcuts when a game overlay button, input, select, textarea, editable content, or dialog has focus. Unstarted games, hidden tabs, modifier shortcuts, IME composition, and desktop sessions without pointer lock cannot inject game inputs. Active pointer-locked gameplay preserves the existing keyboard shortcuts and scoreboard Tab behavior.
+- **Scope:** source update and Git push only. No build, tests, manual gameplay verification or deployment performed per user request. This is not a verified runtime result.
+
+## PDF OCR long-session worker and bitmap lifecycle — 12 November 2026
+
+- Both text OCR and searchable PDF generation now dispose the Tesseract worker and PDF.js document in `finally`, including failure paths after engine setup.
+- OCR page bitmaps are limited to approximately 15.8 megapixels and 8,192px per edge, automatically scaling down unusually large PDF pages; the searchable layer uses the actual render scale when calculating text coordinates.
+- Every page canvas bitmap is released and `page.cleanup()` is called before advancing to the next page. Input PDFs above 40 MB are rejected before expensive OCR initialization.
+- This is source implementation only; no tests, build, OCR accuracy assessment or deployment were performed.
+
+
+## PDF conversion & pointer memory follow-up — 12 November 2026
+
+- **Images-to-PDF:** replace memory-expensive base64 previews with Blob URLs; read images sequentially; bound queues at 40 images / 100 MB; release URLs on removal/unmount and canvas backing after conversion. Preserve file ordering and PNG/JPEG/WebP output behavior.
+- **Strands:** a synchronous pointer ref and direct grid pointerup/cancel handlers close the race between a very fast tap and React's effect installing the window release handler. Cleanup is idempotent and off-grid cancellation cannot leave controls stuck.
+- **Scope:** implementation and Git push only; no build, tests, manual QA or deployment performed.
+
+
+## Puzzle input & game timer lifecycle — 12 November 2026
+
+- **Cross-puzzle keyboard guard:** Wordle, Hive and Mini Crossword ignore keys when focus belongs to fields, buttons, contenteditable or dialogs, as well as IME, modifier shortcuts, hidden tabs and auto-repeat. This prevents global window listeners from hijacking other controls. Hive no longer blocks Tab navigation; Mini Crossword captures arrows only for grid navigation.
+- **Seven puzzle clocks:** Wordle, Connections, Hive, Strands, Mini Crossword, Chess and Nonogram use the existing visible-tab timer and now also suspend counting while help/instructions or relevant result overlays are open. Timer resumes automatically when returning to play.
+- **Strands mobile/desktop pointer lifecycle:** release is handled on window even when pointer ends outside the grid, pointercancel clears drag mode, and reset clears active pointer state. Touch taps can build a path incrementally; drag submission remains available, and keyboard button clicks do not double-append.
+- **Scope:** source implementation and Git push only. No builds, tests, browser QA or live deployment performed; runtime fixes are not yet verified.
+
+
+## Deep scalability phase — remaining games & media workflows (12 November 2026)
+
+**Working branch:** `feat/browser-ai-background-remover`. Code implementation and Git push only; tests, manual QA and deployment explicitly deferred by user.
+
+- **Signal Switch:** fixed a source-confirmed immediate game-over bug: the first canvas/key direction selected a random new relay and could lose on the starting gesture. First gesture now starts the round without grading the same input. First relay has 5.2 seconds; time gradually decreases with successful turns down to 1.5 seconds. HUD timer updates max ~10 times/sec instead of every WebGL frame. Keyboard handlers ignore editable controls and dialogs.
+- **Circuit Shift and Signal Switch:** stop browser WebGL render loops while hidden and cap visible renders to ~30 FPS, keeping the game scene alive. Visibility event listeners and loops are removed on component teardown.
+- **Image Metadata Remover:** selection/reset generations reject late decode/EXIF/re-export completions, release unused object URLs and canvas backings, and allow same-file re-selection; unreadable EXIF does not block safe image export.
+- **AI Background Remover:** free large full-resolution canvas backing after matte composition and final background-color export while preserving full-size output.
+- **Base64 Workbench:** prevent superseded asynchronous file reads from overwriting the latest chosen file, including after reset.
+- **PDF Editor:** lazily render only thumbnails close to the viewport using IntersectionObserver, cap thumbnail bitmap area to 1 megapixel, release each independent pdf.js parser/worker promptly, cancel obsolete render tasks, and enforce a 24-megapixel main-page canvas budget. Precompute annotation badge counts in a single pass. Uploads above 50 MB are refused before browser allocation.
+- **Image Crop/Rotate Editor:** avoid stale output after changing crop/rotation/quality or switching files mid-render, release canvas backing after encoding, and make same-file re-import reliable. Invalidation also unlocks the busy state so rapid option edits cannot leave the editor disabled.
+- **Image/EXIF invalid uploads:** clear any superseded busy indicator when a newly selected file fails validation.
+- **Verification boundary:** no executed unit tests, gameplay, builds, performance benchmarks or Hostinger deployment; this document records source changes, not verified runtime behavior.
+
+
+## Implementation & scalability batch 2 — 12 November 2026
+
+**Git branch:** `feat/browser-ai-background-remover`. These are source changes only; testing and deployment are deliberately deferred at the user's request.
+
+- **Surviv Battle Royale:** static ordered obstacle spatial index for projectile sweeps, nearby bush/loot-target and melee candidate searches; reusable combatants list; hunting bots continuously refresh tracked target positions; fleeing-zone bots choose waypoints on staggered think timers rather than jittering per animation frame. HUD publishes at most 10 times/s, alive counters only when changed.
+- **Krunker FPS:** cap large frame deltas, split player collision/movement over bounded substeps on slow devices, use squared distance checks and scalar movement to avoid transient bot vectors, normalize bot yaw on wrap, use pause-aware simulation time. Suspended matches park requestAnimationFrame entirely, clear stuck inputs on blur/unlock, and release scene mesh/geometry/material memory on teardown.
+- **Krunker mobile:** stable touch identifiers and `touchcancel` handling for movement, aim, ADS, jump, slide and fire; focus/visibility guards prevent unwanted continued combat.
+- **Excel Studio:** 100-row accessible preview pages instead of mounting every spreadsheet row at once; downloads still operate on complete sheet. Reject excessively large uploads/sheet dimensions, ignore superseded file reads, and reset pagination on import/sheet/filter changes.
+- **PDF Compressor:** reject PDFs above a browser-local 40 MB cap; bound raster pages to 16 megapixels, free each canvas and page, close pdf.js worker/document after inspection and recompression.
+- **Image Resizer:** stale asynchronous uploads/encodes are ignored after changing the source/settings; release canvas bitmap backing after export.
+- **Orbit lifecycle follow-up:** visible Pause/Resume, keyboard P/Escape/Space support, input-reset on restart, hidden-tab/blur automatic pause and a frozen difficulty clock while paused.
+- **Final source-review correction:** preserve Surviv melee crate reach when selecting broad-phase candidates and throttle Krunker speed HUD to 10 Hz without changing top-speed statistics.
+- **Release boundary:** no build, tests, human QA, Hostinger upload or deployment performed; do not claim these modifications are verified runtime fixes.
+
+
+## Runtime scalability and lifecycle hardening — implementation only (12 November 2026)
+
+- **Working branch:** `feat/browser-ai-background-remover`; PR #22 merged previously as `b79c74dde3817eca5f81cf7237f199a4b451bb8b`.
+- **Diep Arena:** switched legacy per-animation-frame physics to a bounded fixed 60 Hz simulation, with a maximum of four simulation ticks per render and no accumulated catch-up across pause/resume. This maintains movement, collision, recoil and projectile lifetimes across 30/60/120 Hz displays without an unbounded catch-up spike.
+- **Diep opponents:** purge inactive bots when spawning replacements so the long-lived array cannot grow throughout an extended match. Existing living entities and unique IDs are preserved.
+- **Diep game-over lifecycle:** stop the simulation when the player's final lethal hit is processed instead of continuing invisible updates.
+- **Orbit Dash:** reuse three Babylon gate materials for the entire world instead of allocating and retaining three new materials with every gate; explicitly dispose them on world teardown.
+- **Scope boundary:** implementation and Git push only. Per user request, no manual QA, test execution, build verification, production deployment or Hostinger changes are part of this checkpoint. This is *not* a claim that gameplay has been retested after these code changes.
+
+
+## Games Upgrade Phase — Implementation candidate (11 November 2026)
+
+- **Working feature branch:** `feat/games-upgrade-phase` based on the integrated `feat/browser-ai-background-remover` branch after [PR #20](https://github.com/sahilk267/toolboxgalaxy-rebuild1/pull/20) successfully merged (10 further advanced tools).
+- **New game review:** [PR #21](https://github.com/sahilk267/toolboxgalaxy-rebuild1/pull/21), **Ready for Review, unmerged**; keep `main` and hosting untouched.
+- **Puzzle upgrades:** All 13 listed puzzle games now share visible-time-only timer behavior (six from the common PuzzleFrame, seven independently rendered), including reset timer fairness. Logic Lab includes all 13 puzzles plus searchable categories.
+- **Practice:** Verified seeded Sudoku/Queens/Tango unique-solution board variations, three difficulty tiers, keyboard/touch-friendly 6x6 controls, hints, undo, reset, constraints and deterministic reproduction. New practice sessions do not write daily-completion records.
+- **Arcade:** Orbit Dash hover start/keyboard/graphics handling, Diep and Surviv active simulation pause and stuck-input clearance, Surviv rendering pause, Krunker physics/timer suspension. Original movement/collision/damage rules and game names preserved.
+- **Evidence:** [Full CI](https://github.com/sahilk267/toolboxgalaxy-rebuild1/actions/runs/42997527028) succeeded with **2,153 solver/timer assertions across 72 uniquely solvable generated fields**, existing tests and production build. [Games Chromium QA](https://github.com/sahilk267/toolboxgalaxy-rebuild1/actions/runs/42997527175) succeeded with **58 UI/route assertions** across Logic Lab, all 13 puzzle URLs and four arcade URLs. Other four CI/browser workflows succeeded on this implementation candidate. The latest HEAD must pass again after final timer/docs refinements.
+- **Details and limitations:** [docs/GAMES_UPGRADE_RELEASE.md](docs/GAMES_UPGRADE_RELEASE.md). Browser route smoke and solver checks do **not** amount to all-game controls or mobile graphics certification. Hostinger, manual testing and unrelated projects were excluded.
+
+
+## Next-best development batch — Ten existing tools (11 November 2026)
+
+- **Branch:** `feat/advanced-remaining-everyday-dev-tools` from the user's working `feat/browser-ai-background-remover` branch.
+- **Review PR:** [#20](https://github.com/sahilk267/toolboxgalaxy-rebuild1/pull/20), initially draft and **unmerged**. Do not modify `main` or Hostinger without a separate deliberate decision.
+- **Actual code changes:** Discount Calculator, Loan / EMI Estimate, Business Days Calculator, Time Zone Meeting Planner, Color Signal, Gradient Forge, Text Case Tool, Base64 Workbench, UUID Generator and Basic Calculator, all using original slugs and defaults.
+- **Implementation notes:** [docs/NEXT_PRIORITY_TOOLS_RELEASE.md](docs/NEXT_PRIORITY_TOOLS_RELEASE.md), including limits, nonofficial fixed-holiday examples, DST fold ambiguities, numeric-parser safety and manual QA.
+- **Regression:** `scripts/verify-next-priority-tools.ts` runs real production engines in `npm run check` and verifies 165 cases on the first successful CI candidate; Chromium E2E uses actual production build and real CSV/HTML/TXT downloads for all ten tool URLs.
+- **First evidence:** [successful CI](https://github.com/sahilk267/toolboxgalaxy-rebuild1/actions/runs/42928041033) and [successful Chromium](https://github.com/sahilk267/toolboxgalaxy-rebuild1/actions/runs/42927942087) (51 assertions). Reverify the final code/documentation PR head as those runs precede the final documentation commit.
+- **Games:** no gameplay change included; do not conflate a generic "improvements" roadmap item with a verified game defect.
+- **Unverified:** mobile iOS/Android, Safari/Firefox, production deployment and main-branch synchronization. Previously merged QR, Favicon, Password and JSON tool behavior remains regression-covered.
+
+
+## Combined advanced-tool implementation batch — Merged into feature branch (11 November 2026)
+
+**Source of truth:** [docs/CONSOLIDATED_ADVANCED_TOOLS_QA.md](docs/CONSOLIDATED_ADVANCED_TOOLS_QA.md). User requested the PRs merged into the existing `feat/browser-ai-background-remover` branch and opted to defer one combined manual/real-device QA pass. Merge into that branch is **not** proof that live hosting has deployed the changes.
+
+- PR [#17](https://github.com/sahilk267/toolboxgalaxy-rebuild1/pull/17): **merged** previously (advanced Percentage Calculator, Unit Converter and Text Statistics).
+- PR [#18](https://github.com/sahilk267/toolboxgalaxy-rebuild1/pull/18): **merged** at `d529e0ba4961` (Advanced QR Generator; QR contrast, payload validation, optional logo, PNG/SVG).
+- PR [#19](https://github.com/sahilk267/toolboxgalaxy-rebuild1/pull/19): **merged** after retargeting at `04957e1c49c5` (Favicon ICO/ZIP/manifest, secure bulk passwords and passphrases, strength auditor, JSON tree/query/compare/export).
+- Final pre-merge PR #19 [full CI](https://github.com/sahilk267/toolboxgalaxy-rebuild1/actions/runs/42878144207): **success**, including 126 core-engine, 80 QR-engine and 153 everyday-engine assertions, existing checks and production build.
+- Final pre-merge PR #19 [consolidated Chromium QA](https://github.com/sahilk267/toolboxgalaxy-rebuild1/actions/runs/42878144213): **success**, 40 Favicon/Password/JSON + 25 QR + 15 Percentage/Unit/Text browser assertions (80 total).
+- **Still pending:** Verify live hosting deployment state, one combined Android/iPhone/Safari/Firefox and real-file manual QA, security/hosting review and eventual `main` synchronization (separate draft PR #15). Do not claim production/mobile certification. `main` remained unchanged by PRs #17–#19.
+- Original tool slugs preserved; no game changes in this batch.
+
+## Candidate upgrade batch — Percentage, Units and Text Statistics (10 November 2026)
+
+**Branch:** `feat/advanced-percentage-units-text-stats` based on the user's deployed `feat/browser-ai-background-remover` branch. **Do not merge or deploy without CI and browser regression review.** Existing URLs and shared catalog tool identifiers are preserved.
+
+- Percentage Calculator retains its 18 / 120 = 15% default and adds percentage-of, increase/decrease, symmetric difference, reverse increase/discount and percentage-point modes, each with explicit formula and zero-denominator guards.
+- Unit Converter retains 1 kilometre to mile as its default and adds length, mass, temperatures, area, US customary volume/cooking, speed, pressure and explicitly separated decimal/binary data units. Uses fixed conversion constants and no network rates. Rejects incompatible units, negative physical quantities and below-absolute-zero temperatures.
+- Text Statistics preserves legacy word/character/line counters and adds sentences, paragraphs, unique words, reading/speaking time, top word frequencies, copy/export and 200,000-character input bounds. Unicode word/sentence boundaries follow Intl.Segmenter where available.
+- `scripts/verify-advanced-everyday.ts` exercises the actual pure engines and is wired to `npm run check`; `npm run verify:everyday` runs the focused suite.
+- **Verified automated evidence:** [CI run 42729443088](https://github.com/sahilk267/toolboxgalaxy-rebuild1/actions/runs/42729443088) passed locked npm install, TypeScript, existing suites, **153 new deterministic engine assertions**, and production build. [Chromium run 42729442403](https://github.com/sahilk267/toolboxgalaxy-rebuild1/actions/runs/42729442403) passed **15 real UI assertions**, including output conversion, reset, validation, word frequency and downloaded TXT report.
+- **Not certified:** Actual Safari/Firefox, iOS/Android device QA and extended accessibility/performance tests are still separate release gates. Neither smoke suite establishes universal browser/device support.
+
+
+## Candidate Tool #62 — AI Background Remover (10 November 2026)
+
+This is a **separate draft addition**, not part of the historical 61-tool browser-QA table below. PR [#15](https://github.com/sahilk267/toolboxgalaxy-rebuild1/pull/15) adds browser-local ORMBG background removal with pinned Apache-2.0 model/runtime, original-dimension PNG composition, and upload/memory limits. The core main CI has passed (e.g. [run 42714460236](https://github.com/sahilk267/toolboxgalaxy-rebuild1/actions/runs/42714460236)). A real Chrome/Chromium smoke passed [run 42715470051](https://github.com/sahilk267/toolboxgalaxy-rebuild1/actions/runs/42715470051), demonstrating local model execution, image-to-PNG workflow and full-resolution output. Further alpha-mask assertions, performance measurements, Safari/mobile QA and actual Hostinger production deployment remain required. **PR #15 is draft; tool is not universally certified or merged.** Details in `docs/AI_BACKGROUND_REMOVER_RELEASE.md`.
+
 ## Current verification standard — 8 November 2026
 
 **Scope:** improve and validate the existing **61 utility-tool registrations** and **18 game catalog entries** only. Work on SEO, marketing, analytics, hosting, or unrelated infrastructure is not part of this repair scope.

@@ -25,6 +25,7 @@ import type {
 } from "./types";
 import { DiepAudio } from "./audio";
 import { logicalCanvasSize } from "../canvasGeometry";
+import { arcadePressure, isOpeningProtected, meetsSpawnSeparation, targetDiepBots, type ArcadeDifficulty } from "../playability";
 
 export interface EngineCallbacks {
   onPlayerUpdate: (player: TankEntity) => void;
@@ -39,6 +40,11 @@ const BOT_NAMES = [
   "Shadow", "Vector", "Eclipse", "Rogue", "Blaze", "Vortex", "Cipher", "Hydra"
 ];
 
+// Diep's legacy movement and collision maths are calibrated in 60 Hz ticks.
+// Decouple them from display refresh rate without retuning damage or movement.
+const DIEP_FIXED_STEP_SECONDS = 1 / 60;
+const DIEP_MAX_STEPS_PER_FRAME = 4;
+
 export class DiepEngine {
   public canvas: HTMLCanvasElement;
   public ctx: CanvasRenderingContext2D;
@@ -48,6 +54,9 @@ export class DiepEngine {
   public isRunning = false;
   private animFrameId: number | null = null;
   private lastTime = 0;
+  private simulationAccumulator = 0;
+  public elapsedSeconds = 0;
+  public difficulty: ArcadeDifficulty = "normal";
 
   // Viewport / Camera
   public cameraX = ARENA_SIZE / 2;
@@ -99,16 +108,21 @@ export class DiepEngine {
     this.initPools();
 
     // Spawn Player
+    // The central pentagon nest contains aggressive crashers: beginners must
+    // never spawn inside it or directly on top of a high-level enemy.
+    const playerAngle = Math.random() * Math.PI * 2;
     this.player = this.createTank(
       "Player",
-      ARENA_SIZE / 2 + (Math.random() - 0.5) * 800,
-      ARENA_SIZE / 2 + (Math.random() - 0.5) * 800,
+      ARENA_SIZE / 2 + Math.cos(playerAngle) * (NEST_RADIUS + 660),
+      ARENA_SIZE / 2 + Math.sin(playerAngle) * (NEST_RADIUS + 660),
       false,
       COLORS.player
     );
+    this.cameraX = this.player.x;
+    this.cameraY = this.player.y;
 
-    // Spawn Initial Bots (8 active bots)
-    for (let i = 0; i < 8; i++) {
+    // Start with three low-level opponents, then ramp to eight over time.
+    for (let i = 0; i < 3; i++) {
       this.spawnBot();
     }
 
@@ -223,16 +237,31 @@ export class DiepEngine {
   }
 
   private spawnBot() {
+    // Killed bots must not accumulate in this long-lived array after respawn.
+    // Retain unique tank IDs, active drones and all living opponents unchanged.
+    if (this.bots.some((bot) => !bot.active)) {
+      this.bots = this.bots.filter((bot) => bot.active);
+    }
     const name = BOT_NAMES[Math.floor(Math.random() * BOT_NAMES.length)] + " [" + Math.floor(Math.random() * 90 + 10) + "]";
     const botColors = [COLORS.botEnemy, COLORS.botTeamGreen, COLORS.botTeamPurple, "#f18d4e"];
     const color = botColors[Math.floor(Math.random() * botColors.length)];
 
-    const x = Math.random() * (ARENA_SIZE - 200) + 100;
-    const y = Math.random() * (ARENA_SIZE - 200) + 100;
+    let x = 100, y = 100;
+    for (let attempt = 0; attempt < 80; attempt++) {
+      const candidate = {x:100+Math.random()*(ARENA_SIZE-200),y:100+Math.random()*(ARENA_SIZE-200)};
+      if (meetsSpawnSeparation(candidate,[this.player,...this.bots.filter(bot=>bot.active)],550)) {
+        x=candidate.x; y=candidate.y; break;
+      }
+    }
+    // In even the most crowded seeded arena, prefer a safe opposite-edge spawn.
+    if (!meetsSpawnSeparation({x,y},[this.player],550)) {
+      x=this.player.x<ARENA_SIZE/2?ARENA_SIZE-180:180;
+      y=this.player.y<ARENA_SIZE/2?ARENA_SIZE-180:180;
+    }
     const bot = this.createTank(name, x, y, true, color);
 
     // Initial random score for bots so arena has high and low tier enemies
-    const initialScore = Math.floor(Math.random() * 32000);
+    const initialScore = Math.floor(Math.random() * (450 + 22000 * arcadePressure(this.elapsedSeconds,this.difficulty).rampFraction));
     this.addScore(bot, initialScore, false);
 
     // Auto assign bot stats and evolution based on starting level
@@ -288,6 +317,8 @@ export class DiepEngine {
   }
 
   private spawnShapeSpecific(type: ShapeType, x: number, y: number) {
+    // No hostile or damaging shape can materialize directly on the player.
+    if (type !== "alpha-pentagon" && Math.hypot(x-this.player.x,y-this.player.y)<180) return;
     const slot = this.shapes.find((s) => !s.active);
     if (!slot) return;
 
@@ -573,15 +604,21 @@ export class DiepEngine {
   }
 
   // Main Simulation Loop
+  public setDifficulty(mode: ArcadeDifficulty) {
+    if (!this.isRunning && this.elapsedSeconds === 0) this.difficulty = mode;
+  }
+
   public start() {
-    if (this.isRunning) return;
+    if (this.isRunning || !this.player.active) return;
     this.isRunning = true;
     this.lastTime = performance.now();
+    this.simulationAccumulator = 0;
     this.loop();
   }
 
   public stop() {
     this.isRunning = false;
+    this.simulationAccumulator = 0;
     if (this.animFrameId !== null) {
       cancelAnimationFrame(this.animFrameId);
       this.animFrameId = null;
@@ -591,18 +628,36 @@ export class DiepEngine {
   private loop = () => {
     if (!this.isRunning) return;
     const now = performance.now();
-    const dt = Math.min(0.05, (now - this.lastTime) / 1000);
+    const elapsed = Math.max(0, Math.min(0.1, (now - this.lastTime) / 1000));
     this.lastTime = now;
 
-    this.update(dt);
-    this.render();
+    // A 30 Hz display advances two 60 Hz simulation ticks per rendered frame.
+    // Bound catch-up on very slow devices so a stalled tab never runs a burst
+    // of collision/damage ticks or locks the main thread after resuming.
+    this.simulationAccumulator = Math.min(
+      this.simulationAccumulator + elapsed,
+      DIEP_FIXED_STEP_SECONDS * DIEP_MAX_STEPS_PER_FRAME,
+    );
+    let steps = 0;
+    while (
+      this.simulationAccumulator + 1e-9 >= DIEP_FIXED_STEP_SECONDS &&
+      steps < DIEP_MAX_STEPS_PER_FRAME &&
+      this.isRunning &&
+      this.player.active
+    ) {
+      this.update(DIEP_FIXED_STEP_SECONDS);
+      this.simulationAccumulator = Math.max(0, this.simulationAccumulator - DIEP_FIXED_STEP_SECONDS);
+      steps++;
+    }
 
-    this.animFrameId = requestAnimationFrame(this.loop);
+    this.render();
+    if (this.isRunning) this.animFrameId = requestAnimationFrame(this.loop);
   };
 
   // PHYSICS & GAMEPLAY UPDATE
   private update(dt: number) {
     if (!this.player.active) return;
+    this.elapsedSeconds += dt;
 
     // 1. Process Player Input & Movement
     let moveX = 0;
@@ -663,6 +718,15 @@ export class DiepEngine {
 
     // 5. Collisions Resolution
     this.resolveCollisions();
+    if (!this.player.active) {
+      // No invisible physics or score changes after the final lethal hit.
+      this.stop();
+      return;
+    }
+    if (isOpeningProtected(this.elapsedSeconds,this.difficulty)) {
+      this.player.health=this.player.maxHealth;
+      this.player.damagedTimer=0;
+    }
 
     // 6. Update Particles
     for (const p of this.particles) {
@@ -679,7 +743,7 @@ export class DiepEngine {
     if (this.shapes.filter((s) => s.active).length < 240) {
       this.spawnRandomShape();
     }
-    if (this.bots.filter((b) => b.active).length < 8) {
+    if (this.bots.filter((b) => b.active).length < targetDiepBots(this.elapsedSeconds,this.difficulty)) {
       this.spawnBot();
     }
 
@@ -752,7 +816,9 @@ export class DiepEngine {
 
     // Find closest target (Player or Shapes)
     const distToPlayer = Math.hypot(this.player.x - bot.x, this.player.y - bot.y);
-    const seesPlayer = this.player.active && distToPlayer < 650;
+    const seesPlayer = this.player.active &&
+      !isOpeningProtected(this.elapsedSeconds,this.difficulty) &&
+      distToPlayer < (320 + 330 * arcadePressure(this.elapsedSeconds,this.difficulty).rampFraction);
 
     if (seesPlayer) {
       bot.aiState = bot.health < bot.maxHealth * 0.35 && this.player.level > bot.level ? "fleeing" : "attacking";
@@ -1098,6 +1164,10 @@ export class DiepEngine {
 
   // Handle Tank Destruction
   private eliminateTank(victim: TankEntity, killerId: number) {
+    if (victim.id === this.player.id && isOpeningProtected(this.elapsedSeconds,this.difficulty)) {
+      victim.health=victim.maxHealth;
+      return;
+    }
     // Overlapping shapes, drones and tanks may all hit within one physics pass.
     // Only the first lethal collision may award score, particles or a killfeed.
     if (!victim.active) return;
@@ -1426,6 +1496,16 @@ export class DiepEngine {
       ctx.fill();
       ctx.restore();
     }
+  }
+
+  public renderPreview() {
+    this.render();
+    this.callbacks.onPlayerUpdate(this.player);
+    this.updateLeaderboard();
+  }
+
+  public getOpeningProtectionRemaining() {
+    return arcadePressure(this.elapsedSeconds,this.difficulty).protectionRemaining;
   }
 
   // Cleanup on unmount

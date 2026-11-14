@@ -1,6 +1,6 @@
 /* Orbital Workbench / EXIF & GPS Metadata Remover & Privacy Relay */
 import { Download, FileOutput, ImageUp, RotateCcw, ShieldCheck, Sparkles, MapPin, Camera, Clock, ExternalLink, AlertTriangle, CheckCircle2 } from "lucide-react";
-import { type ChangeEvent, useEffect, useMemo, useState } from "react";
+import { type ChangeEvent, useEffect, useMemo, useRef, useState } from "react";
 import { trackPageView } from "@/lib/analytics";
 import { assertCanvasImageEncoding } from "@/lib/imageExportValidation";
 import { imageMetadataLimits, metadataDimensionError, metadataFileError, metadataFormatExtension, metadataFormatLabel, type MetadataImageFormat } from "@/lib/localImageMetadata";
@@ -44,6 +44,8 @@ export default function ImageMetadataTool() {
   const [error, setError] = useState("");
   const [working, setWorking] = useState(false);
   const [fileKey, setFileKey] = useState(0);
+  // Cancels stale asynchronous decode/EXIF/encode results on file change/reset.
+  const operationRevision = useRef(0);
 
   useEffect(() => () => { if (source) URL.revokeObjectURL(source.url); }, [source]);
   useEffect(() => () => { if (output) URL.revokeObjectURL(output.url); }, [output]);
@@ -61,41 +63,42 @@ export default function ImageMetadataTool() {
 
   const choose = async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
+    event.target.value = ""; // Re-selecting the same local image must work.
     if (!file) return;
-
+    const revision = ++operationRevision.current;
     const fileError = metadataFileError(file);
-    if (fileError) {
-      setError(fileError);
-      return;
-    }
+    if (fileError) { setWorking(false); setError(fileError); return; }
 
     setWorking(true);
     setError("");
     clearOutput();
     setExifData(null);
-
+    let next: SourceImage | null = null;
     try {
-      const [next, exif] = await Promise.all([
-        sourceFromFile(file),
-        parseExifFromBlob(file)
-      ]);
-      setSource((current) => {
-        if (current) URL.revokeObjectURL(current.url);
-        return next;
-      });
+      next = await sourceFromFile(file);
+      if (revision !== operationRevision.current) return;
+      // Metadata is optional; an unsupported EXIF block must not prevent
+      // safe browser-canvas re-export of an otherwise valid image.
+      const exif = await parseExifFromBlob(file).catch(() => null);
+      if (revision !== operationRevision.current) return;
+      setSource(next);
+      next = null; // Ownership transferred to React state/effect cleanup.
       setExifData(exif);
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "The image could not be opened.");
+      if (revision === operationRevision.current)
+        setError(reason instanceof Error ? reason.message : "The image could not be opened.");
     } finally {
-      setWorking(false);
+      if (next) URL.revokeObjectURL(next.url);
+      if (revision === operationRevision.current) setWorking(false);
     }
   };
 
   const clean = async () => {
-    if (!source) return;
+    if (!source || working) return;
+    const revision = ++operationRevision.current;
     setWorking(true);
     setError("");
-
+    let canvas: HTMLCanvasElement | null = null;
     try {
       const image = new Image();
       await new Promise<void>((resolve, reject) => {
@@ -103,8 +106,9 @@ export default function ImageMetadataTool() {
         image.onerror = () => reject(new Error("The selected image could not be processed."));
         image.src = source.url;
       });
+      if (revision !== operationRevision.current) return;
 
-      const canvas = document.createElement("canvas");
+      canvas = document.createElement("canvas");
       canvas.width = source.width;
       canvas.height = source.height;
       const context = canvas.getContext("2d");
@@ -114,35 +118,34 @@ export default function ImageMetadataTool() {
         context.fillStyle = "#ffffff";
         context.fillRect(0, 0, canvas.width, canvas.height);
       }
-
       context.drawImage(image, 0, 0, source.width, source.height);
 
       const blob = await new Promise<Blob>((resolve, reject) =>
-        canvas.toBlob(
-          (value) => (value ? resolve(value) : reject(new Error("The browser could not create this clean image."))),
-          source.format,
-          source.format === "image/png" ? undefined : 0.92
-        )
+        canvas!.toBlob(value =>
+          value ? resolve(value) : reject(new Error("The browser could not create this clean image.")),
+          source.format, source.format === "image/png" ? undefined : 0.92),
       );
-
+      if (revision !== operationRevision.current) return;
       assertCanvasImageEncoding(blob, source.format);
       const url = URL.createObjectURL(blob);
-      setOutput((current) => {
-        if (current) URL.revokeObjectURL(current.url);
-        return { blob, url, width: source.width, height: source.height, format: source.format };
-      });
+      setOutput({ blob, url, width: source.width, height: source.height, format: source.format });
       trackPageView(undefined, undefined, "image-metadata-cleaned", {
-        format: source.format,
-        tool_slug: "image-metadata",
+        format: source.format, tool_slug: "image-metadata",
       });
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "The clean re-export could not be created.");
+      if (revision === operationRevision.current)
+        setError(reason instanceof Error ? reason.message : "The clean re-export could not be created.");
     } finally {
-      setWorking(false);
+      if (canvas) {
+        canvas.width = 0;
+        canvas.height = 0;
+      }
+      if (revision === operationRevision.current) setWorking(false);
     }
   };
 
   const reset = () => {
+    operationRevision.current++;
     clearOutput();
     setSource((current) => {
       if (current) URL.revokeObjectURL(current.url);

@@ -26,14 +26,30 @@ export class SignalSwitchWorld {
       return 0;
     }
   })();
-  private status: "ready" | "playing" | "over" = "ready"; private active: RelayDirection = "up"; private timer = 2.4; private demoClock = 0; private turn = 0;
+  private status: "ready" | "playing" | "over" = "ready"; private active: RelayDirection = "up"; private timer = 5.2; private timerUiClock = 0; private demoClock = 0; private turn = 0;
   private readonly onKeyDown: (event: KeyboardEvent) => void;
   private readonly onPointer: (event: PointerEvent) => void;
 
   constructor(private readonly scene: Scene, private readonly canvas: HTMLCanvasElement, private readonly callbacks: SignalSwitchCallbacks) {
     this.demo = new URLSearchParams(window.location.search).has("demo");
     this.createBoard(); this.createPads(); this.configurePacket(); this.setActive("up");
-    this.onKeyDown = (event) => { const key = event.key.toLowerCase(); const keys: Record<string, RelayDirection> = { arrowup: "up", w: "up", arrowright: "right", d: "right", arrowdown: "down", s: "down", arrowleft: "left", a: "left" }; if (keys[key]) { event.preventDefault(); this.select(keys[key]); } if (event.key === " " || key === "r") { event.preventDefault(); if (this.status !== "playing") this.reset(); } };
+    this.onKeyDown = (event) => {
+      if (document.hidden || event.ctrlKey || event.metaKey || event.altKey) return;
+      const target = event.target;
+      if (target instanceof HTMLElement &&
+          (target.isContentEditable || ["INPUT", "TEXTAREA", "SELECT", "BUTTON"].includes(target.tagName))) return;
+      if (document.querySelector('[data-slot="dialog-content"]')) return;
+      const key = event.key.toLowerCase();
+      const keys: Record<string, RelayDirection> = {
+        arrowup: "up", w: "up", arrowright: "right", d: "right",
+        arrowdown: "down", s: "down", arrowleft: "left", a: "left",
+      };
+      if (keys[key]) { event.preventDefault(); this.select(keys[key]); }
+      if (event.key === " " || key === "r") {
+        event.preventDefault();
+        if (this.status !== "playing") this.reset();
+      }
+    };
     this.onPointer = (event) => { const rect = this.canvas.getBoundingClientRect(); const x = (event.clientX - rect.left) / rect.width; const y = (event.clientY - rect.top) / rect.height; const direction: RelayDirection = y < .31 ? "up" : y > .69 ? "down" : x < .36 ? "left" : "right"; this.select(direction); };
     window.addEventListener("keydown", this.onKeyDown, { passive: false }); this.canvas.addEventListener("pointerdown", this.onPointer);
     this.callbacks.onScore(this.score, this.best); this.callbacks.onTimer(this.timer); this.callbacks.onStatus(this.status); if (this.demo) this.start();
@@ -54,9 +70,22 @@ export class SignalSwitchWorld {
   private configurePacket() { const material = new StandardMaterial("packet-material", this.scene); material.diffuseColor = new Color3(1, .54, .22); material.emissiveColor = new Color3(.46, .12, .025); material.specularColor = Color3.Black(); this.packet.material = material; this.packet.position.z = .62; }
   private setActive(direction: RelayDirection) { this.active = direction; this.pads.forEach((pad) => { const chosen = pad.direction === direction; pad.material.diffuseColor = chosen ? new Color3(.66, .9, .20) : new Color3(.09, .16, .24); pad.material.emissiveColor = chosen ? new Color3(.17, .34, .04) : new Color3(.008, .02, .035); pad.root.scaling = chosen ? new Vector3(1.08, 1.08, 1.08) : Vector3.One(); }); this.packet.position = positions[direction].add(new Vector3(0, 0, .55)); }
   private start() { this.status = "playing"; this.callbacks.onStatus(this.status); this.callbacks.onSound("start"); this.nextRelay(); }
-  private nextRelay() { this.active = this.demo ? directions[(this.turn * 3 + 1) % directions.length] : directions[Math.floor(Math.random() * directions.length)]; this.turn += 1; this.timer = Math.max(.82, 2.4 - this.score * .05); this.setActive(this.active); this.callbacks.onTimer(this.timer); }
+  private nextRelay() {
+    this.active = this.demo ? directions[(this.turn * 3 + 1) % directions.length] : directions[Math.floor(Math.random() * directions.length)];
+    this.turn += 1;
+    // First relay provides a full orientation window; precision pressure grows
+    // gently only after success, with a playable lower bound for touch users.
+    this.timer = Math.max(1.5, 5.2 - this.score * 0.09);
+    this.timerUiClock = 0;
+    this.setActive(this.active);
+    this.callbacks.onTimer(this.timer);
+  }
   private select(direction: RelayDirection) {
-    if (this.status === "ready") this.start();
+    if (this.status === "ready") {
+      // First pointer/key gesture is a start action, not a hidden wrong guess.
+      this.start();
+      return;
+    }
     if (this.status !== "playing") return;
     if (direction === this.active) {
       this.score += 1;
@@ -72,7 +101,23 @@ export class SignalSwitchWorld {
     } else this.endRun();
   }
   private endRun() { this.status = "over"; this.callbacks.onStatus(this.status); this.callbacks.onSound("relayFail"); }
-  reset() { this.score = 0; this.turn = 0; this.demoClock = 0; this.callbacks.onScore(this.score, this.best); this.start(); }
-  update(delta: number) { this.packet.rotation.z += delta * 2.7; if (this.status !== "playing") return; if (this.demo) { this.demoClock += delta; if (this.demoClock > .52) { this.demoClock = 0; this.select(this.active); } return; } this.timer -= delta; this.callbacks.onTimer(Math.max(0, this.timer)); if (this.timer <= 0) this.endRun(); }
+  reset() { this.score = 0; this.turn = 0; this.demoClock = 0; this.timerUiClock = 0; this.callbacks.onScore(this.score, this.best); this.start(); }
+  update(delta: number) {
+    this.packet.rotation.z += delta * 2.7;
+    if (this.status !== "playing") return;
+    if (this.demo) {
+      this.demoClock += delta;
+      if (this.demoClock > .52) { this.demoClock = 0; this.select(this.active); }
+      return;
+    }
+    this.timer -= delta;
+    this.timerUiClock += delta;
+    // Avoid forcing a React render on every WebGL frame.
+    if (this.timerUiClock >= 0.1 || this.timer <= 0) {
+      this.timerUiClock = 0;
+      this.callbacks.onTimer(Math.max(0, this.timer));
+    }
+    if (this.timer <= 0) this.endRun();
+  }
   dispose() { window.removeEventListener("keydown", this.onKeyDown); this.canvas.removeEventListener("pointerdown", this.onPointer); this.packet.dispose(); this.pads.forEach((pad) => pad.root.dispose()); }
 }

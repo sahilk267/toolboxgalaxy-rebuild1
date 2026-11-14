@@ -4,7 +4,7 @@ on:
   push:
     branches: [ main ]
   pull_request:
-    branches: [ main ]
+    branches: [ main, feat/browser-ai-background-remover, feat/advanced-qr-generator ]
 
 jobs:
   verify:

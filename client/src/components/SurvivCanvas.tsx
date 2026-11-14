@@ -99,6 +99,21 @@ export default function SurvivCanvas({ callbacks, engineRef, audio }: SurvivCanv
       touchState.current.moveTouchId = null;
       touchState.current.aimTouchId = null;
     };
+    // Preserve the user's actual match state across browser tab switches.
+    // Starting an already-ended match is still rejected by the core engine.
+    let resumeAfterHidden = false;
+    const onVisibility = () => {
+      if (document.hidden) {
+        resumeAfterHidden = engine.running;
+        resetInputOnBlur();
+        engine.stop();
+      } else if (resumeAfterHidden) {
+        resumeAfterHidden = false;
+        engine.start();
+      }
+    };
+    document.addEventListener("visibilitychange", onVisibility);
+    if (document.hidden) onVisibility();
     window.addEventListener("blur", resetInputOnBlur);
     canvas.addEventListener("blur", resetInputOnBlur);
     window.addEventListener("keydown", handleKeyDown);
@@ -222,8 +237,9 @@ export default function SurvivCanvas({ callbacks, engineRef, audio }: SurvivCanv
     canvas.addEventListener("touchcancel", handleTouchEnd, { passive: false });
 
     // Render loop
-    let animId: number;
+    let animId: number | null = null;
     const render = () => {
+      if (document.hidden) { animId = null; return; }
       const p = engine.player;
       const scopeZoom = [1.0, 1.0, 0.85, 0.68, 0.52][p.scopeTier] || 1.0;
 
@@ -299,12 +315,23 @@ export default function SurvivCanvas({ callbacks, engineRef, audio }: SurvivCanv
       animId = requestAnimationFrame(render);
     };
 
-    animId = requestAnimationFrame(render);
+    const onRenderVisibility = () => {
+      if (document.hidden) {
+        if (animId !== null) cancelAnimationFrame(animId);
+        animId = null;
+      } else if (animId === null) {
+        animId = requestAnimationFrame(render);
+      }
+    };
+    document.addEventListener("visibilitychange", onRenderVisibility);
+    if (!document.hidden) animId = requestAnimationFrame(render);
 
     return () => {
-      cancelAnimationFrame(animId);
+      if (animId !== null) cancelAnimationFrame(animId);
+      document.removeEventListener("visibilitychange", onRenderVisibility);
       window.removeEventListener("resize", handleResize);
       resizeObserver.disconnect();
+      document.removeEventListener("visibilitychange", onVisibility);
       window.removeEventListener("blur", resetInputOnBlur);
       canvas.removeEventListener("blur", resetInputOnBlur);
       window.removeEventListener("keydown", handleKeyDown);
@@ -326,6 +353,7 @@ export default function SurvivCanvas({ callbacks, engineRef, audio }: SurvivCanv
       ref={canvasRef}
       className="absolute inset-0 w-full h-full cursor-crosshair touch-none select-none block"
       tabIndex={0}
+      aria-label="Surviv Arena Canvas"
     />
   );
 }

@@ -32,56 +32,44 @@ export async function extractPdfText(bytes: Uint8Array): Promise<{
 }> {
   const loadingTask = pdfjsLib.getDocument({ data: bytes.slice() });
   const pdf = await loadingTask.promise;
-  const numPages = pdf.numPages;
-  const pages: ExtractedPageText[] = [];
-  let fullText = "";
-  let totalWords = 0;
-
-  for (let i = 1; i <= numPages; i++) {
-    const page = await pdf.getPage(i);
-    const textContent = await page.getTextContent();
-    const items = textContent.items as any[];
-
-    // Sort items by vertical position (top to bottom) then horizontal (left to right)
-    items.sort((a, b) => {
-      const yA = a.transform[5];
-      const yB = b.transform[5];
-      if (Math.abs(yA - yB) > 4) {
-        return yB - yA; // top to bottom
-      }
-      return a.transform[4] - b.transform[4]; // left to right
-    });
-
-    let pageText = "";
-    let lastY: number | null = null;
-
-    for (const item of items) {
-      if (typeof item.str !== "string") continue;
-      const currentY = item.transform[5];
-
-      if (lastY !== null && Math.abs(currentY - lastY) > 6) {
-        pageText += "\n";
-      } else if (lastY !== null && !pageText.endsWith(" ") && !item.str.startsWith(" ")) {
-        pageText += " ";
-      }
-
-      pageText += item.str;
-      lastY = currentY;
+  try {
+    const pages: ExtractedPageText[] = [];
+    const sections: string[] = [];
+    let totalWords = 0;
+    for (let i = 1; i <= pdf.numPages; i++) {
+      const page = await pdf.getPage(i);
+      try {
+        const textContent = await page.getTextContent();
+        const items = textContent.items.filter(item =>
+          "str" in item && "transform" in item) as Array<{ str: string; transform: number[] }>;
+        items.sort((a, b) => {
+          const yA = a.transform[5], yB = b.transform[5];
+          return Math.abs(yA - yB) > 4 ? yB - yA : a.transform[4] - b.transform[4];
+        });
+        const fragments: string[] = [];
+        let lastY: number | null = null;
+        let endsInSpace = false;
+        for (const item of items) {
+          const y = item.transform[5];
+          if (lastY !== null && Math.abs(y - lastY) > 6) {
+            fragments.push("\n");
+            endsInSpace = false;
+          } else if (lastY !== null && !endsInSpace && !item.str.startsWith(" ")) {
+            fragments.push(" ");
+          }
+          fragments.push(item.str);
+          endsInSpace = item.str.endsWith(" ");
+          lastY = y;
+        }
+        const pageText = fragments.join("").trim();
+        const wordCount = pageText ? pageText.split(/\s+/).length : 0;
+        totalWords += wordCount;
+        pages.push({ pageNumber: i, text: pageText, wordCount });
+        sections.push(`--- PAGE ${i} ---\n\n${pageText}\n\n`);
+      } finally { page.cleanup(); }
     }
-
-    const words = pageText.trim() ? pageText.trim().split(/\s+/).length : 0;
-    totalWords += words;
-
-    pages.push({
-      pageNumber: i,
-      text: pageText.trim(),
-      wordCount: words,
-    });
-
-    fullText += `--- PAGE ${i} ---\n\n${pageText.trim()}\n\n`;
-  }
-
-  return { fullText: fullText.trim(), pages, totalWords };
+    return { fullText: sections.join("").trim(), pages, totalWords };
+  } finally { await pdf.destroy(); }
 }
 
 /**
@@ -90,47 +78,33 @@ export async function extractPdfText(bytes: Uint8Array): Promise<{
 export async function extractPdfTables(bytes: Uint8Array): Promise<TableExtractionResult[]> {
   const loadingTask = pdfjsLib.getDocument({ data: bytes.slice() });
   const pdf = await loadingTask.promise;
-  const results: TableExtractionResult[] = [];
-
-  for (let i = 1; i <= pdf.numPages; i++) {
-    const page = await pdf.getPage(i);
-    const textContent = await page.getTextContent();
-    const items = textContent.items as any[];
-
-    if (items.length === 0) continue;
-
-    // Group text items by row threshold (~8px delta in vertical Y)
-    const rowsMap: { y: number; items: any[] }[] = [];
-
-    for (const item of items) {
-      if (!item.str || item.str.trim() === "") continue;
-      const y = item.transform[5];
-      let row = rowsMap.find((r) => Math.abs(r.y - y) <= 6);
-      if (!row) {
-        row = { y, items: [] };
-        rowsMap.push(row);
-      }
-      row.items.push(item);
+  try {
+    const results: TableExtractionResult[] = [];
+    for (let i = 1; i <= pdf.numPages; i++) {
+      const page = await pdf.getPage(i);
+      try {
+        const textContent = await page.getTextContent();
+        const items = textContent.items.filter(item =>
+          "str" in item && "transform" in item &&
+          item.str.trim() !== "") as Array<{ str: string; transform: number[] }>;
+        if (!items.length) continue;
+        items.sort((a, b) => b.transform[5] - a.transform[5]);
+        const grouped: Array<{ y: number; items: typeof items }> = [];
+        for (const item of items) {
+          const y = item.transform[5];
+          const row = grouped[grouped.length - 1];
+          if (row && Math.abs(row.y - y) <= 6) row.items.push(item);
+          else grouped.push({ y, items: [item] });
+        }
+        const rows = grouped.map(row => {
+          row.items.sort((a, b) => a.transform[4] - b.transform[4]);
+          return row.items.map(item => item.str.trim());
+        });
+        if (rows.length) results.push({ pageNumber: i, rows });
+      } finally { page.cleanup(); }
     }
-
-    // Sort rows top-to-bottom
-    rowsMap.sort((a, b) => b.y - a.y);
-
-    // Form 2D array: sort items within row by X coordinate
-    const tableRows: string[][] = rowsMap.map((r) => {
-      r.items.sort((a, b) => a.transform[4] - b.transform[4]);
-      return r.items.map((it) => String(it.str).trim());
-    });
-
-    if (tableRows.length > 0) {
-      results.push({
-        pageNumber: i,
-        rows: tableRows,
-      });
-    }
-  }
-
-  return results;
+    return results;
+  } finally { await pdf.destroy(); }
 }
 
 /**

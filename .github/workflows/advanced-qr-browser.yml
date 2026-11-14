@@ -1,0 +1,42 @@
+name: Advanced QR Browser QA
+on:
+  pull_request:
+    branches: [feat/browser-ai-background-remover]
+    paths:
+      - .github/workflows/advanced-qr-browser.yml
+      - client/src/components/AdvancedQrTool.tsx
+      - client/src/lib/qrPayloads.ts
+      - client/src/pages/ToolWorkspace.tsx
+      - scripts/verify-advanced-qr.ts
+      - scripts/verify-advanced-qr-browser.mjs
+      - package.json
+jobs:
+  chromium:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Locked install
+        run: npm ci
+      - name: Production bundle
+        run: npm run build
+      - name: Install browser test tooling
+        run: |
+          npm install --no-save --package-lock=false --ignore-scripts --no-audit --no-fund playwright@1.65.0
+          npx --no-install playwright install chromium
+      - name: Real Chromium QR export test
+        run: |
+          nohup npm run start > /tmp/tbg-advanced-qr.log 2>&1 &
+          for attempt in $(seq 1 60); do
+            if curl -fsS http://127.0.0.1:3000/api/health > /dev/null; then break; fi
+            sleep 1
+          done
+          curl -fsS http://127.0.0.1:3000/api/health
+          node scripts/verify-advanced-qr-browser.mjs
+      - name: Server logs on failure
+        if: failure()
+        run: tail -n 80 /tmp/tbg-advanced-qr.log || true
