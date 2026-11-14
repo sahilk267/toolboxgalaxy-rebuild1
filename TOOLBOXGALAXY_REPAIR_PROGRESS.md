@@ -1,5 +1,15 @@
 # ToolboxGalaxy Repair & Verification Progress Ledger
 
+## Native PDF text engine expansion — 14 November 2026
+
+- Added **single-element `TJ` array** handling alongside literal and hex-encoded `Tj`. Numeric kerning arrays, escaped literal operands, complex encodings and mixed font runs remain intentionally unsupported.
+- Added **multiple independently positioned text objects** in one page stream (maximum 20). Each must contain exactly one text operation and an explicit identity-geometry `Tm`; selected text must match uniquely. Other text objects are preserved verbatim.
+- Fixed PDF name normalization for `/FlateDecode`, `/Type1`, `/WinAnsiEncoding` and base font resource names so leading-slash PDF names don't trigger mistaken rejection.
+- Replaced the prior one-run-only text verification with **full-page PDF.js text comparison**: extracted content before/after must differ only by the requested replacement. Any collateral extracted-text change aborts the operation without updating the editor's original bytes.
+- Restricted signed/permission-constrained PDFs in this mode; kept independent UI action, no silent whiteout fallback, standard Type1 font/width constraints, stream size budget and browser-local processing.
+- **Scope:** Still a narrow implementation candidate for standard-encoding PDF content streams, not arbitrary embedded font/Unicode/paragraph editing. **No typecheck, real-PDF runtime testing, browser QA, merge or deployment** performed.
+
+
 ## Native page-text editing prototype — 13 November 2026
 
 - **Implementation:** added `client/src/lib/pdfNativeTextEditing.ts` with an independent PDF content-stream text replacement path. It rewrites the literal `Tj` operand instead of drawing a background rectangle, and removes the obsolete indirect stream object when safe.
