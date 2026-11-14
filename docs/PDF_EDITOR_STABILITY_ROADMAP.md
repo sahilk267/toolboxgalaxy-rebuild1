@@ -1,5 +1,13 @@
 # PDF Editor — Stability-First Repair Plan
 
+## Zero-kerning TJ and reference safety — 14 November 2026
+
+- Added a restricted parser for multi-segment `TJ` operands with printable literal/hex text chunks and **zero-only** numeric spacing entries. Nonzero numeric kerning, escaped literals, custom fonts and arbitrary operators still fail closed. Replacements reduce accepted zero-kerning arrays to one equivalent text segment without changing target position or font.
+- Native stream replacement now checks all reachable PDF dictionaries/arrays/streams for references to the old stream across *all indirect objects*, with a capped traversal budget. The original registered stream is deleted only when it is unreferenced by any other object.
+- This does not make editing arbitrary embedded-font PDFs safe: custom character encodings, subset glyph IDs, per-glyph ToUnicode tables, RTL shaping and layout reflow still require a dedicated glyph-aware engine.
+- Verification remains pending, including TypeScript compile, synthetic fixtures, real PDF open/edit/save/reopen, font appearance and coordinates, whole-page text equality, memory/cancellation, encrypted/signed documents and browser UX. No deployment.
+
+
 ## Native text engine expansion — 14 November 2026
 
 Implementation updates in `client/src/lib/pdfNativeTextEditing.ts`:
