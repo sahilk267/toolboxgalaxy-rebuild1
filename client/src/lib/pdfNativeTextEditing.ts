@@ -5,6 +5,7 @@ import {
   PDFName,
   PDFRawStream,
   PDFRef,
+  PDFStream,
   StandardFonts,
 } from "pdf-lib";
 import * as pdfjsLib from "pdfjs-dist";
@@ -46,13 +47,47 @@ const MOVE = new RegExp(`^${DECIMAL}\\s+${DECIMAL}\\s+Td$`);
 const FONT = /^\/([A-Za-z0-9_.-]+)\s+(\d+(?:\.\d+)?)\s+Tf$/;
 const SHOW = /^\(([A-Za-z0-9 .,!?'\/-]+)\)\s+Tj$/;
 const HEX_SHOW = /^<([0-9a-fA-F]+)>\s+Tj$/;
-const ARRAY_SHOW = /^\[\s*(\([A-Za-z0-9 .,!?'\/-]+\)|<[0-9a-fA-F]+>)\s*\]\s+TJ$/;
+const ARRAY_SHOW = /^(\[[^\[\]\\\r\n]*\])\s+TJ$/;
 const pdfName = (name: PDFName): string => name.asString().replace(/^\//, "");
 const encodeHex = (value: string): string =>
   Array.from(value).map((character) => character.charCodeAt(0).toString(16).padStart(2, "0")).join("").toUpperCase();
 const decodeHex = (value: string): string =>
   value.match(/.{2}/g)?.map((byte) => String.fromCharCode(parseInt(byte, 16))).join("") ?? "";
 const ONE_NUMBER = new RegExp(`^${DECIMAL}\\s+(?:TL|g|G)$`);
+const ZERO_ADJUSTMENT = /^[+-]?(?:0+(?:\.0*)?|\.0+)$/;
+
+/** Segmented TJ arrays are safe to combine only when spacing adjustments are zero. */
+function parseZeroKerningTj(operand: string): string {
+  if (!operand.startsWith("[") || !operand.endsWith("]")) {
+    unsupported("Invalid text array.");
+  }
+  const body = operand.slice(1, -1);
+  const tokenPattern = /\([A-Za-z0-9 .,!?'\/-]+\)|<[0-9a-fA-F]+>|[+-]?(?:\d+(?:\.\d+)?|\.\d+)/g;
+  let end = 0;
+  let text = "";
+  let segments = 0;
+  for (const match of body.matchAll(tokenPattern)) {
+    if (body.slice(end, match.index).trim()) unsupported("Unsupported TJ array token or PDF escape.");
+    const token = match[0];
+    if (token.startsWith("(")) {
+      text += token.slice(1, -1);
+      segments++;
+    } else if (token.startsWith("<")) {
+      const hex = token.slice(1, -1);
+      if (hex.length % 2) unsupported("Invalid odd-length hex glyph sequence.");
+      text += decodeHex(hex);
+      segments++;
+    } else if (!ZERO_ADJUSTMENT.test(token)) {
+      unsupported("Nonzero TJ kerning adjustments are unsupported.");
+    }
+    end = match.index + token.length;
+  }
+  if (body.slice(end).trim() || segments === 0 || segments > 32 || text.length > 2000) {
+    unsupported("Invalid or oversized TJ array.");
+  }
+  return text;
+}
+
 const ASCII = /^[\x20-\x7e]+$/;
 const MAX_STREAM = 128 * 1024;
 const MAX_DOCUMENT = 12 * 1024 * 1024;
@@ -163,17 +198,18 @@ function inspectSimpleStream(streamBytes: Uint8Array, expectedText: string): Sim
       const literal = op.match(SHOW);
       const hex = op.match(HEX_SHOW);
       const array = op.match(ARRAY_SHOW);
-      const wrapped = array?.[1];
-      const hexValue = hex?.[1] ?? (wrapped?.startsWith("<") ? wrapped.slice(1, -1) : undefined);
+      const arrayOperand = array?.[1];
+      const hexValue = hex?.[1];
       if (hexValue && hexValue.length % 2 !== 0) unsupported("Odd-length hexadecimal text operand.");
       const text = literal?.[1] ??
-        (hexValue !== undefined ? decodeHex(hexValue) : wrapped?.slice(1, -1) ?? "");
+        (hexValue !== undefined ? decodeHex(hexValue) :
+          arrayOperand !== undefined ? parseZeroKerningTj(arrayOperand) : "");
       if (text === expectedText) {
         selectedCount++;
         selected = {
           original,
           encodedText: text,
-          operand: array ? `[${wrapped}]` :
+          operand: arrayOperand ??
             (literal ? `(${literal[1]})` : `<${hexValue}>`),
           textOperator: array ? "TJ" : "Tj",
           fontResource: currentResource,
@@ -297,7 +333,8 @@ export async function replaceSimpleNativePdfText(
   const expectedAfter = extractedBefore.slice(0, at) +
     replacementText + extractedBefore.slice(at + expectedText.length);
   const sourceLine = parsed.operand;
-  const hexEncoded = sourceLine.startsWith("<") || sourceLine.startsWith("[<");
+  const hexEncoded = sourceLine.startsWith("<") ||
+    (sourceLine.startsWith("[") && sourceLine.includes("<"));
   const inner = hexEncoded ? `<${encodeHex(replacementText)}>` : `(${replacementText})`;
   const newOperand = parsed.textOperator === "TJ" ? `[${inner}]` : inner;
   // Select an entire Tj instruction, never a matching string in unrelated
