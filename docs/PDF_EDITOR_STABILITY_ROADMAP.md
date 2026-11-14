@@ -1,5 +1,17 @@
 # PDF Editor — Stability-First Repair Plan
 
+## Native text engine expansion — 14 November 2026
+
+Implementation updates in `client/src/lib/pdfNativeTextEditing.ts`:
+- Parse one unambiguous selected text run among at most 20 **independently positioned** `BT ... Tm ... Tj/TJ ... ET` objects in a single page stream, preserving all unrelated operators.
+- Support literal string `(text) Tj`, printable hex `<HEX> Tj` and a **single-element** array `[(text)] TJ`/`[<HEX>] TJ`; reject kerning-number arrays and multi-element arrays.
+- Normalize PDFName values rather than confusing slash-prefixed names with raw identifiers.
+- Compare the *entire* extracted page text before/after replacement; reject if unrelated extracted content changes or source text occurs ambiguously.
+- Keep original font resource and position. Reject any replacement exceeding original font-measured width. Multiple text objects need absolute identity-geometry `Tm`, and signed/permission-controlled PDFs are unsupported.
+
+**Still pending:** TypeScript/build and PDF fixture execution, real visual baseline comparison, font subset mappings, Unicode support, PDF text operator tokenizer supporting escaped literals and `TJ` kerning, multiple content streams, general transformation matrices, and paragraph reflow. No user-facing claims of general native editing or deployment readiness.
+
+
 ## Prototype checkpoint — Native single-run editing (13 November 2026)
 
 The first native editing path is in `client/src/lib/pdfNativeTextEditing.ts`. It uses pdf-lib's low-level page content stream objects and PDF.js before/after text extraction, not whiteout masking.
