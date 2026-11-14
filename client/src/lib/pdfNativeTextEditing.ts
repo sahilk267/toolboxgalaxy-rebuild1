@@ -217,6 +217,9 @@ export async function replaceSimpleNativePdfText(
   const doc = await PDFDocument.load(input.slice());
   if (pageIndex >= doc.getPageCount()) unsupported("Page no longer exists.");
   if (doc.getForm().getFields().length) unsupported("PDFs containing interactive form fields are not supported in this mode.");
+  if (doc.catalog.get(PDFName.of("Perms"))) {
+    unsupported("PDFs with document permissions/signature restrictions are not supported.");
+  }
   const page = doc.getPage(pageIndex);
   if (page.getRotation().angle !== 0) unsupported("Rotated pages are not supported.");
   const crop = page.getCropBox();
@@ -279,14 +282,17 @@ export async function replaceSimpleNativePdfText(
   }
 
   const extractedBefore = await readPageText(input, pageIndex);
-  if (extractedBefore !== expectedText) {
-    unsupported("PDF.js text extraction does not match the selected source run exactly.");
+  const at = extractedBefore.indexOf(expectedText);
+  if (at < 0 || extractedBefore.indexOf(expectedText, at + expectedText.length) !== -1) {
+    unsupported("PDF.js cannot identify the original text uniquely on this page.");
   }
+  const expectedAfter = extractedBefore.slice(0, at) +
+    replacementText + extractedBefore.slice(at + expectedText.length);
   const sourceLine = parsed.operand;
   const newOperand = sourceLine.startsWith("<") ?
     `<${encodeHex(replacementText)}>` : `(${replacementText})`;
-  // Select an entire Tj instruction, never the same string in comments or
-  // unrelated resource content. The parser only accepts one source Tj.
+  // Select an entire Tj instruction, never a matching string in unrelated
+  // resource content. The parser only accepts one matching source Tj.
   const escaped = sourceLine.replace(/[.*+?^\u0024{}()|[\]\\]/g, "\\$&");
   const instruction = new RegExp(`(^|\\r?\\n)([ \\t]*)${escaped}([ \\t]+Tj)(?=\\r?\\n|$)`, "g");
   const matches = Array.from(parsed.original.matchAll(instruction));
@@ -313,8 +319,8 @@ export async function replaceSimpleNativePdfText(
   if (originalRef) doc.context.delete(originalRef);
   const saved = await doc.save();
   const verified = await readPageText(saved, pageIndex);
-  if (verified !== replacementText) {
-    throw new Error("Native text verification failed; the original PDF was not modified.");
+  if (verified !== expectedAfter) {
+    throw new Error("Native text verification failed or unrelated page text changed; the original PDF was preserved.");
   }
   return { bytes: saved, originalText: expectedText, replacementText, pageIndex, fontName, fontSize: parsed.fontSize };
 }
