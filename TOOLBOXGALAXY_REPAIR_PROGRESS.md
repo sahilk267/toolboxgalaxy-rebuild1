@@ -1,5 +1,14 @@
 # ToolboxGalaxy Repair & Verification Progress Ledger
 
+## Embedded PDF font mapping foundations — 14 November 2026
+
+- Implemented `client/src/lib/pdfGlyphMapping.ts`: a browser-local, **read-only** PDF font-resource inspector for the active PDF page. It identifies resource name, base PostScript name, subtype, encoding, subset prefix, embedded font-file presence and ToUnicode availability.
+- Added a bounded ToUnicode CMap diagnostic parser for explicit `bfchar` pairs and conservative `bfrange` scalar/array maps, decoding Unicode destinations as UTF-16BE. Unknown mappings, malformed blocks, conflicting codes, unsupported filters and oversized files fail closed; glyph counts are **diagnostic only**.
+- Added async font-inspection UI to PDF Editor's native text mode, displaying resource characteristics and why a glyph-aware engine would be required. Stale async results are ignored when switching page, document or mode.
+- **Security/fidelity boundary:** `ToUnicode` maps PDF codes to extracted Unicode. It does not establish writable glyph codes, embedded outlines, widths, kerning or shaping. No reverse encoding or replacement of embedded/subset fonts was enabled. Existing standard Type1 safe subset remains unchanged.
+- **No build/typecheck, manual browser QA, real-PDF corpus testing or deployment** was performed in this batch. Changes were committed directly to the working branch `feat/browser-ai-background-remover`.
+
+
 ## Native PDF text-run safety expansion — 14 November 2026
 
 - Extended the strict native text engine to recognize `TJ` arrays containing **multiple printable text segments with zero-only numeric adjustments**, including hexadecimal segments. Concatenated replacement is permitted only when its existing Type1 font width fits; nonzero kerning is still rejected because flattening would shift glyphs.
