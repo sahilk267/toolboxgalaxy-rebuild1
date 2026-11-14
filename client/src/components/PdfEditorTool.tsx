@@ -93,6 +93,7 @@ import {
   type NativeFormField,
 } from "../lib/pdfNativeFormEditing";
 import { replaceSimpleNativePdfText } from "../lib/pdfNativeTextEditing";
+import { inspectPdfGlyphFonts, type PdfGlyphFontReport } from "../lib/pdfGlyphMapping";
 import {
   extractInteractiveTextBlocks,
   DetectedTextBlock,
@@ -572,6 +573,8 @@ export default function PdfEditorTool({
   const [nativeFormFields, setNativeFormFields] = useState<NativeFormField[]>([]);
   const [nativeFormDrafts, setNativeFormDrafts] = useState<Record<string, string | boolean>>({});
   const [nativeFormsError, setNativeFormsError] = useState<string | null>(null);
+  const [glyphFontReports, setGlyphFontReports] = useState<PdfGlyphFontReport[]>([]);
+  const [glyphFontError, setGlyphFontError] = useState<string | null>(null);
 
   // Sync initialPdfBytes or sessionStorage load on mount
   useEffect(() => {
@@ -681,6 +684,23 @@ export default function PdfEditorTool({
     }
     return () => { cancelled = true; };
   }, [pdfBytes]);
+
+  // Read-only font preflight, scoped to the active smart-edit page. The
+  // diagnostic never changes PDF bytes or attempts reverse glyph encoding.
+  useEffect(() => {
+    let cancelled = false;
+    setGlyphFontReports([]);
+    setGlyphFontError(null);
+    if (pdfBytes && activeTool === "smart-edit") {
+      inspectPdfGlyphFonts(pdfBytes, currentPage)
+        .then((report) => { if (!cancelled) setGlyphFontReports(report); })
+        .catch((err) => {
+          if (!cancelled) setGlyphFontError(
+            err instanceof Error ? err.message : "Could not inspect PDF fonts.");
+        });
+    }
+    return () => { cancelled = true; };
+  }, [pdfBytes, currentPage, activeTool]);
 
   // Canvas drawing state
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -3076,6 +3096,24 @@ export default function PdfEditorTool({
                           kerning and paragraph reflow are unsupported. Rejected edits leave
                           the original document unchanged.
                         </p>
+                        {(glyphFontReports.length > 0 || glyphFontError) && (
+                          <div className="mt-2 rounded border border-white/15 bg-black/30 p-2 space-y-1.5">
+                            <p className="font-semibold text-white/90">Original PDF font inspection (read-only)</p>
+                            {glyphFontError && <p role="status" className="text-amber-300">{glyphFontError}</p>}
+                            {glyphFontReports.map((font) => (
+                              <div key={font.resource} className="text-[10px] text-white/70 border-t border-white/10 pt-1">
+                                <span className="font-medium text-white">{font.baseFont || font.resource}</span>
+                                {" · "}{font.subtype || "Unknown subtype"}
+                                {font.subset ? " · subset" : ""}
+                                {font.embedded ? " · embedded" : ""}
+                                {" · "}{font.mappingStatus === "parsed"
+                                  ? `${font.mappedCodes} extraction glyph mappings`
+                                  : font.hasToUnicode ? "complex/unsupported ToUnicode" : "no ToUnicode"}
+                                <p className="mt-0.5">{font.reason}</p>
+                              </div>
+                            ))}
+                          </div>
+                        )}
                         <button
                           type="button"
                           disabled={isProcessing || Boolean(reeditingAnnotationId)}
