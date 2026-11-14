@@ -3070,9 +3070,10 @@ export default function PdfEditorTool({
                       <div className="rounded border border-sky-400/30 bg-sky-400/[0.06] p-2 text-[11px] text-sky-200">
                         <p className="font-semibold">Native source-text replacement (limited preview)</p>
                         <p className="mt-1 text-white/70">
-                          Only simple single-text-run pages (plain/Flate streams) with standard fonts and
-                          same-or-shorter ASCII replacements. Other PDFs are rejected without
-                          changing the original. This does not support paragraph reflow.
+                          Only simple ASCII Tj/TJ runs in plain/Flate streams with standard fonts,
+                          including individually positioned text objects (up to 20). New text must fit
+                          the original width. Complex fonts, positioning, and paragraph reflow are
+                          unsupported; rejection leaves the original document unchanged.
                         </p>
                         <button
                           type="button"
