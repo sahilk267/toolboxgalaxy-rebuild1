@@ -129,18 +129,11 @@ export function inspectExplicitToUnicodeCMap(source: string): {
       }
     }
     if (!sections || !seen.size) throw new Error("No mapped codes");
-    // Reject incomplete/unknown mapping operators, not merely unrecognized
-    // glyphs. Metadata and code-space definitions are allowed here.
-    const leftover = clean
-      .replace(bfchar, "")
-      .replace(bfrange, "")
-      .replace(/(\d+)\s+begincodespacerange\b[\s\S]*?\bendcodespacerange/g, "")
-      .replace(/\/[A-Za-z0-9_.-]+\s+def/g, "")
-      .replace(/\/[A-Za-z0-9_.-]+\s*\/[A-Za-z0-9_.-]+\s+def/g, "")
-      .replace(/[\s\S]*/g, (v) => v);
-    // Other CMap boilerplate is not used to authorize editing. A 'parsed'
-    // result means only that recognized bf mappings are internally coherent.
-    void leftover;
+    // A partially recognized CMap must not be described as parsed.
+    const declaredBlocks = [...clean.matchAll(/\bbegin(?:bfchar|bfrange)\b/g)].length;
+    if (declaredBlocks !== sections) throw new Error("Incomplete CMap block");
+    // 'parsed' only describes the recognized extraction mappings. It never
+    // establishes the availability or width of a replacement glyph.
     return {
       mappedCodes: seen.size,
       mappedUnicodeCharacters: Array.from(seen.values()).reduce(
