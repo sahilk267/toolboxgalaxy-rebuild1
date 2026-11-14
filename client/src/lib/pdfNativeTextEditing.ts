@@ -30,6 +30,7 @@ type SimpleStream = {
   original: string;
   encodedText: string;
   operand: string;
+  textOperator: "Tj" | "TJ";
   fontResource: string;
   fontSize: number;
 };
@@ -45,6 +46,7 @@ const MOVE = new RegExp(`^${DECIMAL}\\s+${DECIMAL}\\s+Td$`);
 const FONT = /^\/([A-Za-z0-9_.-]+)\s+(\d+(?:\.\d+)?)\s+Tf$/;
 const SHOW = /^\(([A-Za-z0-9 .,!?'\/-]+)\)\s+Tj$/;
 const HEX_SHOW = /^<([0-9a-fA-F]+)>\s+Tj$/;
+const ARRAY_SHOW = /^\[\s*(\([A-Za-z0-9 .,!?'\/-]+\)|<[0-9a-fA-F]+>)\s*\]\s+TJ$/;
 const pdfName = (name: PDFName): string => name.asString().replace(/^\//, "");
 const encodeHex = (value: string): string =>
   Array.from(value).map((character) => character.charCodeAt(0).toString(16).padStart(2, "0")).join("").toUpperCase();
@@ -154,20 +156,26 @@ function inspectSimpleStream(streamBytes: Uint8Array, expectedText: string): Sim
     } else if (MATRIX.test(op) && textOpen) {
       if (hasAbsolutePosition || currentTextCount) unsupported("Multiple text positions in one run.");
       hasAbsolutePosition = true;
-    } else if ((SHOW.test(op) || HEX_SHOW.test(op)) && textOpen) {
+    } else if ((SHOW.test(op) || HEX_SHOW.test(op) || ARRAY_SHOW.test(op)) && textOpen) {
       if (!currentResource || !hasAbsolutePosition || ++currentTextCount !== 1) {
         unsupported("Text must be one run with an explicit font and absolute position.");
       }
       const literal = op.match(SHOW);
       const hex = op.match(HEX_SHOW);
-      if (hex && hex[1].length % 2 !== 0) unsupported("Odd-length hexadecimal text operand.");
-      const text = literal ? literal[1] : decodeHex(hex![1]);
+      const array = op.match(ARRAY_SHOW);
+      const wrapped = array?.[1];
+      const hexValue = hex?.[1] ?? (wrapped?.startsWith("<") ? wrapped.slice(1, -1) : undefined);
+      if (hexValue && hexValue.length % 2 !== 0) unsupported("Odd-length hexadecimal text operand.");
+      const text = literal?.[1] ??
+        (hexValue !== undefined ? decodeHex(hexValue) : wrapped?.slice(1, -1) ?? "");
       if (text === expectedText) {
         selectedCount++;
         selected = {
           original,
           encodedText: text,
-          operand: literal ? `(${literal[1]})` : `<${hex![1]}>`,
+          operand: array ? `[${wrapped}]` :
+            (literal ? `(${literal[1]})` : `<${hexValue}>`),
+          textOperator: array ? "TJ" : "Tj",
           fontResource: currentResource,
           fontSize: currentSize,
         };
@@ -289,12 +297,13 @@ export async function replaceSimpleNativePdfText(
   const expectedAfter = extractedBefore.slice(0, at) +
     replacementText + extractedBefore.slice(at + expectedText.length);
   const sourceLine = parsed.operand;
-  const newOperand = sourceLine.startsWith("<") ?
-    `<${encodeHex(replacementText)}>` : `(${replacementText})`;
+  const hexEncoded = sourceLine.startsWith("<") || sourceLine.startsWith("[<");
+  const inner = hexEncoded ? `<${encodeHex(replacementText)}>` : `(${replacementText})`;
+  const newOperand = parsed.textOperator === "TJ" ? `[${inner}]` : inner;
   // Select an entire Tj instruction, never a matching string in unrelated
   // resource content. The parser only accepts one matching source Tj.
   const escaped = sourceLine.replace(/[.*+?^\u0024{}()|[\]\\]/g, "\\$&");
-  const instruction = new RegExp(`(^|\\r?\\n)([ \\t]*)${escaped}([ \\t]+Tj)(?=\\r?\\n|$)`, "g");
+  const instruction = new RegExp(`(^|\\r?\\n)([ \\t]*)${escaped}([ \\t]+${parsed.textOperator})(?=\\r?\\n|$)`, "g");
   const matches = Array.from(parsed.original.matchAll(instruction));
   if (matches.length !== 1) unsupported("The source text operation is ambiguous.");
   const replaced = parsed.original.replace(instruction,
