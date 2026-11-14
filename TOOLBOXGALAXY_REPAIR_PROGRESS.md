@@ -1,5 +1,13 @@
 # ToolboxGalaxy Repair & Verification Progress Ledger
 
+## Native PDF text-run safety expansion — 14 November 2026
+
+- Extended the strict native text engine to recognize `TJ` arrays containing **multiple printable text segments with zero-only numeric adjustments**, including hexadecimal segments. Concatenated replacement is permitted only when its existing Type1 font width fits; nonzero kerning is still rejected because flattening would shift glyphs.
+- Added a **bounded document-wide indirect-object reference scan** before deleting the obsolete page-content stream. If another PDF object still refers to the old stream, native replacement aborts rather than breaking the document graph. This replaces the previous page-only reference scan.
+- Updated the PDF Editor on-screen capability message. The actual content stream changes only for supported standard-font text; embedded/subset fonts, mappings, shaping, multiline reflow and general PDF transforms remain unresolved.
+- GitHub implementation and documentation pushed to `feat/browser-ai-background-remover`. **No TypeScript build, real PDF round-trip testing, manual browser QA or deployment performed**. Source changes are implementation candidates, not production-certification evidence.
+
+
 ## Native PDF text engine expansion — 14 November 2026
 
 - Added **single-element `TJ` array** handling alongside literal and hex-encoded `Tj`. Numeric kerning arrays, escaped literal operands, complex encodings and mixed font runs remain intentionally unsupported.
