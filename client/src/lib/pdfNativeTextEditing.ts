@@ -229,6 +229,41 @@ function inspectSimpleStream(streamBytes: Uint8Array, expectedText: string): Sim
   return selected;
 }
 
+
+/**
+ * Before unregistering the old stream, confirm no other indirect object points
+ * at its reference. PDF structures can refer to streams outside page Contents.
+ * Traversal is bounded and conservative: if we cannot prove uniqueness, fail.
+ */
+function assertUnsharedStream(doc: PDFDocument, originalRef: PDFRef): void {
+  const target = originalRef.toString();
+  const seen = new Set<object>();
+  let visited = 0;
+  const containsRef = (object: unknown): boolean => {
+    if (++visited > 150000) unsupported("PDF object graph is too large for safe content replacement.");
+    if (object instanceof PDFRef) return object.toString() === target;
+    if (typeof object !== "object" || object === null || seen.has(object)) return false;
+    seen.add(object);
+    if (object instanceof PDFArray) {
+      for (let i = 0; i < object.size(); i++) {
+        if (containsRef(object.get(i))) return true;
+      }
+    } else if (object instanceof PDFDict) {
+      for (const [, value] of object.entries()) {
+        if (containsRef(value)) return true;
+      }
+    } else if (object instanceof PDFStream) {
+      return containsRef(object.dict);
+    }
+    return false;
+  };
+  for (const [ref, object] of doc.context.enumerateIndirectObjects()) {
+    if (ref.toString() !== target && containsRef(object)) {
+      unsupported("Original PDF content stream is still referenced elsewhere.");
+    }
+  }
+}
+
 async function readPageText(bytes: Uint8Array, pageIndex: number): Promise<string> {
   ensurePdfWorkerConfigured();
   const task = pdfjsLib.getDocument({ data: bytes.slice() });
@@ -347,22 +382,12 @@ export async function replaceSimpleNativePdfText(
     (_full, prefix: string, indent: string, suffix: string) =>
       prefix + indent + newOperand + suffix);
   const bytes = new TextEncoder().encode(replaced);
-  if (originalRef) {
-    for (let i = 0; i < doc.getPageCount(); i++) {
-      if (i === pageIndex) continue;
-      const otherRef = doc.getPage(i).node.get(PDFName.of("Contents"));
-      if (otherRef === originalRef) unsupported("The content stream is shared by multiple pages.");
-      const other = doc.context.lookup(otherRef);
-      if (other instanceof PDFArray) {
-        for (let j = 0; j < other.size(); j++) {
-          if (other.get(j) === originalRef) unsupported("The content stream is shared by multiple pages.");
-        }
-      }
-    }
-  }
   const newRef = doc.context.register(doc.context.stream(bytes));
   page.node.set(PDFName.of("Contents"), newRef);
-  if (originalRef) doc.context.delete(originalRef);
+  if (originalRef) {
+    assertUnsharedStream(doc, originalRef);
+    doc.context.delete(originalRef);
+  }
   const saved = await doc.save();
   const verified = await readPageText(saved, pageIndex);
   if (verified !== expectedAfter) {
