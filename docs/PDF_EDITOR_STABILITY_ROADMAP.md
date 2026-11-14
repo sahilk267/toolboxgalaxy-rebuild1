@@ -1,5 +1,16 @@
 # PDF Editor — Stability-First Repair Plan
 
+## Glyph-aware editing preparation — 14 November 2026
+
+**Implemented (read-only foundation):** `client/src/lib/pdfGlyphMapping.ts` enumerates active-page PDF font resources, detects embedded and subset fonts, distinguishes standard-font candidates, and inspects bounded `ToUnicode` `bfchar` and simple `bfrange` mappings. The PDF Editor shows the diagnostic in its native-edit panel; the original PDF bytes are never modified by this inspection.
+
+**Why not yet enable embedded-font replacement:** `ToUnicode` is primarily an extraction mapping from encoded character codes to UTF-16BE, not a guarantee that requested replacement glyphs are present or have compatible outlines, CIDs, widths and positioning. Even a reversible mapping needs code-space validation, `CIDToGIDMap`/embedded font coverage, descendant `W`/`DW` metrics, text matrix, line layout and independent render comparisons. Approximating missing glyphs would silently corrupt user text.
+
+**Next implementation gates:** model validated glyph-code inventories and widths for a demonstrably safe PDF subset; use a tokenizer rather than line regex to identify encoded operands; retain original resources, metadata and unrelated content; guard unsupported fonts and signed PDFs; introduce deterministic fixtures and independent PDF.js render/extraction comparison before permitting native writes.
+
+**Verification/deployment:** not run in this checkpoint.
+
+
 ## Zero-kerning TJ and reference safety — 14 November 2026
 
 - Added a restricted parser for multi-segment `TJ` operands with printable literal/hex text chunks and **zero-only** numeric spacing entries. Nonzero numeric kerning, escaped literals, custom fonts and arbitrary operators still fail closed. Replacements reduce accepted zero-kerning arrays to one equivalent text segment without changing target position or font.
