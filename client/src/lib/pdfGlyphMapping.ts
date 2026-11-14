@@ -39,9 +39,10 @@ const unicodeFromHex = (hex: string): string => {
   return decoded;
 };
 
-/** CMap parsing deliberately supports only canonical explicit bfchar pairs.
- * Anything involving ranges, usecmap, nonstandard codespaces or token mixing
- * is reported unsupported, not guessed.
+/**
+ * Bounded, read-only inspection of explicit ToUnicode CMaps.
+ * Supports bfchar and common bfrange scalar/array mappings. Unknown CMap
+ * constructs fail closed rather than reporting an incomplete map as parsed.
  */
 export function inspectExplicitToUnicodeCMap(source: string): {
   mappedCodes: number;
@@ -50,29 +51,96 @@ export function inspectExplicitToUnicodeCMap(source: string): {
 } {
   try {
     if (source.length > MAX_CMAP_BYTES ||
-        /\b(?:usecmap|beginbfrange|begincidrange|begincidchar|beginnotdefrange)\b/i.test(source)) {
+        /\b(?:usecmap|begincidrange|begincidchar|beginnotdefrange|beginnotdefchar)\b/i.test(source)) {
       throw new Error("Complex CMap");
     }
-    const sections = [...source.matchAll(/(\d+)\s+beginbfchar\b([\s\S]*?)\bendbfchar/g)];
-    if (!sections.length) throw new Error("No explicit bfchar mappings");
     const seen = new Map<string, string>();
-    for (const section of sections) {
+    const add = (code: string, unicode: string) => {
+      const key = code.toUpperCase();
+      if (key.length !== 2 && key.length !== 4) throw new Error("Unsupported code width");
+      if (seen.size >= MAX_CMAP_ENTRIES && !seen.has(key)) throw new Error("Large CMap");
+      if (seen.has(key) && seen.get(key) !== unicode) throw new Error("Conflicting mapping");
+      seen.set(key, unicode);
+    };
+    const clean = source.replace(/%[^\r\n]*/g, "");
+    let sections = 0;
+    const bfchar = /(\d+)\s+beginbfchar\b([\s\S]*?)\bendbfchar/g;
+    for (const section of clean.matchAll(bfchar)) {
+      sections++;
       const count = Number(section[1]);
-      if (!Number.isSafeInteger(count) || count > MAX_CMAP_ENTRIES) throw new Error("Large CMap");
-      const body = section[2].replace(/%[^\r\n]*/g, "");
-      const pairs = [...body.matchAll(/<([0-9a-fA-F]+)>\s*<([0-9a-fA-F]+)>/g)];
-      const leftover = body.replace(/<([0-9a-fA-F]+)>\s*<([0-9a-fA-F]+)>/g, "").trim();
-      if (leftover || pairs.length !== count || seen.size + pairs.length > MAX_CMAP_ENTRIES) {
-        throw new Error("Ambiguous bfchar data");
+      if (!Number.isSafeInteger(count) || count < 1 || count > MAX_CMAP_ENTRIES) {
+        throw new Error("Invalid bfchar count");
       }
-      for (const pair of pairs) {
-        const code = pair[1].toUpperCase();
-        if (code.length !== 2 && code.length !== 4) throw new Error("Unsupported code width");
-        const mapped = unicodeFromHex(pair[2]);
-        if (seen.has(code) && seen.get(code) !== mapped) throw new Error("Duplicate code mapping");
-        seen.set(code, mapped);
+      const body = section[2];
+      const pairs = [...body.matchAll(/<([0-9a-fA-F]+)>\s*<([0-9a-fA-F]+)>/g)];
+      if (pairs.length !== count ||
+          body.replace(/<([0-9a-fA-F]+)>\s*<([0-9a-fA-F]+)>/g, "").trim()) {
+        throw new Error("Noncanonical bfchar block");
+      }
+      for (const pair of pairs) add(pair[1], unicodeFromHex(pair[2]));
+    }
+    const bfrange = /(\d+)\s+beginbfrange\b([\s\S]*?)\bendbfrange/g;
+    for (const section of clean.matchAll(bfrange)) {
+      sections++;
+      const count = Number(section[1]);
+      if (!Number.isSafeInteger(count) || count < 1 || count > MAX_CMAP_ENTRIES) {
+        throw new Error("Invalid bfrange count");
+      }
+      const body = section[2].trim();
+      // One range per line; supports scalar UTF-16BE destination and explicit
+      // arrays. Avoid guessing at arbitrary CMap syntax.
+      const lines = body.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+      if (lines.length !== count) throw new Error("Unsupported bfrange line format");
+      for (const line of lines) {
+        const match = line.match(/^<([0-9a-fA-F]{2}|[0-9a-fA-F]{4})>\s*<([0-9a-fA-F]{2}|[0-9a-fA-F]{4})>\s*(<([0-9a-fA-F]+)>|\[([^\]]+)\])$/);
+        if (!match) throw new Error("Unsupported bfrange mapping");
+        const [startHex, endHex] = [match[1], match[2]];
+        if (startHex.length !== endHex.length) throw new Error("Mismatched code widths");
+        const start = parseInt(startHex, 16), end = parseInt(endHex, 16);
+        const width = end - start + 1;
+        if (width <= 0 || width > MAX_CMAP_ENTRIES || seen.size + width > MAX_CMAP_ENTRIES) {
+          throw new Error("Large or invalid CMap range");
+        }
+        const destinations: string[] = [];
+        if (match[4]) {
+          // Scalar increment is only safe for a single UTF-16 code unit; do
+          // not invent surrogate, combining or multi-unit mappings.
+          if (match[4].length !== 4) throw new Error("Complex Unicode range");
+          const first = parseInt(match[4], 16);
+          if (first >= 0xd800 && first <= 0xdfff) throw new Error("Surrogate range");
+          for (let i = 0; i < width; i++) {
+            const next = first + i;
+            if (next > 0xffff || (next >= 0xd800 && next <= 0xdfff)) {
+              throw new Error("Unicode range overflow");
+            }
+            destinations.push(String.fromCharCode(next));
+          }
+        } else {
+          const values = [...match[5].matchAll(/<([0-9a-fA-F]+)>/g)];
+          if (values.length !== width ||
+              match[5].replace(/<([0-9a-fA-F]+)>/g, "").trim()) {
+            throw new Error("Malformed Unicode range array");
+          }
+          for (const value of values) destinations.push(unicodeFromHex(value[1]));
+        }
+        for (let i = 0; i < width; i++) {
+          add((start + i).toString(16).toUpperCase().padStart(startHex.length, "0"), destinations[i]);
+        }
       }
     }
+    if (!sections || !seen.size) throw new Error("No mapped codes");
+    // Reject incomplete/unknown mapping operators, not merely unrecognized
+    // glyphs. Metadata and code-space definitions are allowed here.
+    const leftover = clean
+      .replace(bfchar, "")
+      .replace(bfrange, "")
+      .replace(/(\d+)\s+begincodespacerange\b[\s\S]*?\bendcodespacerange/g, "")
+      .replace(/\/[A-Za-z0-9_.-]+\s+def/g, "")
+      .replace(/\/[A-Za-z0-9_.-]+\s*\/[A-Za-z0-9_.-]+\s+def/g, "")
+      .replace(/[\s\S]*/g, (v) => v);
+    // Other CMap boilerplate is not used to authorize editing. A 'parsed'
+    // result means only that recognized bf mappings are internally coherent.
+    void leftover;
     return {
       mappedCodes: seen.size,
       mappedUnicodeCharacters: Array.from(seen.values()).reduce(
